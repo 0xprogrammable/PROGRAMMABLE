@@ -1109,6 +1109,131 @@ export function validV4SourceVerificationStatus(overrides = {}) {
   };
 }
 
+export function validV4OnchainEvidenceV2(resource, overrides = {}) {
+  const deployment = resource.chainDeployment;
+  return {
+    schemaVersion: "programmable.custom-launch-onchain-evidence.v2",
+    apiVersion: "v4",
+    chainId: ROBINHOOD_CHAIN_ID,
+    caip2: ROBINHOOD_CAIP2,
+    chainDeploymentId: resource.chainDeploymentId,
+    chainDeploymentDescriptorDigest: resource.chainDeploymentDescriptorDigest,
+    chainDeployment: structuredClone(deployment),
+    profile: structuredClone(resource.profile),
+    router: deployment.contracts.programmableLaunchStampRouter.address,
+    routerRuntimeCodeHash:
+      deployment.contracts.programmableLaunchStampRouter.runtimeCodeHash,
+    routerLaunchId: codeHash("1"),
+    transactionHash: codeHash("2"),
+    blockNumber: "49210000",
+    blockHash: codeHash("3"),
+    logIndex: 5,
+    checkpointType: "ethereum_finalized",
+    finalityPolicy: structuredClone(deployment.finality),
+    commitments: structuredClone(resource.commitments),
+    walletTransactionPreimageHash: resource.walletTransactionPreimageHash,
+    evidenceDigest: `sha256:${"4".repeat(64)}`,
+    terminal: true,
+    observedAt: "2026-08-29T12:30:00.000Z",
+    ...overrides,
+  };
+}
+
+export function validV4OnchainEvidenceV3(
+  resource,
+  checkpointType = "ethereum_finalized",
+  overrides = {},
+) {
+  const deployment = resource.chainDeployment;
+  const ethereumFinality = deployment.permitAuthoritySourceProvenance
+    .configurationEvidence.ethereumFinalityEvidence;
+  const l2Inclusion = {
+    schemaVersion: "programmable.custom-launch-l2-inclusion.v1",
+    chainId: ROBINHOOD_CHAIN_ID,
+    caip2: ROBINHOOD_CAIP2,
+    transactionHash: codeHash("2"),
+    blockNumber: "49210000",
+    blockHash: codeHash("3"),
+    blockTimestamp: "1788006600",
+    receiptStatus: "success",
+    launchEventLogIndex: 7,
+    routeEventLogIndex: 5,
+  };
+  const l1Posting = checkpointType === "sequencer_soft_confirmation" ? null : {
+    schemaVersion: "programmable.custom-launch-l1-posting.v1",
+    chainId: "1",
+    caip2: "eip155:1",
+    rollup: ethereumFinality.rollup,
+    sequencerInbox: ethereumFinality.sequencerInbox,
+    batchNumber: "153047",
+    transactionHash: codeHash("4"),
+    blockNumber: "24000001",
+    blockHash: codeHash("5"),
+    logIndex: 6,
+  };
+  const l1FinalizedCheckpoint = checkpointType === "ethereum_finalized" ? {
+    schemaVersion: "programmable.custom-launch-l1-finalized-checkpoint.v1",
+    chainId: "1",
+    caip2: "eip155:1",
+    consensusCheckpointTag: "finalized",
+    blockNumber: "24000012",
+    blockHash: codeHash("7"),
+    providerReadbacks: ethereumFinality.ethereumProviders.map((provider) => ({
+      providerId: provider.providerId,
+      trustDomain: provider.trustDomain,
+      blockNumber: "24000012",
+      blockHash: codeHash("7"),
+    })),
+  } : null;
+  const projection = checkpointType === "sequencer_soft_confirmation"
+    ? {
+        blockNumber: l2Inclusion.blockNumber,
+        blockHash: l2Inclusion.blockHash,
+        logIndex: l2Inclusion.launchEventLogIndex,
+      }
+    : checkpointType === "ethereum_posted"
+      ? {
+          blockNumber: l1Posting.blockNumber,
+          blockHash: l1Posting.blockHash,
+          logIndex: l1Posting.logIndex,
+        }
+      : {
+          blockNumber: l1FinalizedCheckpoint.blockNumber,
+          blockHash: l1FinalizedCheckpoint.blockHash,
+          logIndex: l1Posting.logIndex,
+        };
+  const preimage = {
+    schemaVersion: "programmable.custom-launch-onchain-evidence.v3",
+    apiVersion: "v4",
+    chainId: ROBINHOOD_CHAIN_ID,
+    caip2: ROBINHOOD_CAIP2,
+    chainDeploymentId: resource.chainDeploymentId,
+    chainDeploymentDescriptorDigest: resource.chainDeploymentDescriptorDigest,
+    chainDeployment: structuredClone(deployment),
+    profile: structuredClone(resource.profile),
+    router: deployment.contracts.programmableLaunchStampRouter.address,
+    routerRuntimeCodeHash:
+      deployment.contracts.programmableLaunchStampRouter.runtimeCodeHash,
+    routerLaunchId: codeHash("1"),
+    transactionHash: l2Inclusion.transactionHash,
+    ...projection,
+    checkpointType,
+    l2Inclusion,
+    l1Posting,
+    l1FinalizedCheckpoint,
+    finalityPolicy: structuredClone(deployment.finality),
+    commitments: structuredClone(resource.commitments),
+    walletTransactionPreimageHash: resource.walletTransactionPreimageHash,
+    terminal: checkpointType === "ethereum_finalized",
+    observedAt: "2026-08-29T12:30:00.000Z",
+    ...overrides,
+  };
+  return {
+    ...preimage,
+    evidenceDigest: framedSha256Json(preimage.schemaVersion, preimage),
+  };
+}
+
 export function validV4Resource(
   request = validV4Request(),
   rawBytes = v4RequestBytes(request),

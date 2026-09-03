@@ -133,6 +133,7 @@ export const CUSTOM_LAUNCH_RESOURCE_SCHEMA_V4 = "programmable.custom-launch.v4";
 export const CAPABILITIES_SCHEMA_V2 = "programmable.custom-launch-capabilities.v2";
 export const PREFLIGHT_SCHEMA_V2 = "programmable.custom-launch-preflight.v2";
 export const ONCHAIN_EVIDENCE_SCHEMA_V2 = "programmable.custom-launch-onchain-evidence.v2";
+export const ONCHAIN_EVIDENCE_SCHEMA_V3 = "programmable.custom-launch-onchain-evidence.v3";
 export const EXACT_WALLET_TRANSACTION_SCHEMA_V4 = "programmable.exact-wallet-transaction.v4";
 export const CHAIN_DEPLOYMENT_SCHEMA_V1 =
   "programmable.custom-launch-chain-deployment.v1";

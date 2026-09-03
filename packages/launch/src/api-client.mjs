@@ -27,6 +27,8 @@ import {
   PREFLIGHT_SCHEMA_V1,
   PREFLIGHT_SCHEMA_V2,
   EXACT_WALLET_TRANSACTION_SCHEMA_V4,
+  ONCHAIN_EVIDENCE_SCHEMA_V2,
+  ONCHAIN_EVIDENCE_SCHEMA_V3,
   HOOK_PERMISSIONS,
   ROBINHOOD_CAIP2,
   ROBINHOOD_CHAIN_ID,
@@ -66,6 +68,10 @@ const REQUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-
 const SAFE_API_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
 const SHA256 = /^sha256:[0-9a-f]{64}$/u;
 const NONZERO_HEX32 = /^0x(?!0{64}$)[0-9a-f]{64}$/u;
+const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/u;
+const DECIMAL_UINT = /^(?:0|[1-9][0-9]*)$/u;
+const POSITIVE_DECIMAL_UINT = /^[1-9][0-9]*$/u;
+const MAX_LOG_INDEX = 2_147_483_647;
 const ROBINHOOD_EXACT_SOURCE_BINDING_COVERED_EVIDENCE = Object.freeze([
   "protected-source-tree",
   "source-closure",
@@ -1918,6 +1924,18 @@ function canonicalTimestampV4(value) {
 }
 
 function assertV4OnchainEvidence(value, capabilities, resource) {
+  if (value?.schemaVersion === ONCHAIN_EVIDENCE_SCHEMA_V2) {
+    assertV4OnchainEvidenceV2(value, capabilities, resource);
+    return;
+  }
+  if (value?.schemaVersion === ONCHAIN_EVIDENCE_SCHEMA_V3) {
+    assertV4OnchainEvidenceV3(value, capabilities, resource);
+    return;
+  }
+  throw invalidV4OnchainEvidence("schemaVersion");
+}
+
+function assertV4OnchainEvidenceV2(value, capabilities, resource) {
   assertV4ExactKeys(value, [
     "schemaVersion",
     "apiVersion",
@@ -1942,10 +1960,109 @@ function assertV4OnchainEvidence(value, capabilities, resource) {
     "terminal",
     "observedAt",
   ], "resource.onchain");
+  assertV4OnchainEvidenceCommon(value, capabilities, resource);
+  if (typeof value.blockNumber !== "string"
+    || !DECIMAL_UINT.test(value.blockNumber)
+    || !NONZERO_HEX32.test(value.blockHash ?? "")
+    || !validHistoricalV2LogIndex(value.logIndex)
+    || !new Set([
+      "sequencer_soft_confirmation",
+      "ethereum_posted",
+      "ethereum_finalized",
+    ]).has(value.checkpointType)) {
+    throw invalidV4OnchainEvidence("legacyCheckpoint");
+  }
+}
+
+function assertV4OnchainEvidenceV3(value, capabilities, resource) {
+  assertV4ExactKeys(value, [
+    "schemaVersion",
+    "apiVersion",
+    "chainId",
+    "caip2",
+    "chainDeploymentId",
+    "chainDeploymentDescriptorDigest",
+    "chainDeployment",
+    "profile",
+    "router",
+    "routerRuntimeCodeHash",
+    "routerLaunchId",
+    "transactionHash",
+    "blockNumber",
+    "blockHash",
+    "logIndex",
+    "checkpointType",
+    "l2Inclusion",
+    "l1Posting",
+    "l1FinalizedCheckpoint",
+    "finalityPolicy",
+    "commitments",
+    "walletTransactionPreimageHash",
+    "evidenceDigest",
+    "terminal",
+    "observedAt",
+  ], "resource.onchain");
+  const deployment = assertV4OnchainEvidenceCommon(value, capabilities, resource);
+  assertV4L2Inclusion(value.l2Inclusion);
+  if (value.transactionHash !== value.l2Inclusion.transactionHash) {
+    throw invalidV4OnchainEvidence("transactionHash");
+  }
+
+  const ethereumFinality = deployment.permitAuthoritySourceProvenance
+    ?.configurationEvidence?.ethereumFinalityEvidence;
+  const hasPosting = value.checkpointType === "ethereum_posted"
+    || value.checkpointType === "ethereum_finalized";
+  const hasFinalizedCheckpoint = value.checkpointType === "ethereum_finalized";
+  if (hasPosting) {
+    assertV4L1Posting(value.l1Posting, ethereumFinality);
+  } else if (value.l1Posting !== null) {
+    throw invalidV4OnchainEvidence("l1Posting");
+  }
+  if (hasFinalizedCheckpoint) {
+    assertV4L1FinalizedCheckpoint(value.l1FinalizedCheckpoint, ethereumFinality);
+  } else if (value.l1FinalizedCheckpoint !== null) {
+    throw invalidV4OnchainEvidence("l1FinalizedCheckpoint");
+  }
+
+  if (value.terminal !== hasFinalizedCheckpoint) {
+    throw invalidV4OnchainEvidence("terminal");
+  }
+
+  let projectedBlockNumber = value.l2Inclusion.blockNumber;
+  let projectedBlockHash = value.l2Inclusion.blockHash;
+  let projectedLogIndex = value.l2Inclusion.launchEventLogIndex;
+  if (value.checkpointType === "ethereum_posted") {
+    projectedBlockNumber = value.l1Posting.blockNumber;
+    projectedBlockHash = value.l1Posting.blockHash;
+    projectedLogIndex = value.l1Posting.logIndex;
+  } else if (value.checkpointType === "ethereum_finalized") {
+    projectedBlockNumber = value.l1FinalizedCheckpoint.blockNumber;
+    projectedBlockHash = value.l1FinalizedCheckpoint.blockHash;
+    projectedLogIndex = value.l1Posting.logIndex;
+    if (BigInt(value.l1FinalizedCheckpoint.blockNumber)
+      < BigInt(value.l1Posting.blockNumber)) {
+      throw invalidV4OnchainEvidence("l1FinalizedCheckpoint.blockNumber");
+    }
+  } else if (value.checkpointType !== "sequencer_soft_confirmation") {
+    throw invalidV4OnchainEvidence("checkpointType");
+  }
+  if (value.blockNumber !== projectedBlockNumber
+    || value.blockHash !== projectedBlockHash
+    || value.logIndex !== projectedLogIndex) {
+    throw invalidV4OnchainEvidence("legacyCheckpoint");
+  }
+
+  const preimage = { ...value };
+  delete preimage.evidenceDigest;
+  if (value.evidenceDigest !== framedSha256JsonV4(value.schemaVersion, preimage)) {
+    throw invalidV4OnchainEvidence("evidenceDigest");
+  }
+}
+
+function assertV4OnchainEvidenceCommon(value, capabilities, resource) {
   const deployment = normalizeV4ChainDeployment(value.chainDeployment);
   const router = capabilities.chainDeployment.contracts.programmableLaunchStampRouter;
-  if (value.schemaVersion !== "programmable.custom-launch-onchain-evidence.v2"
-    || value.apiVersion !== "v4"
+  if (value.apiVersion !== "v4"
     || value.chainId !== ROBINHOOD_CHAIN_ID
     || value.caip2 !== ROBINHOOD_CAIP2
     || value.chainDeploymentId !== capabilities.chainDeployment.chainDeploymentId
@@ -1958,16 +2075,6 @@ function assertV4OnchainEvidence(value, capabilities, resource) {
     || value.routerRuntimeCodeHash !== router.runtimeCodeHash
     || !NONZERO_HEX32.test(value.routerLaunchId ?? "")
     || !NONZERO_HEX32.test(value.transactionHash ?? "")
-    || typeof value.blockNumber !== "string"
-    || !/^(?:0|[1-9][0-9]*)$/u.test(value.blockNumber)
-    || !NONZERO_HEX32.test(value.blockHash ?? "")
-    || !Number.isSafeInteger(value.logIndex)
-    || value.logIndex < 0
-    || !new Set([
-      "sequencer_soft_confirmation",
-      "ethereum_posted",
-      "ethereum_finalized",
-    ]).has(value.checkpointType)
     || canonicalizeJson(value.finalityPolicy)
       !== canonicalizeJson(capabilities.chainDeployment.finality)
     || !validV4Commitments(value.commitments)
@@ -1977,11 +2084,102 @@ function assertV4OnchainEvidence(value, capabilities, resource) {
     || !SHA256.test(value.evidenceDigest ?? "")
     || typeof value.terminal !== "boolean"
     || !Number.isFinite(Date.parse(value.observedAt))) {
-    throw new ProgrammableApiError("Custom Launch API returned invalid V4 onchain evidence", {
-      code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
-      serverDetails: { field: "onchain" },
-    });
+    throw invalidV4OnchainEvidence("onchain");
   }
+  return deployment;
+}
+
+function assertV4L2Inclusion(value) {
+  assertV4ExactKeys(value, [
+    "schemaVersion", "chainId", "caip2", "transactionHash", "blockNumber", "blockHash",
+    "blockTimestamp", "receiptStatus", "launchEventLogIndex", "routeEventLogIndex",
+  ], "resource.onchain.l2Inclusion");
+  if (value.schemaVersion !== "programmable.custom-launch-l2-inclusion.v1"
+    || value.chainId !== ROBINHOOD_CHAIN_ID
+    || value.caip2 !== ROBINHOOD_CAIP2
+    || !NONZERO_HEX32.test(value.transactionHash ?? "")
+    || !POSITIVE_DECIMAL_UINT.test(value.blockNumber ?? "")
+    || !NONZERO_HEX32.test(value.blockHash ?? "")
+    || !POSITIVE_DECIMAL_UINT.test(value.blockTimestamp ?? "")
+    || value.receiptStatus !== "success"
+    || !validV4LogIndex(value.launchEventLogIndex)
+    || !validV4LogIndex(value.routeEventLogIndex)
+    || value.routeEventLogIndex >= value.launchEventLogIndex) {
+    throw invalidV4OnchainEvidence("l2Inclusion");
+  }
+}
+
+function assertV4L1Posting(value, ethereumFinality) {
+  assertV4ExactKeys(value, [
+    "schemaVersion", "chainId", "caip2", "rollup", "sequencerInbox", "batchNumber",
+    "transactionHash", "blockNumber", "blockHash", "logIndex",
+  ], "resource.onchain.l1Posting");
+  if (value.schemaVersion !== "programmable.custom-launch-l1-posting.v1"
+    || value.chainId !== "1"
+    || value.caip2 !== "eip155:1"
+    || !EVM_ADDRESS.test(value.rollup ?? "")
+    || !EVM_ADDRESS.test(value.sequencerInbox ?? "")
+    || value.rollup !== ethereumFinality?.rollup
+    || value.sequencerInbox !== ethereumFinality?.sequencerInbox
+    || !DECIMAL_UINT.test(value.batchNumber ?? "")
+    || !NONZERO_HEX32.test(value.transactionHash ?? "")
+    || !POSITIVE_DECIMAL_UINT.test(value.blockNumber ?? "")
+    || !NONZERO_HEX32.test(value.blockHash ?? "")
+    || !validV4LogIndex(value.logIndex)) {
+    throw invalidV4OnchainEvidence("l1Posting");
+  }
+}
+
+function assertV4L1FinalizedCheckpoint(value, ethereumFinality) {
+  assertV4ExactKeys(value, [
+    "schemaVersion", "chainId", "caip2", "consensusCheckpointTag", "blockNumber",
+    "blockHash", "providerReadbacks",
+  ], "resource.onchain.l1FinalizedCheckpoint");
+  const providers = ethereumFinality?.ethereumProviders;
+  if (value.schemaVersion
+      !== "programmable.custom-launch-l1-finalized-checkpoint.v1"
+    || value.chainId !== "1"
+    || value.caip2 !== "eip155:1"
+    || value.consensusCheckpointTag !== "finalized"
+    || !POSITIVE_DECIMAL_UINT.test(value.blockNumber ?? "")
+    || !NONZERO_HEX32.test(value.blockHash ?? "")
+    || !Array.isArray(value.providerReadbacks)
+    || value.providerReadbacks.length !== 2
+    || !Array.isArray(providers)
+    || providers.length !== 2) {
+    throw invalidV4OnchainEvidence("l1FinalizedCheckpoint");
+  }
+  for (const [index, readback] of value.providerReadbacks.entries()) {
+    const label = `resource.onchain.l1FinalizedCheckpoint.providerReadbacks[${index}]`;
+    assertV4ExactKeys(
+      readback,
+      ["providerId", "trustDomain", "blockNumber", "blockHash"],
+      label,
+    );
+    if (!nonemptyString(readback.providerId)
+      || !nonemptyString(readback.trustDomain)
+      || readback.providerId !== providers[index].providerId
+      || readback.trustDomain !== providers[index].trustDomain
+      || readback.blockNumber !== value.blockNumber
+      || readback.blockHash !== value.blockHash) {
+      throw invalidV4OnchainEvidence(`l1FinalizedCheckpoint.providerReadbacks[${index}]`);
+    }
+  }
+}
+
+function validV4LogIndex(value) {
+  return Number.isSafeInteger(value) && value >= 0 && value <= MAX_LOG_INDEX;
+}
+
+function validHistoricalV2LogIndex(value) {
+  return Number.isSafeInteger(value) && value >= 0;
+}
+
+function invalidV4OnchainEvidence(field) {
+  return new ProgrammableApiError("Custom Launch API returned invalid V4 onchain evidence", {
+    code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
+    serverDetails: { field: `onchain.${field}` },
+  });
 }
 
 function validV4Commitments(value) {

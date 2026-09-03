@@ -6,7 +6,10 @@ import test from "node:test";
 import Ajv2020 from "ajv/dist/2020.js";
 
 import { canonicalizeJson } from "../src/canonical-json.mjs";
-import { normalizeV4ExternalContracts } from "../src/v4-contract.mjs";
+import {
+  hashV4ChainDeployment,
+  normalizeV4ExternalContracts,
+} from "../src/v4-contract.mjs";
 
 import {
   validExactWalletTransaction,
@@ -14,6 +17,8 @@ import {
   validV4ExternalContractDeclaration,
   validV4ExternalProxyContractDeclaration,
   validV4Capabilities,
+  validV4OnchainEvidenceV2,
+  validV4OnchainEvidenceV3,
   validV4Preflight,
   validV4ProjectMetadata,
   validV4Resource,
@@ -41,7 +46,7 @@ const publicSchemaFiles = Object.freeze({
   "source-verification-status.json": "SourceVerificationStatusV4",
   "capabilities.json": "CustomLaunchCapabilitiesV2",
   "preflight.json": "CustomLaunchPreflightV2",
-  "onchain-evidence.json": "CustomLaunchOnchainEvidenceV2",
+  "onchain-evidence.json": "CustomLaunchOnchainEvidenceV3",
   "exact-wallet-transaction.json": "ExactWalletTransactionV4",
 });
 const publicSchemas = new Map(await Promise.all(
@@ -89,6 +94,33 @@ const validate = ajv.compile(packageSchema);
 
 const ADMISSION_SCHEMA_DIGEST =
   "sha256:a28a6de6208d6ba7b65b4b706174509570955ba9ce9714624bcb2046ab7beae7";
+const CHAIN_DEPLOYMENT_BINDING_RULE =
+  "contracts bind atomic deployment, Permit2 genesis, Safe permit authority, and external root evidence; atomic deployment, Safe snapshot, and Ethereum finality agree; programmable Router != universal Router";
+const ONCHAIN_EVIDENCE_BINDING_RULE =
+  "chainDeploymentDescriptorDigest == keccak256(canonical chainDeployment); router and finalityPolicy match chainDeployment; transactionHash == l2Inclusion.transactionHash; L1 identities match chainDeployment ethereumFinalityEvidence; legacy checkpoint projection follows checkpointType; finalized provider readbacks equal checkpoint";
+const V4_ATOMIC_TRUST_ROOT_NAMES = Object.freeze([
+  "permitAuthority",
+  "graphFactory",
+  "programmableLaunchStampRouter",
+]);
+const V4_EXTERNAL_TRUST_ROOT_NAMES = Object.freeze([
+  "poolManager",
+  "positionManager",
+  "stateView",
+  "v4Quoter",
+  "universalRouter",
+]);
+const V4_TRUST_ROOT_NAMES = Object.freeze([
+  "programmableLaunchStampRouter",
+  "permitAuthority",
+  "graphFactory",
+  "poolManager",
+  "positionManager",
+  "stateView",
+  "v4Quoter",
+  "permit2",
+  "universalRouter",
+]);
 
 function frozenV4Profile() {
   const value = structuredClone(v4Profile);
@@ -170,15 +202,21 @@ test("V4 programmable-order semantics fail closed for every declared machine rul
     Object.values(value).forEach(visit);
   };
   for (const schema of publicSchemas.values()) visit(schema);
+  visit(openapi.components.schemas.CustomLaunchFinalizedListV4);
   assert.deepEqual([...declaredRules].sort(compareUtf8), [
-    "Safe atomicRootStateEvidenceDigest == permitAuthority result stateEvidenceDigest",
     "UTF-8 role, NUL, lowercase address; unique",
     "caller-declared-and-hash-bound",
+    "chainDeploymentDescriptorDigest, chainDeployment, profile, and commitments equal onchain counterparts",
+    ONCHAIN_EVIDENCE_BINDING_RULE,
+    CHAIN_DEPLOYMENT_BINDING_RULE,
     "dependency-topological with UTF-8 tie-break",
     "ethereumFinalizedCheckpoint.blockNumber >= postingBlockNumber",
+    "launches.length <= quality.publishedRowCount",
     "previousBlockNumber + 1 == startBlock; previousBlockNumber == providerReadbacks[*].previousBlockNumber; previousBlockHash == providerReadbacks[*].previousBlockHash; startBlock == providerReadbacks[*].blockNumber; blockHash == providerReadbacks[*].blockHash; providerReadbacks[0].rawTransactionDigest == providerReadbacks[1].rawTransactionDigest; providerReadbacks[0].transactionDigest == providerReadbacks[1].transactionDigest; providerReadbacks[0].transactionReceiptDigest == providerReadbacks[1].transactionReceiptDigest",
     "providerReadbacks[0].blockHash == providerReadbacks[1].blockHash",
+    "routeEventLogIndex < launchEventLogIndex",
     "resultingContracts providerReadbacks prove blockNumber - 1 -> blockNumber",
+    "sourceRowCount == publishedRowCount",
     "strictly increasing logIndex; unique",
     "unique UTF-8 ascending",
     "unique UTF-8 targetId ascending",
@@ -300,8 +338,82 @@ test("V4 chain deployment schema locks atomic, registry, Permit2, Safe, and fina
   const validateDeployment = machineContractAjv().compile(
     packageSchema.$defs.chainDeployment,
   );
+  const validateOrdinaryDeployment = new Ajv2020({
+    allErrors: true,
+    strict: false,
+    validateFormats: false,
+  }).compile(packageSchema.$defs.chainDeployment);
   const golden = deploymentWithSafeEvidence();
   assert.equal(validateDeployment(golden), true, JSON.stringify(validateDeployment.errors));
+  assert.equal(
+    validateOrdinaryDeployment(golden),
+    true,
+    JSON.stringify(validateOrdinaryDeployment.errors),
+  );
+
+  for (const name of V4_TRUST_ROOT_NAMES) {
+    const deployment = structuredClone(golden);
+    deployment.contracts[name].address = `0x${"9".repeat(40)}`;
+    assert.equal(
+      validateOrdinaryDeployment(deployment),
+      false,
+      `ordinary JSON Schema pins ${name} address`,
+    );
+    assert.equal(validateDeployment(deployment), false, `machine schema pins ${name} address`);
+  }
+  const runtimeMutation = structuredClone(golden);
+  runtimeMutation.contracts.programmableLaunchStampRouter.runtimeCodeHash =
+    `0x${"9".repeat(64)}`;
+  assert.equal(
+    validateOrdinaryDeployment(runtimeMutation),
+    false,
+    "ordinary JSON Schema pins Router runtime",
+  );
+
+  assert.equal(
+    validateProgrammableOrder(CHAIN_DEPLOYMENT_BINDING_RULE, golden),
+    true,
+    "chain deployment binding rule accepts the canonical evidence graph",
+  );
+  const semanticBindingCases = [
+    ["atomic Router result", (deployment) => {
+      deployment.contracts.programmableLaunchStampRouter.address = `0x${"9".repeat(40)}`;
+    }],
+    ["Permit2 genesis provenance", (deployment) => {
+      deployment.contracts.permit2.address = `0x${"9".repeat(40)}`;
+    }],
+    ["Safe PermitAuthority runtime", (deployment) => {
+      deployment.contracts.permitAuthority.runtimeCodeHash = `0x${"9".repeat(64)}`;
+    }],
+    ["external PoolManager evidence", (deployment) => {
+      deployment.contracts.poolManager.address = `0x${"9".repeat(40)}`;
+    }],
+    ["atomic and Safe transaction", (deployment) => {
+      deployment.permitAuthoritySourceProvenance.transactionHash = `0x${"9".repeat(64)}`;
+    }],
+    ["atomic and Safe snapshot", (deployment) => {
+      deployment.permitAuthoritySourceProvenance.configurationEvidence.blockHash =
+        `0x${"9".repeat(64)}`;
+    }],
+    ["atomic and Safe finality", (deployment) => {
+      const safe = deployment.permitAuthoritySourceProvenance.configurationEvidence;
+      safe.ethereumFinalityEvidence = structuredClone(safe.ethereumFinalityEvidence);
+      safe.ethereumFinalityEvidence.postingBlockHash = `0x${"9".repeat(64)}`;
+    }],
+    ["Programmable and Universal Router separation", (deployment) => {
+      deployment.contracts.programmableLaunchStampRouter.address =
+        deployment.contracts.universalRouter.address;
+    }],
+  ];
+  for (const [label, mutate] of semanticBindingCases) {
+    const deployment = structuredClone(golden);
+    mutate(deployment);
+    assert.equal(
+      validateProgrammableOrder(CHAIN_DEPLOYMENT_BINDING_RULE, deployment),
+      false,
+      label,
+    );
+  }
 
   const cases = [
     ["atomic chain id", (deployment) => {
@@ -502,6 +614,11 @@ test("OpenAPI 4.0.0 publishes all required V4 routes and machine schema names", 
     CustomLaunchResourceV4: "programmable.custom-launch.v4",
     SourceVerificationStatusV4: "programmable.source-verification-status.v4",
     CustomLaunchOnchainEvidenceV2: "programmable.custom-launch-onchain-evidence.v2",
+    CustomLaunchOnchainEvidenceV3: "programmable.custom-launch-onchain-evidence.v3",
+    CustomLaunchL2InclusionV1: "programmable.custom-launch-l2-inclusion.v1",
+    CustomLaunchL1PostingV1: "programmable.custom-launch-l1-posting.v1",
+    CustomLaunchL1FinalizedCheckpointV1:
+      "programmable.custom-launch-l1-finalized-checkpoint.v1",
     ExactWalletTransactionV4: "programmable.exact-wallet-transaction.v4",
   };
   for (const [name, schemaVersion] of Object.entries(expected)) {
@@ -559,31 +676,7 @@ test("standalone and OpenAPI V4 schemas accept goldens and reject one-field addi
       expiresAt: exactWallet.expiresAt,
     },
   });
-  const evidence = {
-    schemaVersion: "programmable.custom-launch-onchain-evidence.v2",
-    apiVersion: "v4",
-    chainId: "4663",
-    caip2: "eip155:4663",
-    chainDeploymentId: "robinhood-mainnet-custom-launch-v1",
-    chainDeploymentDescriptorDigest: resource.chainDeploymentDescriptorDigest,
-    chainDeployment: deployment,
-    profile: frozenProfile,
-    router: deployment.contracts.programmableLaunchStampRouter.address,
-    routerRuntimeCodeHash:
-      deployment.contracts.programmableLaunchStampRouter.runtimeCodeHash,
-    routerLaunchId: `0x${"1".repeat(64)}`,
-    transactionHash: `0x${"2".repeat(64)}`,
-    blockNumber: "49210000",
-    blockHash: `0x${"3".repeat(64)}`,
-    logIndex: 0,
-    checkpointType: "ethereum_finalized",
-    finalityPolicy: deployment.finality,
-    commitments: exactWallet.commitments,
-    walletTransactionPreimageHash: exactWallet.transactionPreimageHash,
-    evidenceDigest: `sha256:${"4".repeat(64)}`,
-    terminal: true,
-    observedAt: "2026-08-29T12:30:00.000Z",
-  };
+  const evidence = validV4OnchainEvidenceV3(resource);
   resource.externalContractEvidenceReceipt = externalEvidenceReceipt({
     requestHash: resource.requestHash,
     rawRequestSha256: resource.rawRequestSha256,
@@ -628,6 +721,289 @@ test("standalone and OpenAPI V4 schemas accept goldens and reject one-field addi
     const mutation = { ...structuredClone(golden), unexpectedField: true };
     assert.equal(standaloneValidator(mutation), false, `${fileName} standalone mutation`);
     assert.equal(componentValidator(mutation), false, `${fileName} OpenAPI mutation`);
+  }
+});
+
+test("V4 onchain evidence keeps authenticated V2 compatibility and closes V3 stage coordinates", () => {
+  const deployment = deploymentWithSafeEvidence();
+  const resource = validV4Resource(undefined, undefined, {
+    chainDeployment: deployment,
+    profile: frozenV4Profile(),
+    walletTransactionPreimageHash: `sha256:${"8".repeat(64)}`,
+  });
+  const resourceOnchain = publicSchemas.get("custom-launch.json").properties.onchain;
+  const validateAuthenticatedOnchain = machineContractAjv().compile(resourceOnchain);
+  assert.equal(
+    validateAuthenticatedOnchain(validV4OnchainEvidenceV2(resource)),
+    true,
+    JSON.stringify(validateAuthenticatedOnchain.errors),
+  );
+  assert.equal(
+    validateAuthenticatedOnchain(validV4OnchainEvidenceV2(resource, {
+      logIndex: 2_147_483_648,
+    })),
+    true,
+    `historical V2 large log index: ${JSON.stringify(validateAuthenticatedOnchain.errors)}`,
+  );
+
+  const standalone = publicSchemas.get("onchain-evidence.json");
+  const component = openapi.components.schemas.CustomLaunchOnchainEvidenceV3;
+  const validators = [
+    machineContractAjv().compile(standalone),
+    machineContractAjv().compile(component),
+  ];
+  const ordinaryJsonSchemaValidators = [standalone, component].map((schema) =>
+    new Ajv2020({ allErrors: true, strict: false, validateFormats: false }).compile(schema));
+  const stages = [
+    ["sequencer_soft_confirmation", "49210000", `0x${"3".repeat(64)}`, 7],
+    ["ethereum_posted", "24000001", `0x${"5".repeat(64)}`, 6],
+    ["ethereum_finalized", "24000012", `0x${"7".repeat(64)}`, 6],
+  ];
+  for (const [stage, blockNumber, blockHash, logIndex] of stages) {
+    const evidence = validV4OnchainEvidenceV3(resource, stage);
+    assert.equal(evidence.blockNumber, blockNumber, `${stage} legacy block number`);
+    assert.equal(evidence.blockHash, blockHash, `${stage} legacy block hash`);
+    assert.equal(evidence.logIndex, logIndex, `${stage} legacy log index`);
+    assert.equal(evidence.transactionHash, evidence.l2Inclusion.transactionHash);
+    assert.ok(
+      evidence.l2Inclusion.routeEventLogIndex < evidence.l2Inclusion.launchEventLogIndex,
+      `${stage} Router route event precedes launch event`,
+    );
+    for (const validateEvidence of validators) {
+      assert.equal(
+        validateEvidence(evidence),
+        true,
+        `${stage}: ${JSON.stringify(validateEvidence.errors)}`,
+      );
+    }
+  }
+
+  const invalidCases = [
+    ["top-level L2 transaction alias", (value) => {
+      value.transactionHash = `0x${"9".repeat(64)}`;
+    }],
+    ["missing required milestone key", (value) => { delete value.l1Posting; }],
+    ["future-stage leakage", (value) => {
+      value.l1Posting = validV4OnchainEvidenceV3(resource, "ethereum_posted").l1Posting;
+    }, "sequencer_soft_confirmation"],
+    ["wrong L2 chain", (value) => { value.l2Inclusion.chainId = "1"; }],
+    ["impossible Router log order", (value) => {
+      value.l2Inclusion.routeEventLogIndex = value.l2Inclusion.launchEventLogIndex;
+    }],
+    ["wrong L1 chain", (value) => { value.l1Posting.chainId = "4663"; }],
+    ["posting rollup outside deployment trust root", (value) => {
+      value.l1Posting.rollup = `0x${"9".repeat(40)}`;
+    }],
+    ["legacy checkpoint projection", (value) => { value.logIndex += 1; }],
+    ["finalized readback mismatch", (value) => {
+      value.l1FinalizedCheckpoint.providerReadbacks[1].blockHash =
+        `0x${"8".repeat(64)}`;
+    }],
+    ["swapped finalized provider identities", (value) => {
+      value.l1FinalizedCheckpoint.providerReadbacks.reverse();
+    }],
+    ["wrong finalized provider trust domain", (value) => {
+      value.l1FinalizedCheckpoint.providerReadbacks[0].trustDomain = "wrong.example";
+    }],
+    ["finalized checkpoint before posting", (value) => {
+      value.l1FinalizedCheckpoint.blockNumber = "24000000";
+      for (const readback of value.l1FinalizedCheckpoint.providerReadbacks) {
+        readback.blockNumber = "24000000";
+      }
+      value.blockNumber = "24000000";
+    }],
+    ["nested unknown key", (value) => { value.l2Inclusion.unexpected = true; }],
+  ];
+  for (const [label, mutate, stage = "ethereum_finalized"] of invalidCases) {
+    const evidence = validV4OnchainEvidenceV3(resource, stage);
+    mutate(evidence);
+    for (const validateEvidence of validators) {
+      assert.equal(validateEvidence(evidence), false, label);
+    }
+  }
+  const ordinarySchemaIdentityCases = [
+    ["ordinary JSON Schema rejects wrong posting rollup", (value) => {
+      value.l1Posting.rollup = `0x${"9".repeat(40)}`;
+    }],
+    ["ordinary JSON Schema rejects wrong posting inbox", (value) => {
+      value.l1Posting.sequencerInbox = `0x${"9".repeat(40)}`;
+    }],
+    ["ordinary JSON Schema rejects swapped provider identities", (value) => {
+      value.l1FinalizedCheckpoint.providerReadbacks.reverse();
+    }],
+    ["ordinary JSON Schema rejects wrong provider identity", (value) => {
+      value.l1FinalizedCheckpoint.providerReadbacks[0].providerId = "quicknode";
+      value.l1FinalizedCheckpoint.providerReadbacks[0].trustDomain = "quicknode.com";
+    }],
+  ];
+  for (const [label, mutate] of ordinarySchemaIdentityCases) {
+    const evidence = validV4OnchainEvidenceV3(resource);
+    mutate(evidence);
+    for (const validateEvidence of ordinaryJsonSchemaValidators) {
+      assert.equal(validateEvidence(evidence), false, label);
+    }
+  }
+});
+
+test("V4 finalized public items require V3 evidence and server-authored identity", () => {
+  const finalizedSchema = openapi.components.schemas.CustomLaunchFinalizedMetadataV4;
+  const validateFinalized = machineContractAjv().compile(finalizedSchema);
+  const validateFinalizedOrdinary = new Ajv2020({
+    allErrors: true,
+    strict: false,
+    validateFormats: false,
+  }).compile(finalizedSchema);
+  const finalized = validFinalizedMetadataV4();
+  assert.equal(validateFinalized(finalized), true, JSON.stringify(validateFinalized.errors));
+  assert.equal(
+    validateFinalizedOrdinary(finalized),
+    true,
+    JSON.stringify(validateFinalizedOrdinary.errors),
+  );
+  assert.equal(finalized.platformId, "programmable");
+  assert.equal(finalized.category, "custom");
+  assert.equal(finalized.onchain.schemaVersion, "programmable.custom-launch-onchain-evidence.v3");
+  assert.equal(Object.hasOwn(finalized.onchain, "walletTransactionPreimageHash"), false);
+
+  const v2 = validV4OnchainEvidenceV2({
+    ...finalized,
+    walletTransactionPreimageHash: `sha256:${"8".repeat(64)}`,
+  });
+  delete v2.walletTransactionPreimageHash;
+  finalized.onchain = v2;
+  assert.equal(validateFinalized(finalized), false, "public finalized item must reject V2");
+
+  const missingIdentity = validFinalizedMetadataV4();
+  delete missingIdentity.platformId;
+  assert.equal(validateFinalized(missingIdentity), false, "platformId is required");
+  const nestedIdentity = validFinalizedMetadataV4();
+  nestedIdentity.projectMetadata.platformId = "programmable";
+  assert.equal(validateFinalized(nestedIdentity), false, "identity is not project metadata");
+
+  for (const [label, mutate] of [
+    ["outer commitments are bound to onchain evidence", (value) => {
+      value.commitments.graph = `sha256:${"9".repeat(64)}`;
+    }],
+    ["outer deployment descriptor is bound to onchain evidence", (value) => {
+      value.chainDeploymentDescriptorDigest = `0x${"9".repeat(64)}`;
+    }],
+    ["onchain descriptor is recomputed from the canonical deployment", (value) => {
+      value.chainDeploymentDescriptorDigest = `0x${"9".repeat(64)}`;
+      value.onchain.chainDeploymentDescriptorDigest = `0x${"9".repeat(64)}`;
+    }],
+    ["outer deployment is bound to onchain evidence", (value) => {
+      value.chainDeployment.contracts.programmableLaunchStampRouter.address =
+        `0x${"9".repeat(40)}`;
+    }],
+    ["onchain Router is bound to the embedded deployment", (value) => {
+      value.onchain.router = `0x${"9".repeat(40)}`;
+    }],
+    ["onchain Router runtime is bound to the embedded deployment", (value) => {
+      value.onchain.routerRuntimeCodeHash = `0x${"9".repeat(64)}`;
+    }],
+    ["onchain finality policy is bound to the embedded deployment", (value) => {
+      value.onchain.finalityPolicy.policyRevision += 1;
+    }],
+    ["coordinated Router copies cannot drift away from deployment evidence", (value) => {
+      const address = `0x${"9".repeat(40)}`;
+      const runtimeCodeHash = `0x${"9".repeat(64)}`;
+      for (const deployment of [value.chainDeployment, value.onchain.chainDeployment]) {
+        deployment.contracts.programmableLaunchStampRouter = { address, runtimeCodeHash };
+      }
+      value.onchain.router = address;
+      value.onchain.routerRuntimeCodeHash = runtimeCodeHash;
+    }],
+  ]) {
+    const mutation = validFinalizedMetadataV4();
+    mutate(mutation);
+    assert.equal(validateFinalized(mutation), false, label);
+  }
+
+  for (const name of V4_TRUST_ROOT_NAMES) {
+    const mutation = validFinalizedMetadataV4();
+    for (const deployment of [mutation.chainDeployment, mutation.onchain.chainDeployment]) {
+      deployment.contracts[name].address = `0x${"9".repeat(40)}`;
+    }
+    if (name === "programmableLaunchStampRouter") {
+      mutation.onchain.router = `0x${"9".repeat(40)}`;
+    }
+    assert.equal(
+      validateFinalizedOrdinary(mutation),
+      false,
+      `ordinary finalized schema pins coordinated ${name} drift`,
+    );
+    assert.equal(
+      validateFinalized(mutation),
+      false,
+      `machine finalized schema rejects coordinated ${name} drift`,
+    );
+  }
+
+  for (const status of ["queued", "retrying", "needs_attention"]) {
+    const mutation = validFinalizedMetadataV4();
+    mutation.sourceVerification.status = status;
+    assert.equal(
+      validateFinalizedOrdinary(mutation),
+      false,
+      `public finalized sourceVerification rejects ${status}`,
+    );
+  }
+  const nonExactComponent = validFinalizedMetadataV4();
+  nonExactComponent.sourceVerification.components[0] = {
+    targetId: nonExactComponent.sourceVerification.components[0].targetId,
+    address: nonExactComponent.sourceVerification.components[0].address,
+    status: "needs_attention",
+    providerObservation: null,
+    exactSourceAuthority: null,
+    exactSourceBinding: null,
+    updatedAt: nonExactComponent.sourceVerification.components[0].updatedAt,
+  };
+  assert.equal(
+    validateFinalizedOrdinary(nonExactComponent),
+    false,
+    "public finalized sourceVerification rejects a needs-attention component",
+  );
+});
+
+test("V4 finalized quality contract is all-or-nothing over eligible V3 rows", () => {
+  const quality = openapi.components.schemas.CustomLaunchFinalizedListV4.properties.quality;
+  assert.match(
+    quality.description,
+    /canonical eligible V3-finalized and authoritatively source-verified rows/u,
+  );
+  assert.match(quality.description, /global finalized-dataset snapshot totals/u);
+  assert.match(quality.description, /not current-page counts/u);
+  assert.match(
+    quality.properties.sourceRowCount.description,
+    /canonical eligible V3-finalized and authoritatively source-verified rows/u,
+  );
+  assert.match(quality.properties.publishedRowCount.description, /emittable/u);
+  assert.match(quality.properties.publishedRowCount.description, /equals sourceRowCount/u);
+  assert.match(quality.properties.publishedRowCount.description, /current page is a subset/u);
+  assert.match(quality.properties.quarantinedRowCount.description, /Always zero/u);
+  assert.match(quality.properties.quarantinedRowCount.description, /fails the entire request/u);
+  const validateQuality = machineContractAjv().compile(quality);
+  assert.equal(validateQuality({
+    status: "ready", sourceRowCount: 2, publishedRowCount: 2, quarantinedRowCount: 0,
+  }), true, JSON.stringify(validateQuality.errors));
+  for (const [label, value] of [
+    ["every eligible V3 row is globally published", {
+      status: "ready", sourceRowCount: 2, publishedRowCount: 1, quarantinedRowCount: 0,
+    }],
+    ["successful response cannot quarantine", {
+      status: "ready", sourceRowCount: 2, publishedRowCount: 1, quarantinedRowCount: 1,
+    }],
+    ["partial is an endpoint failure, not a 200 response", {
+      status: "partial", sourceRowCount: 2, publishedRowCount: 2, quarantinedRowCount: 0,
+    }],
+    ["stale is an endpoint failure, not a 200 response", {
+      status: "stale", sourceRowCount: 2, publishedRowCount: 2, quarantinedRowCount: 0,
+    }],
+    ["unavailable is an endpoint failure, not a 200 response", {
+      status: "unavailable", sourceRowCount: 0, publishedRowCount: 0, quarantinedRowCount: 0,
+    }],
+  ]) {
+    assert.equal(validateQuality(value), false, label);
   }
 });
 
@@ -680,13 +1056,29 @@ test("V4 list and finalized routes publish closed launches/nextCursor envelopes"
       publishedRowCount: 1,
       quarantinedRowCount: 0,
     },
-    launches: [fixtureFromSchema(finalizedEnvelopeSchema.properties.launches.items)],
+    launches: [validFinalizedMetadataV4()],
     nextCursor: null,
   };
   assert.equal(
     finalizedValidator(finalizedGolden),
     true,
     JSON.stringify(finalizedValidator.errors),
+  );
+  const paginatedSubset = structuredClone(finalizedGolden);
+  paginatedSubset.quality.sourceRowCount = 2;
+  paginatedSubset.quality.publishedRowCount = 2;
+  assert.equal(
+    finalizedValidator(paginatedSubset),
+    true,
+    `a page may be smaller than the global published total: ${JSON.stringify(finalizedValidator.errors)}`,
+  );
+  const impossiblePublishedZeroPage = structuredClone(finalizedGolden);
+  impossiblePublishedZeroPage.quality.sourceRowCount = 0;
+  impossiblePublishedZeroPage.quality.publishedRowCount = 0;
+  assert.equal(
+    finalizedValidator(impossiblePublishedZeroPage),
+    false,
+    "publishedRowCount zero requires an empty page",
   );
   finalizedGolden.unexpectedField = true;
   assert.equal(finalizedValidator(finalizedGolden), false, "finalized envelope must be closed");
@@ -756,7 +1148,13 @@ test("V4 source-verification schemas bind aggregate truth, exact evidence, and f
     .find((candidate) => candidate.type === "object");
   const finalizedSchema = openapi.components.schemas.CustomLaunchFinalizedMetadataV4;
   assert.deepEqual(embedded, sourceVerificationCore);
-  assert.deepEqual(finalizedSchema.properties.sourceVerification, sourceVerificationCore);
+  const exactComponent = sourceVerificationCore.properties.components.items.oneOf
+    .find(({ properties }) => properties.status.const === "exact_match");
+  assert.equal(finalizedSchema.properties.sourceVerification.properties.status.const, "exact_match");
+  assert.deepEqual(
+    finalizedSchema.properties.sourceVerification.properties.components.items,
+    exactComponent,
+  );
   assert.equal(resourceSchema.required.includes("sourceVerification"), false);
   assert.equal(finalizedSchema.required.includes("sourceVerification"), true);
 
@@ -893,8 +1291,7 @@ test("V4 source-verification schemas bind aggregate truth, exact evidence, and f
   assert.equal(validateResource(prefinal), true, JSON.stringify(validateResource.errors));
 
   const validateFinalized = machineContractAjv().compile(finalizedSchema);
-  const finalized = fixtureFromSchema(finalizedSchema);
-  finalized.sourceVerification = validV4SourceVerificationStatus();
+  const finalized = validFinalizedMetadataV4();
   assert.equal(validateFinalized(finalized), true, JSON.stringify(validateFinalized.errors));
   delete finalized.sourceVerification;
   assert.equal(validateFinalized(finalized), false, "finalized readback must carry source state");
@@ -1110,6 +1507,16 @@ function machineContractAjv() {
 }
 
 function validateProgrammableOrder(rule, value) {
+  if (rule
+    === "chainDeploymentDescriptorDigest, chainDeployment, profile, and commitments equal onchain counterparts") {
+    if (value === null || typeof value !== "object" || Array.isArray(value)
+      || value.onchain === null || typeof value.onchain !== "object"
+      || Array.isArray(value.onchain)) return false;
+    return value.chainDeploymentDescriptorDigest === value.onchain.chainDeploymentDescriptorDigest
+      && canonicalJsonEqual(value.chainDeployment, value.onchain.chainDeployment)
+      && canonicalJsonEqual(value.profile, value.onchain.profile)
+      && canonicalJsonEqual(value.commitments, value.onchain.commitments);
+  }
   if (rule === "UTF-8 role, NUL, lowercase address; unique") {
     if (!Array.isArray(value)) return false;
     const keys = value.map((entry) => {
@@ -1285,14 +1692,8 @@ function validateProgrammableOrder(rule, value) {
         && secondary.deploymentRuntimeCodeHash === result.runtimeCodeHash;
     });
   }
-  if (rule
-    === "Safe atomicRootStateEvidenceDigest == permitAuthority result stateEvidenceDigest") {
-    const safeDigest = value?.permitAuthoritySourceProvenance
-      ?.configurationEvidence?.atomicRootStateEvidenceDigest;
-    const resultDigest = value?.deploymentEvidence?.resultingContracts?.[0]
-      ?.stateEvidenceDigest;
-    if (typeof safeDigest !== "string" || typeof resultDigest !== "string") return false;
-    return safeDigest === resultDigest;
+  if (rule === CHAIN_DEPLOYMENT_BINDING_RULE) {
+    return validV4ChainDeploymentBindings(value);
   }
   if (rule === "ethereumFinalizedCheckpoint.blockNumber >= postingBlockNumber") {
     const postingBlockNumber = value?.postingBlockNumber;
@@ -1303,7 +1704,197 @@ function validateProgrammableOrder(rule, value) {
       || !/^(?:0|[1-9][0-9]*)$/u.test(finalizedBlockNumber)) return false;
     return BigInt(finalizedBlockNumber) >= BigInt(postingBlockNumber);
   }
+  if (rule === "routeEventLogIndex < launchEventLogIndex") {
+    return Number.isInteger(value?.routeEventLogIndex)
+      && Number.isInteger(value?.launchEventLogIndex)
+      && value.routeEventLogIndex < value.launchEventLogIndex;
+  }
+  if (rule === "sourceRowCount == publishedRowCount") {
+    return Number.isInteger(value?.sourceRowCount)
+      && Number.isInteger(value?.publishedRowCount)
+      && value.sourceRowCount >= 0
+      && value.publishedRowCount >= 0
+      && value.sourceRowCount === value.publishedRowCount;
+  }
+  if (rule === "launches.length <= quality.publishedRowCount") {
+    return Array.isArray(value?.launches)
+      && Number.isInteger(value?.quality?.publishedRowCount)
+      && value.quality.publishedRowCount >= 0
+      && value.launches.length <= value.quality.publishedRowCount;
+  }
+  if (rule === ONCHAIN_EVIDENCE_BINDING_RULE) {
+    if (value === null || typeof value !== "object" || Array.isArray(value)
+      || value.l2Inclusion === null || typeof value.l2Inclusion !== "object"
+      || Array.isArray(value.l2Inclusion)
+      || !matchesV4ChainDeploymentDescriptorDigest(
+        value.chainDeploymentDescriptorDigest,
+        value.chainDeployment,
+      )
+      || value.router !== value.chainDeployment?.contracts?.programmableLaunchStampRouter?.address
+      || value.routerRuntimeCodeHash
+        !== value.chainDeployment?.contracts?.programmableLaunchStampRouter?.runtimeCodeHash
+      || !canonicalJsonEqual(value.finalityPolicy, value.chainDeployment?.finality)
+      || value.transactionHash !== value.l2Inclusion.transactionHash) return false;
+    const ethereumFinality = value.chainDeployment?.permitAuthoritySourceProvenance
+      ?.configurationEvidence?.ethereumFinalityEvidence;
+    const postingMatchesDeployment = (posting) => posting?.rollup === ethereumFinality?.rollup
+      && posting?.sequencerInbox === ethereumFinality?.sequencerInbox;
+    let expectedBlockNumber = value.l2Inclusion.blockNumber;
+    let expectedBlockHash = value.l2Inclusion.blockHash;
+    let expectedLogIndex = value.l2Inclusion.launchEventLogIndex;
+    if (value.checkpointType === "sequencer_soft_confirmation") {
+      if (value.l1Posting !== null || value.l1FinalizedCheckpoint !== null
+        || value.terminal !== false) return false;
+    } else if (value.checkpointType === "ethereum_posted") {
+      if (value.l1Posting === null || typeof value.l1Posting !== "object"
+        || Array.isArray(value.l1Posting) || value.l1FinalizedCheckpoint !== null
+        || value.terminal !== false || !postingMatchesDeployment(value.l1Posting)) return false;
+      expectedBlockNumber = value.l1Posting.blockNumber;
+      expectedBlockHash = value.l1Posting.blockHash;
+      expectedLogIndex = value.l1Posting.logIndex;
+    } else if (value.checkpointType === "ethereum_finalized") {
+      if (value.l1Posting === null || typeof value.l1Posting !== "object"
+        || Array.isArray(value.l1Posting)
+        || value.l1FinalizedCheckpoint === null
+        || typeof value.l1FinalizedCheckpoint !== "object"
+        || Array.isArray(value.l1FinalizedCheckpoint)
+        || value.terminal !== true || !postingMatchesDeployment(value.l1Posting)) return false;
+      const checkpoint = value.l1FinalizedCheckpoint;
+      const providers = ethereumFinality?.ethereumProviders;
+      if (!Array.isArray(checkpoint.providerReadbacks)
+        || checkpoint.providerReadbacks.length !== 2
+        || !Array.isArray(providers)
+        || providers.length !== 2
+        || checkpoint.providerReadbacks.some((readback, index) =>
+          readback?.blockNumber !== checkpoint.blockNumber
+          || readback?.blockHash !== checkpoint.blockHash
+          || readback?.providerId !== providers[index]?.providerId
+          || readback?.trustDomain !== providers[index]?.trustDomain)
+        || !/^[1-9][0-9]*$/u.test(checkpoint.blockNumber ?? "")
+        || !/^[1-9][0-9]*$/u.test(value.l1Posting.blockNumber ?? "")
+        || BigInt(checkpoint.blockNumber) < BigInt(value.l1Posting.blockNumber)) return false;
+      expectedBlockNumber = checkpoint.blockNumber;
+      expectedBlockHash = checkpoint.blockHash;
+      expectedLogIndex = value.l1Posting.logIndex;
+    } else {
+      return false;
+    }
+    return value.blockNumber === expectedBlockNumber
+      && value.blockHash === expectedBlockHash
+      && value.logIndex === expectedLogIndex;
+  }
   return false;
+}
+
+function validV4ChainDeploymentBindings(value) {
+  if (!isPlainRecord(value)
+    || !isPlainRecord(value.contracts)
+    || !isPlainRecord(value.deploymentEvidence)
+    || !isPlainRecord(value.permit2GenesisProvenance)
+    || !isPlainRecord(value.permitAuthoritySourceProvenance)
+    || !Array.isArray(value.externalRootDeploymentEvidence)) return false;
+
+  const contracts = value.contracts;
+  if (!canonicalJsonEqual(
+    Object.keys(contracts).sort(compareUtf8),
+    [...V4_TRUST_ROOT_NAMES].sort(compareUtf8),
+  ) || V4_TRUST_ROOT_NAMES.some((name) =>
+    !isTrustRootBinding(contracts[name]))) return false;
+
+  const atomic = value.deploymentEvidence;
+  const atomicResults = atomic.resultingContracts;
+  if (!Array.isArray(atomicResults)
+    || atomicResults.length !== V4_ATOMIC_TRUST_ROOT_NAMES.length) return false;
+  const atomicByName = new Map();
+  for (const result of atomicResults) {
+    if (!isPlainRecord(result)
+      || typeof result.contract !== "string"
+      || atomicByName.has(result.contract)
+      || !sameTrustRoot(result, contracts[result.contract])) return false;
+    atomicByName.set(result.contract, result);
+  }
+  if (V4_ATOMIC_TRUST_ROOT_NAMES.some((name) => !atomicByName.has(name))) return false;
+
+  const permit2 = value.permit2GenesisProvenance;
+  if (permit2.address !== contracts.permit2.address
+    || !Array.isArray(permit2.providerReadbacks)
+    || permit2.providerReadbacks.length !== 2
+    || permit2.providerReadbacks.some((readback) =>
+      !isPlainRecord(readback)
+      || readback.runtimeCodeHash !== contracts.permit2.runtimeCodeHash)) return false;
+
+  const permitAuthority = value.permitAuthoritySourceProvenance;
+  const safe = permitAuthority.configurationEvidence;
+  if (!isPlainRecord(safe)
+    || permitAuthority.address !== contracts.permitAuthority.address
+    || safe.proxyRuntimeCodeHash !== contracts.permitAuthority.runtimeCodeHash) return false;
+
+  const comparableAtomicFields = ["transactionHash", "blockNumber", "blockHash"];
+  if (comparableAtomicFields.some((field) =>
+    typeof atomic[field] !== "string"
+    || atomic[field] !== permitAuthority[field])
+    || safe.blockNumber !== atomic.blockNumber
+    || safe.blockHash !== atomic.blockHash
+    || safe.ethereumFinalityEvidence?.l2Checkpoint?.blockNumber !== atomic.blockNumber
+    || safe.ethereumFinalityEvidence?.l2Checkpoint?.blockHash !== atomic.blockHash
+    || !canonicalJsonEqual(
+      atomic.ethereumFinalityEvidence,
+      safe.ethereumFinalityEvidence,
+    )) return false;
+
+  const permitAuthorityResult = atomicByName.get("permitAuthority");
+  if (typeof permitAuthorityResult.stateEvidenceDigest !== "string"
+    || permitAuthorityResult.stateEvidenceDigest
+      !== safe.atomicRootStateEvidenceDigest) return false;
+
+  const externalByName = new Map();
+  if (value.externalRootDeploymentEvidence.length
+    !== V4_EXTERNAL_TRUST_ROOT_NAMES.length) return false;
+  for (const evidence of value.externalRootDeploymentEvidence) {
+    if (!isPlainRecord(evidence)
+      || typeof evidence.contract !== "string"
+      || externalByName.has(evidence.contract)
+      || !sameTrustRoot(evidence, contracts[evidence.contract])) return false;
+    externalByName.set(evidence.contract, evidence);
+  }
+  if (V4_EXTERNAL_TRUST_ROOT_NAMES.some((name) => !externalByName.has(name))) return false;
+
+  return contracts.programmableLaunchStampRouter.address
+    !== contracts.universalRouter.address;
+}
+
+function matchesV4ChainDeploymentDescriptorDigest(digest, deployment) {
+  if (typeof digest !== "string") return false;
+  try {
+    return digest === hashV4ChainDeployment(deployment);
+  } catch {
+    return false;
+  }
+}
+
+function isPlainRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isTrustRootBinding(value) {
+  return isPlainRecord(value)
+    && typeof value.address === "string"
+    && typeof value.runtimeCodeHash === "string";
+}
+
+function sameTrustRoot(evidence, binding) {
+  return isTrustRootBinding(binding)
+    && evidence.address === binding.address
+    && evidence.runtimeCodeHash === binding.runtimeCodeHash;
+}
+
+function canonicalJsonEqual(left, right) {
+  if (left === undefined || right === undefined) return false;
+  try {
+    return canonicalizeJson(left) === canonicalizeJson(right);
+  } catch {
+    return false;
+  }
 }
 
 function compareUtf8(left, right) {
@@ -1340,6 +1931,55 @@ function deploymentWithSafeEvidence() {
     "V4 fixture must carry the complete nested Ethereum-finality receipt",
   );
   return deployment;
+}
+
+function validFinalizedMetadataV4() {
+  const resource = validV4Resource(undefined, undefined, {
+    chainDeployment: deploymentWithSafeEvidence(),
+    profile: frozenV4Profile(),
+    walletTransactionPreimageHash: `sha256:${"8".repeat(64)}`,
+  });
+  const onchain = validV4OnchainEvidenceV3(resource);
+  delete onchain.walletTransactionPreimageHash;
+  return {
+    schemaVersion: "programmable.finalized-custom-launch-metadata.v4",
+    apiVersion: "v4",
+    launchId: resource.launchId,
+    chainId: resource.chainId,
+    caip2: resource.caip2,
+    chainDeploymentId: resource.chainDeploymentId,
+    chainDeploymentDescriptorDigest: resource.chainDeploymentDescriptorDigest,
+    chainDeployment: structuredClone(resource.chainDeployment),
+    profile: structuredClone(resource.profile),
+    platformId: "programmable",
+    category: "custom",
+    projectMetadata: structuredClone(resource.projectMetadata),
+    funding: structuredClone(resource.funding),
+    liquidityModel: structuredClone(resource.liquidityModel),
+    commitments: structuredClone(resource.commitments),
+    onchain,
+    sourceVerification: validExactSourceVerificationStatusV4(),
+    createdAt: resource.createdAt,
+    finalizedAt: "2026-08-29T12:30:00.000Z",
+  };
+}
+
+function validExactSourceVerificationStatusV4() {
+  const value = validV4SourceVerificationStatus();
+  const exact = value.components.find(({ status }) => status === "exact_match");
+  value.status = "exact_match";
+  value.components = value.components.map((component) => {
+    const withoutRetry = structuredClone(component);
+    delete withoutRetry.nextAttemptAt;
+    return {
+      ...withoutRetry,
+      status: "exact_match",
+      providerObservation: structuredClone(exact.providerObservation),
+      exactSourceAuthority: exact.exactSourceAuthority,
+      exactSourceBinding: structuredClone(exact.exactSourceBinding),
+    };
+  });
+  return value;
 }
 
 function externalContractDeclaration() {

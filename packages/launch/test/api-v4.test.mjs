@@ -24,6 +24,8 @@ import {
   validPreparedArtifactV4,
   validSimulationReceiptV4,
   validV4Capabilities,
+  validV4OnchainEvidenceV2,
+  validV4OnchainEvidenceV3,
   validV4Preflight,
   validV4ProjectMetadata,
   validV4Request,
@@ -515,6 +517,131 @@ test("V4 finalized status validates and emits the server-authored exact-source s
     result.resource.sourceVerification.components[1].nextAttemptAt,
     "2026-08-29T12:34:00.000Z",
   );
+});
+
+test("V4 authenticated status accepts historical V2 and current V3 onchain evidence", async () => {
+  const submitStatus = async (buildEvidence) => {
+    const wallet = validExactWalletTransaction();
+    const resource = walletReadyResource(validV4Resource(undefined, undefined, {
+      status: "finalized",
+      walletTransactionPreimageHash: wallet.transactionPreimageHash,
+      walletTransaction: wallet,
+      sourceVerification: validV4SourceVerificationStatus(),
+    }));
+    resource.onchain = buildEvidence(resource);
+    return statusLaunch({
+      requestId: V4_LAUNCH_ID,
+      apiVersion: 4,
+      chainId: "4663",
+      maxAttempts: 1,
+      fetchImpl: async (url) => url === CAPABILITIES_URL
+        ? jsonResponse(validV4Capabilities())
+        : jsonResponse(resource),
+      loadApiKeyImpl: async () => V4_API_KEY,
+    });
+  };
+
+  const historical = await submitStatus(validV4OnchainEvidenceV2);
+  assert.equal(
+    historical.resource.onchain.schemaVersion,
+    "programmable.custom-launch-onchain-evidence.v2",
+  );
+  const historicalLargeLogIndex = await submitStatus((resource) =>
+    validV4OnchainEvidenceV2(resource, { logIndex: 2_147_483_648 }));
+  assert.equal(
+    historicalLargeLogIndex.resource.onchain.logIndex,
+    2_147_483_648,
+    "historical V2 keeps its original nonnegative safe-integer range",
+  );
+  const current = await submitStatus(validV4OnchainEvidenceV3);
+  assert.equal(
+    current.resource.onchain.schemaVersion,
+    "programmable.custom-launch-onchain-evidence.v3",
+  );
+  assert.equal(
+    current.resource.onchain.transactionHash,
+    current.resource.onchain.l2Inclusion.transactionHash,
+  );
+});
+
+test("V4 authenticated status rejects noncanonical V3 coordinate and digest bindings", async () => {
+  const submitMutation = async (mutate, rehashEvidence = false) => {
+    const wallet = validExactWalletTransaction();
+    const resource = walletReadyResource(validV4Resource(undefined, undefined, {
+      status: "finalized",
+      walletTransactionPreimageHash: wallet.transactionPreimageHash,
+      walletTransaction: wallet,
+      sourceVerification: validV4SourceVerificationStatus(),
+    }));
+    resource.onchain = validV4OnchainEvidenceV3(resource);
+    mutate(resource.onchain);
+    if (rehashEvidence) {
+      const preimage = { ...resource.onchain };
+      delete preimage.evidenceDigest;
+      resource.onchain.evidenceDigest = sha256Digest(Buffer.concat([
+        Buffer.from(resource.onchain.schemaVersion, "utf8"),
+        Buffer.from([0]),
+        Buffer.from(canonicalizeJson(preimage), "utf8"),
+      ]));
+    }
+    return statusLaunch({
+      requestId: V4_LAUNCH_ID,
+      apiVersion: 4,
+      chainId: "4663",
+      maxAttempts: 1,
+      fetchImpl: async (url) => url === CAPABILITIES_URL
+        ? jsonResponse(validV4Capabilities())
+        : jsonResponse(resource),
+      loadApiKeyImpl: async () => V4_API_KEY,
+    });
+  };
+  const cases = [
+    ["missing nested key", (value) => { delete value.l2Inclusion.blockTimestamp; }],
+    ["L2 transaction alias", (value) => { value.transactionHash = `0x${"9".repeat(64)}`; }],
+    ["embedded deployment Router binding", (value) => {
+      value.router = `0x${"9".repeat(40)}`;
+    }],
+    ["embedded deployment Router runtime binding", (value) => {
+      value.routerRuntimeCodeHash = `0x${"9".repeat(64)}`;
+    }],
+    ["embedded deployment finality binding", (value) => {
+      value.finalityPolicy.policyRevision += 1;
+    }],
+    ["deployment descriptor recomputation", (value) => {
+      value.chainDeploymentDescriptorDigest = `0x${"9".repeat(64)}`;
+    }],
+    ["impossible Router log order", (value) => {
+      value.l2Inclusion.routeEventLogIndex = value.l2Inclusion.launchEventLogIndex;
+    }, true],
+    ["legacy stage projection", (value) => { value.logIndex += 1; }],
+    ["posting deployment identity", (value) => {
+      value.l1Posting.sequencerInbox = `0x${"9".repeat(40)}`;
+    }],
+    ["finalized provider identity", (value) => {
+      value.l1FinalizedCheckpoint.providerReadbacks[0].providerId = "untrusted";
+    }],
+    ["finalized provider checkpoint", (value) => {
+      value.l1FinalizedCheckpoint.providerReadbacks[1].blockHash = `0x${"9".repeat(64)}`;
+    }],
+    ["future-stage leakage", (value) => {
+      value.checkpointType = "sequencer_soft_confirmation";
+      value.terminal = false;
+      value.blockNumber = value.l2Inclusion.blockNumber;
+      value.blockHash = value.l2Inclusion.blockHash;
+      value.logIndex = value.l2Inclusion.launchEventLogIndex;
+    }],
+    ["V3 digest domain", (value) => { value.evidenceDigest = `sha256:${"9".repeat(64)}`; }],
+  ];
+  for (const [label, mutate, rehashEvidence = false] of cases) {
+    await assert.rejects(
+      submitMutation(mutate, rehashEvidence),
+      (error) => {
+        assert.ok(error instanceof ProgrammableApiError, label);
+        assert.match(error.message, /onchain evidence|noncanonical V4 object/u, label);
+        return true;
+      },
+    );
+  }
 });
 
 test("V4 source-verification parser rejects drift, unsafe evidence, and pre-finality exposure", async () => {
