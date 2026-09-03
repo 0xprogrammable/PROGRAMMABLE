@@ -87,14 +87,15 @@ describe("topbar and Explore hero polish", () => {
     for (const label of [
       "Explore",
       "Create",
-      "Migrate",
       "Docs",
       "API keys",
       "Profile",
     ]) {
       expect(navigation).toContain(`label: "${label}"`);
     }
-    expect(navigation).toContain('{ href: "/migration", label: "Migrate" }');
+    expect(navigation).not.toContain(
+      '{ href: "/migration", label: "Migrate" }',
+    );
     expect(navigationCss).toContain("@media (max-width: 60rem)");
     expect(navigationCss).toContain("grid-template-columns: 1fr");
     expect(navigation).toContain("<HeaderSocialLinks mobile />");

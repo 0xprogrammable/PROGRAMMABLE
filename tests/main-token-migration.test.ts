@@ -539,12 +539,12 @@ describe("main token migration page contract", () => {
     expect(route).toContain("PROGRAMMABLE_MAIN_TOKEN_MIGRATION_PAGE_ENABLED");
     expect(route).toContain("PROGRAMMABLE_MAIN_TOKEN_MIGRATION_LOCAL_PREVIEW");
     expect(route).toContain("notFound()");
-    expect(landing).toContain('href="/migration"');
-    expect(landing).toContain("V4 is moving to Robinhood");
-    expect(landing).toContain(
+    expect(landing).not.toContain('href="/migration"');
+    expect(landing).not.toContain("V4 is moving to Robinhood");
+    expect(landing).not.toContain(
       "NEXT_PUBLIC_PROGRAMMABLE_MAIN_TOKEN_MIGRATION_PAGE_VISIBLE",
     );
-    expect(landing).toContain("migrationWindowActive");
+    expect(landing).not.toContain("migrationWindowActive");
     expect(read("app/api/main-token-migration/window-time/route.ts")).toContain(
       "programmable-main-token-migration-window-time/v1",
     );
