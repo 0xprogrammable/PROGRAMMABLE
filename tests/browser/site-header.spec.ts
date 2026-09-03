@@ -18,8 +18,6 @@ test.afterAll(async () => { server.close(); await once(server, "close"); });
 test.beforeEach(async ({ page }) => { await page.goto(origin); });
 
 const walletName = "Wallet 0xaaaa…aaaa";
-const toRobinhood = "Viewing Ethereum. Switch to Robinhood";
-const toEthereum = "Viewing Robinhood. Switch to Ethereum";
 
 test("wallet opens only its actions; copy, Escape, outside click and focus work", async ({page,context}) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
@@ -58,39 +56,44 @@ test("disconnect failure stays inline and success returns to connect",async ({pa
   await expect(page.getByRole("group",{name:"Wallet actions",exact:true})).toHaveCount(0);
 });
 
-test("chain switch waits for wallet success and suppresses duplicate requests",async ({page})=>{
-  const toggle=page.getByRole("button",{name:toRobinhood,exact:true});
-  await toggle.evaluate((button:HTMLButtonElement)=>{button.click();button.click();});
-  await expect(toggle).toBeDisabled();
-  await expect(page.getByTestId("requests")).toHaveText("4663");
-  await expect(page.getByRole("button",{name:toEthereum,exact:true})).toBeEnabled();
-  await expect(page.getByTestId("wallet-chain")).toHaveText("0x1237");
-  await page.getByRole("button",{name:toEthereum,exact:true}).click();
-  await expect(page.getByRole("button",{name:toRobinhood,exact:true})).toBeEnabled();
-  await expect(page.getByTestId("wallet-chain")).toHaveText("0x1");
-  await expect(page.getByTestId("requests")).toHaveText("4663,1");
+test("keeps network selection out of the global header",async ({page})=>{
+  await expect(page.getByRole("button",{name:/Viewing .* Switch to/})).toHaveCount(0);
+  await expect(page.getByRole("button",{name:walletName,exact:true})).toBeVisible();
 });
 
-test("rejected network switch leaves the view and wallet unchanged",async ({page})=>{
-  await page.getByRole("button",{name:"Reject network switch"}).click();
-  await page.getByRole("button",{name:toRobinhood,exact:true}).click();
-  await expect(page.getByText("Network unchanged. Confirm Robinhood in your wallet and try again.")).toBeVisible();
-  await expect(page.getByRole("button",{name:toRobinhood,exact:true})).toBeEnabled();
-  await expect(page.getByTestId("wallet-chain")).toHaveText("0x1");
-});
-
-test("anonymous browsing can change chain without a wallet request",async ({page})=>{
-  await page.getByRole("button",{name:"Use anonymous session"}).click();
-  await page.getByRole("button",{name:toRobinhood,exact:true}).click();
-  await expect(page.getByRole("button",{name:toEthereum,exact:true})).toBeEnabled();
+test("Explore exposes one live chain and two truthful coming-soon choices",async ({page})=>{
+  const trigger=page.getByRole("button",{name:"Explore chain: Ethereum",exact:true});
+  await trigger.click();
+  const listbox=page.getByRole("listbox",{name:"Explore chains",exact:true});
+  await expect(listbox.getByRole("option")).toHaveText([
+    "Ethereum",
+    "RobinhoodComing soon",
+    "BaseComing soon",
+  ]);
+  await expect(listbox.getByRole("option",{name:"Robinhood Coming soon",exact:true})).toHaveAttribute("aria-disabled","true");
+  await expect(listbox.getByRole("option",{name:"Base Coming soon",exact:true})).toHaveAttribute("aria-disabled","true");
+  await page.keyboard.press("ArrowDown");
+  await expect(listbox.getByRole("option",{name:"Robinhood Coming soon",exact:true})).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("view-chain")).toHaveText("1");
   await expect(page.getByTestId("requests")).toBeEmpty();
+  await expect(listbox).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(listbox).toHaveCount(0);
+  await expect(trigger).toBeFocused();
 });
 
-test("session changes during a pending switch do not commit an outdated result",async ({page})=>{
-  await page.getByRole("button",{name:toRobinhood,exact:true}).click();
-  await page.getByRole("button",{name:"Use anonymous session"}).click();
-  await expect(page.getByText("Your wallet changed. Please try again.")).toBeVisible();
-  await expect(page.getByRole("button",{name:toRobinhood,exact:true})).toBeEnabled();
+test("Explore chain menu closes outside and stays inside the mobile viewport",async ({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  const trigger=page.getByRole("button",{name:"Explore chain: Ethereum",exact:true});
+  await trigger.click();
+  const listbox=page.getByRole("listbox",{name:"Explore chains",exact:true});
+  const box=await listbox.boundingBox();
+  expect(box?.x).toBeGreaterThanOrEqual(0);
+  expect((box?.x??0)+(box?.width??0)).toBeLessThanOrEqual(390);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
+  await page.getByRole("heading",{name:"Header interaction fixture",exact:true}).click();
+  await expect(listbox).toHaveCount(0);
 });
 
 test("anonymous Connect wallet closes navigation before opening login",async ({page})=>{

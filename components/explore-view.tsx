@@ -27,6 +27,7 @@ import {
   type MarketCapMetric,
 } from "@/components/animated-market-cap";
 import { XBrandIcon } from "@/components/brand-icons";
+import { ExploreChainSelector } from "@/components/explore-chain-selector";
 import { EXPLORE_PREVIEW_TOKENS } from "@/components/explore-preview-data";
 import {
   isInterfacePreviewHost,
@@ -50,6 +51,7 @@ import {
   type ExploreValuation,
   type ValuedExploreEntry,
 } from "@/lib/explore-financial-data";
+import { resolveExploreChainId } from "@/lib/explore-chain";
 import {
   CLASSIC_V4_PUBLIC_RELEASE_BINDING,
   isClassicV4AnchoredPublicReleaseBinding,
@@ -3376,11 +3378,20 @@ export function ExploreView({
   const {
     hydrated: viewChainReady,
     viewChainId: resolvedViewChainId,
+    setViewChainId,
   } = useViewChain();
-  const viewChainId =
+  const hydratedViewChainId =
     !viewChainReady && initialResponseChainId !== undefined
       ? initialResponseChainId
       : resolvedViewChainId;
+  const viewChainId = resolveExploreChainId(hydratedViewChainId);
+  useEffect(() => {
+    if (resolvedViewChainId === viewChainId) return;
+    const frame = window.requestAnimationFrame(() => {
+      setViewChainId(viewChainId);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [resolvedViewChainId, setViewChainId, viewChainId, viewChainReady]);
   const activeInitialResponse =
     initialResponseChainId === undefined ||
       initialResponseChainId === viewChainId
@@ -4199,7 +4210,10 @@ export function ExploreView({
   return (
     <div className={`${styles.page} explore-page page-width`}>
         <header className={styles.pageHeading}>
-          <Heading data-explore-heading>Explore</Heading>
+          <div className={styles.titleRow}>
+            <Heading data-explore-heading>Explore</Heading>
+            {!embedded ? <ExploreChainSelector /> : null}
+          </div>
         </header>
 
         <section

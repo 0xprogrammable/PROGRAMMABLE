@@ -10,8 +10,8 @@ import type {
   ExploreModelFilter,
 } from "@/components/explore-view";
 import { DEFAULT_EXPLORE_VIEW_SORT } from "@/lib/explore-defaults";
+import { resolveExploreChainId } from "@/lib/explore-chain";
 import {
-  parseViewChainId,
   VIEW_CHAIN_COOKIE_NAME,
   type ViewChainId,
 } from "@/lib/view-chain";
@@ -113,7 +113,7 @@ async function InitialExploreView({
       cookies(),
       searchParams,
     ]);
-  const viewChainId = parseViewChainId(
+  const viewChainId = resolveExploreChainId(
     requestCookies.get(VIEW_CHAIN_COOKIE_NAME)?.value,
   );
   const modelFilter = initialExploreModelFilter(resolvedSearchParams.model);

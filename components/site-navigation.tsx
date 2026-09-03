@@ -21,8 +21,6 @@ import {
   NavigationCloseIcon,
   NavigationMenuIcon,
 } from "@/components/navigation-icons";
-import { useViewChain, type ViewChainId } from "@/components/view-chain";
-import { isRobinhoodUnavailableRoute } from "@/components/view-chain-unavailable";
 import { useWallet } from "@/components/wallet-provider";
 import styles from "@/components/site-navigation.module.css";
 
@@ -275,111 +273,11 @@ function DesktopNavigation() {
   );
 }
 
-function ViewChainMark({ viewChainId }: { viewChainId: ViewChainId }) {
-  if (viewChainId === 4663) {
-    return (
-      <span className={styles.robinhoodChainMark} aria-hidden="true" />
-    );
-  }
-
-  return (
-    <svg
-      className={styles.ethereumChainMark}
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path d="M12 2 5.5 12.2 12 9.25l6.5 2.95L12 2Z" fill="currentColor" />
-      <path
-        d="m5.5 13.35 6.5 3.7 6.5-3.7L12 22 5.5 13.35Z"
-        fill="currentColor"
-      />
-      <path
-        d="m12 9.25-6.5 2.95L12 15.9l6.5-3.7L12 9.25Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-
-function viewChainLabel(viewChainId: ViewChainId) {
-  return viewChainId === 1 ? "Ethereum" : "Robinhood";
-}
-
-function HeaderChainToggle({
-  triggerRef,
-  onStart,
-  onSelect,
-}: Readonly<{
-  triggerRef: RefObject<HTMLButtonElement | null>;
-  onStart: () => void;
-  onSelect: (viewChainId: ViewChainId) => void;
-}>) {
-  const { hydrated, viewChainId, setViewChainId } = useViewChain();
-  const { wallet, authReady, hasSession, connecting, disconnecting, switchingNetwork, switchNetwork } = useWallet();
-  const pendingRef = useRef(false);
-  const accountRef = useRef(wallet?.account);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState("");
-  useEffect(() => {
-    accountRef.current = wallet?.account;
-  }, [wallet?.account]);
-  const alternateViewChainId: ViewChainId = viewChainId === 1 ? 4663 : 1;
-  const currentLabel = viewChainLabel(viewChainId);
-  const alternateLabel = viewChainLabel(alternateViewChainId);
-
-  return (
-    <div className={styles.headerChain}>
-      <button
-        ref={triggerRef}
-        className={styles.chainTrigger}
-        type="button"
-        aria-busy={!hydrated || pending || switchingNetwork || undefined}
-        aria-label={`Viewing ${currentLabel}. Switch to ${alternateLabel}`}
-        disabled={!hydrated || (hasSession && !authReady) || connecting || disconnecting || pending || switchingNetwork}
-        title={`Switch to ${alternateLabel}`}
-        onClick={async () => {
-          if (pendingRef.current) return;
-          onStart();
-          setError("");
-          pendingRef.current = true;
-          setPending(true);
-          try {
-            if (wallet && !(await switchNetwork(String(alternateViewChainId)))) {
-              setError(`Network unchanged. Confirm ${alternateLabel} in your wallet and try again.`);
-              return;
-            }
-            if (accountRef.current !== wallet?.account) {
-              setError("Your wallet changed. Please try again.");
-              return;
-            }
-            setViewChainId(alternateViewChainId);
-            onSelect(alternateViewChainId);
-          } catch {
-            setError("Network unchanged. Please try again.");
-          } finally {
-            pendingRef.current = false;
-            setPending(false);
-          }
-        }}
-      >
-        <ViewChainMark viewChainId={viewChainId} />
-      </button>
-      <p className={error ? styles.chainFeedback : "sr-only"} role="status" aria-live="polite">
-        {error || (pending ? `Confirm ${alternateLabel} in your wallet` : "")}
-      </p>
-    </div>
-  );
-}
-
 export function SiteHeader() {
   const pathname = usePathname() ?? "/";
-  const router = useRouter();
   const menuId = useId();
   const headerRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
-  const chainButtonRef = useRef<HTMLButtonElement>(null);
   const walletButtonRef = useRef<HTMLButtonElement>(null);
   const [menuPath, setMenuPath] = useState<string | null>(null);
   const [walletMenuPath, setWalletMenuPath] = useState<string | null>(null);
@@ -462,30 +360,6 @@ export function SiteHeader() {
         <DesktopNavigation />
 
         <div className={`header-actions ${styles.headerActions}`}>
-          <HeaderChainToggle
-            triggerRef={chainButtonRef}
-            onStart={() => {
-              setMenuPath(null);
-              setWalletMenuPath(null);
-            }}
-            onSelect={(selectedViewChainId) => {
-              setMenuPath(null);
-              if (pathname.startsWith("/token/")) {
-                const url = new URL(window.location.href);
-                url.searchParams.set("chain", String(selectedViewChainId));
-                const search = url.searchParams.toString();
-                router.replace(`${pathname}${search ? `?${search}` : ""}`);
-                window.requestAnimationFrame(() => {
-                  chainButtonRef.current?.focus({ preventScroll: true });
-                });
-                return;
-              }
-              if (isRobinhoodUnavailableRoute(pathname)) return;
-              window.requestAnimationFrame(() => {
-                chainButtonRef.current?.focus({ preventScroll: true });
-              });
-            }}
-          />
           <HeaderWalletButton
             triggerRef={walletButtonRef}
             open={walletMenuOpen}

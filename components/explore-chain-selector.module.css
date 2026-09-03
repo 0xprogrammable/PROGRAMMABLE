@@ -1,0 +1,188 @@
+.selector {
+  flex: none;
+  position: relative;
+  z-index: 20;
+}
+
+.trigger {
+  align-items: center;
+  background: var(--webde-surface);
+  border: 1px solid var(--webde-line);
+  border-radius: var(--webde-radius-control);
+  color: var(--webde-ink);
+  display: inline-flex;
+  font-family: var(--font-instrument), sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  gap: 9px;
+  min-height: 44px;
+  padding: 0 12px;
+  transition:
+    background-color 160ms cubic-bezier(0.32, 0.72, 0, 1),
+    border-color 160ms cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 160ms cubic-bezier(0.32, 0.72, 0, 1);
+  white-space: nowrap;
+}
+
+.trigger:focus-visible {
+  outline: 2px solid var(--webde-ink);
+  outline-offset: 2px;
+}
+
+.selector[data-open="true"] .trigger {
+  background: var(--webde-surface-raised);
+  border-color: #595959;
+  box-shadow: 0 0 0 3px rgb(255 255 255 / 0.08);
+}
+
+.chevron {
+  color: var(--webde-dim);
+  flex: none;
+  transition: transform 160ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.selector[data-open="true"] .chevron {
+  transform: rotate(180deg);
+}
+
+.ethereumMark,
+.robinhoodMark,
+.baseMark {
+  color: currentColor;
+  display: block;
+  flex: none;
+  height: 18px;
+  width: 18px;
+}
+
+.robinhoodMark {
+  aspect-ratio: 32 / 42;
+  background: currentColor;
+  height: 19px;
+  mask: url("/brand/networks/robinhood-feather-white.svg") center / contain no-repeat;
+  width: auto;
+}
+
+.baseMark {
+  background: #0052ff;
+  border: 5px solid currentColor;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px #0052ff;
+}
+
+.menu {
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  background: rgb(24 24 24 / 0.98);
+  border: 1px solid var(--webde-line);
+  border-radius: 12px;
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.58);
+  display: grid;
+  gap: 2px;
+  left: 0;
+  min-width: 232px;
+  padding: 8px;
+  position: absolute;
+  top: calc(100% + 8px);
+}
+
+.option {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  color: var(--webde-muted);
+  display: grid;
+  font: inherit;
+  grid-template-columns: 20px minmax(0, 1fr) 16px;
+  min-height: 48px;
+  padding: 7px 10px;
+  text-align: start;
+  width: 100%;
+}
+
+.option:focus-visible {
+  outline: 2px solid var(--webde-ink);
+  outline-offset: -2px;
+}
+
+.optionCurrent {
+  background: var(--webde-control);
+  color: var(--webde-ink);
+}
+
+.option[aria-disabled="true"] {
+  color: var(--webde-dim);
+}
+
+.optionCopy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.optionCopy > span:first-child {
+  font-family: var(--font-instrument), sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.optionStatus {
+  color: var(--webde-dim);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.check {
+  color: var(--webde-ink);
+}
+
+.checkPlaceholder {
+  height: 16px;
+  width: 16px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .trigger:hover,
+  .option:hover:not([aria-disabled="true"]) {
+    background: var(--webde-surface-raised);
+    border-color: #505050;
+    color: var(--webde-ink);
+  }
+}
+
+@media (max-width: 700px) {
+  .menu {
+    left: auto;
+    max-width: calc(100vw - 32px);
+    min-width: min(232px, calc(100vw - 32px));
+    right: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trigger,
+  .chevron {
+    transition-duration: 0.01ms;
+  }
+}
+
+@media (forced-colors: active) {
+  .trigger,
+  .menu,
+  .option {
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+
+  .robinhoodMark,
+  .baseMark {
+    background: CanvasText;
+    forced-color-adjust: none;
+  }
+
+  .trigger:focus-visible,
+  .option:focus-visible {
+    outline-color: Highlight;
+  }
+}
