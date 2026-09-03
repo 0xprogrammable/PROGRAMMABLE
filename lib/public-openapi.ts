@@ -281,7 +281,7 @@ export const programmablePublicOpenApi = {
             name: "chain",
             in: "query",
             description:
-              "Chain-scoped Explore discovery. Ethereum Mainnet is live; the Robinhood Explore read-model lane currently returns an honest planned-not-deployed response with no catalog or tokens. This does not describe Router or Custom API deployment.",
+              "Chain-scoped Explore discovery. Ethereum Mainnet retains its existing market-enriched response. Robinhood returns a newest-only ready projection only when the finalized Programmable backend feed and direct chain verification succeed; otherwise it returns the honest planned-not-deployed response.",
             schema: { type: "integer", enum: [1, 4663], default: 1 },
           },
           {
@@ -319,7 +319,7 @@ export const programmablePublicOpenApi = {
             name: "sort",
             in: "query",
             description:
-              "Canonical launch order, GMGN Trending, or GMGN-primary market-cap ordering. trending is accepted only with chain=1. Market-cap sorts place qualified canonical GMGN rank matches first in the requested direction, then sort only the unobserved canonical remainder by exact-identity Dexscreener FDV; this is deliberately not a cross-provider numeric merge. Every mode retains the complete filtered canonical catalog.",
+              "Canonical launch order, GMGN Trending, or GMGN-primary market-cap ordering. chain=4663 accepts only newest. trending and every market-cap sort are accepted only with chain=1. Market-cap sorts place qualified canonical GMGN rank matches first in the requested direction, then sort only the unobserved canonical remainder by exact-identity Dexscreener FDV; this is deliberately not a cross-provider numeric merge. Every mode retains the complete filtered canonical catalog.",
             schema: {
               type: "string",
               enum: [
@@ -349,7 +349,7 @@ export const programmablePublicOpenApi = {
           "200": {
             ...jsonResponse(
               component("ExploreListResponse"),
-              "Verified launch page or an honest planned-not-deployed Explore-lane response.",
+              "Verified chain-scoped launch page or an honest planned-not-deployed Robinhood response.",
             ),
             headers: {
               ...exploreIdentityResponseHeaders,
@@ -376,7 +376,7 @@ export const programmablePublicOpenApi = {
         operationId: "getVerifiedToken",
         summary: "Look up one verified token",
         description:
-          "Looks up an exact token identity on the selected chain. Ethereum Mainnet is live. The Robinhood Explore read-model lane currently returns an honest planned-not-deployed response without reading chain 4663; this does not describe Router or Custom API deployment. A 404 response is a completed verified lookup with no public identity, not a provider timeout.",
+          "Looks up an exact token identity on the selected chain. Ethereum Mainnet retains its existing market-enriched response. Robinhood returns a ready identity only when the finalized Programmable backend feed and direct chain verification succeed; otherwise it returns the honest planned-not-deployed response. A 404 response is a completed verified lookup with no public identity, not a provider timeout.",
         tags: ["Discovery"],
         security: [],
         parameters: [
@@ -400,7 +400,7 @@ export const programmablePublicOpenApi = {
           "200": {
             ...jsonResponse(
               component("TokenDetailResponse"),
-              "Verified token, Registry-verified Custom project, or honest planned-not-deployed Explore-lane response.",
+              "Verified chain-scoped token, Registry-verified Custom project, or honest planned-not-deployed Robinhood response.",
             ),
             headers: {
               ...exploreIdentityResponseHeaders,
@@ -410,7 +410,7 @@ export const programmablePublicOpenApi = {
           "400": jsonResponse(component("ApiError"), "Invalid address or query shape."),
           "404": {
             ...jsonResponse(
-              component("TokenDetailReadyResponse"),
+              component("TokenDetailLookupReadyResponse"),
               "Verified lookup completed but no public token identity matched. No market provider is read for this response.",
             ),
             headers: exploreIdentityResponseHeaders,
@@ -3232,9 +3232,36 @@ export const programmablePublicOpenApi = {
         },
         additionalProperties: true,
       },
+      RobinhoodFinalizedCatalogBoundary: {
+        type: "object",
+        description:
+          "Finalized Robinhood Custom launch identities admitted from the Programmable V4 backend and reverified against the canonical launch-stamp Router before publication.",
+        required: [
+          "source",
+          "launchSource",
+          "status",
+          "lastIndexedAt",
+          "identityCount",
+        ],
+        properties: {
+          source: { const: "robinhood-finalized-custom-launch-feed-v4" },
+          launchSource: {
+            const:
+              "robinhood-finalized-custom-launch-feed-v4+canonical-launch-stamp-router",
+          },
+          status: { const: "current" },
+          lastIndexedAt: { type: "string", format: "date-time" },
+          asOfBlock: { type: "string", pattern: "^[1-9][0-9]*$" },
+          asOfBlockHash: component("Hex32"),
+          identityCount: { type: "integer", minimum: 1 },
+          identityCommitment: component("Sha256Digest"),
+        },
+        additionalProperties: true,
+      },
       ExploreListResponse: {
         oneOf: [
           component("ExploreReadyListResponse"),
+          component("RobinhoodExploreReadyListResponse"),
           component("ExplorePlannedListResponse"),
         ],
       },
@@ -3289,6 +3316,41 @@ export const programmablePublicOpenApi = {
         },
         additionalProperties: true,
       },
+      RobinhoodExploreReadyListResponse: {
+        type: "object",
+        description:
+          "Newest-first Robinhood Custom launches from the finalized Programmable backend feed after direct Router, L2 inclusion and Ethereum-finality verification. Market enrichment is unavailable and marketRead is omitted (or null).",
+        required: [
+          "status",
+          "chainId",
+          "tokens",
+          "page",
+          "pageSize",
+          "total",
+          "totalPages",
+          "sort",
+          "query",
+          "catalog",
+        ],
+        properties: {
+          status: { const: "ready" },
+          chainId: { const: 4663 },
+          tokens: { type: "array", items: component("ExploreEntry") },
+          page: { type: "integer", minimum: 1 },
+          pageSize: { type: "integer", minimum: 1, maximum: 100 },
+          total: { type: "integer", minimum: 0 },
+          totalPages: { type: "integer", minimum: 0 },
+          sort: { const: "newest" },
+          query: { type: "string" },
+          catalog: component("RobinhoodFinalizedCatalogBoundary"),
+          marketRead: {
+            type: "null",
+            description:
+              "Robinhood Explore currently performs no market-data provider read.",
+          },
+        },
+        additionalProperties: false,
+      },
       ExplorePlannedListResponse: {
         type: "object",
         required: [
@@ -3316,10 +3378,7 @@ export const programmablePublicOpenApi = {
           pageSize: { type: "integer", minimum: 1, maximum: 100 },
           total: { const: 0 },
           totalPages: { const: 0 },
-          sort: {
-            type: "string",
-            enum: ["newest", "oldest", "market-cap", "market-cap-asc"],
-          },
+          sort: { const: "newest" },
           query: { type: "string" },
         },
         additionalProperties: false,
@@ -3327,7 +3386,14 @@ export const programmablePublicOpenApi = {
       TokenDetailResponse: {
         oneOf: [
           component("TokenDetailReadyResponse"),
+          component("RobinhoodTokenDetailReadyResponse"),
           component("TokenDetailPlannedResponse"),
+        ],
+      },
+      TokenDetailLookupReadyResponse: {
+        oneOf: [
+          component("TokenDetailReadyResponse"),
+          component("RobinhoodTokenDetailReadyResponse"),
         ],
       },
       TokenDetailReadyResponse: {
@@ -3344,6 +3410,29 @@ export const programmablePublicOpenApi = {
           creatorArticle: { type: ["object", "null"], additionalProperties: true },
           snapshot: { type: ["object", "null"], additionalProperties: true },
           catalog: component("CatalogBoundary"),
+        },
+        additionalProperties: true,
+      },
+      RobinhoodTokenDetailReadyResponse: {
+        type: "object",
+        description:
+          "A Robinhood token lookup completed against the finalized Programmable feed and direct chain verification boundary. token is null only for a verified 404.",
+        required: ["status", "token", "customProject", "creatorArticle", "catalog"],
+        properties: {
+          status: { const: "ready" },
+          token: {
+            oneOf: [component("ExploreEntry"), { type: "null" }],
+          },
+          customProject: { type: "null" },
+          routerTradeProject: { type: "null" },
+          platformFeeCertification: { type: "null" },
+          sourceVerification: {
+            type: ["object", "null"],
+            additionalProperties: true,
+          },
+          creatorArticle: { type: "null" },
+          snapshot: { type: ["object", "null"], additionalProperties: true },
+          catalog: component("RobinhoodFinalizedCatalogBoundary"),
         },
         additionalProperties: true,
       },

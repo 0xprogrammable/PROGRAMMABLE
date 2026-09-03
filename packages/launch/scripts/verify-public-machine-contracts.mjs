@@ -32,6 +32,28 @@ const API_SERVER_BY_DOCUMENT = Object.freeze({
   "custom-launch-v3.json": "https://api.programmable.market",
   "custom-launch-v4.json": "https://api.programmable.market",
 });
+const ROBINHOOD_V4_PLATFORM_FEE_POLICY = Object.freeze({
+  required: true,
+  status: "required-default-configuration",
+  appliesTo: "new-robinhood-v4-api-custom-launches-only",
+  changesExistingLaunches: false,
+  changesEthereumLaunches: false,
+  rateBps: 20,
+  ratePpm: 2_000,
+  ratePercent: "0.20%",
+  recipient: "0xD88539d3c4C460136a733A3Fd60cf6BF269079da",
+  basis: null,
+  feeCurrency: null,
+  accountingMode: null,
+  rounding: null,
+  accrual: null,
+  claimMechanism: null,
+  enforcement: "not-guaranteed-onchain",
+  canonicalOnchainEnforcementProven: false,
+  guaranteedRevenue: false,
+  feeBehaviorClaim: false,
+  universalFeeBehaviorClaim: false,
+});
 
 const documents = new Map();
 for (const [name, filePath] of Object.entries(documentPaths)) {
@@ -296,6 +318,27 @@ assert.deepEqual(
   packageV4PackBytes,
   "Public and packaged V4 pack-config schemas must be byte-identical",
 );
+const packageV4Schema = parseStrictJson(packageV4PackBytes.toString("utf8"), {
+  maximumBytes: 10_000_000,
+  maximumDepth: 256,
+});
+assertJsonEqual(
+  packageV4Schema["x-programmable-contract"].platformFeePolicy,
+  ROBINHOOD_V4_PLATFORM_FEE_POLICY,
+  "V4 pack annotation must pin the Robinhood API platform fee policy",
+);
+assert.equal(
+  Object.hasOwn(packageV4Schema.$defs, "launchProfile"),
+  false,
+  "V4 pack schema must not retain the unreachable Ethereum V3 launch profile",
+);
+assert.equal(
+  JSON.stringify(packageV4Schema).includes(
+    "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+  ),
+  false,
+  "V4 pack schema must not retain the Ethereum V3 payout recipient",
+);
 const v4StandaloneComponents = Object.freeze({
   "pack-config.json": "PackConfigV4",
   "custom-launch-create-request.json": "CustomLaunchCreateRequestV4",
@@ -339,6 +382,19 @@ assert.equal(
     .properties.walletHandoff.properties.walletHandoffBaseUrl.const,
   "https://programmable.market/developers/api-keys",
   "V4 wallet handoff must publish the exact owner-action base URL",
+);
+assertJsonEqual(
+  v4.components.schemas.CustomLaunchCapabilitiesV2.properties.safety.properties,
+  {
+    serverAuthoritative: { const: true },
+    clientBypassAccepted: { const: false },
+    walletSignatureProduced: { const: false },
+    transactionBroadcast: { const: false },
+    feeBehaviorClaim: { const: false },
+    universalFeeBehaviorClaim: { const: false },
+    genericClaimingLive: { const: false },
+  },
+  "V4 capabilities must preserve the non-claiming safety contract",
 );
 const packagedExternalContract = v4.components.schemas.PackConfigV4.$defs.externalContract;
 assert.equal(

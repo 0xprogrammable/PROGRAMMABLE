@@ -185,6 +185,24 @@ describe("Explore UI contract", () => {
     );
     expect(source).toContain("valuationSortOptions.map((option) => (");
     expect(source).toContain("ageSortOptions.map((option) => (");
+    expect(source).toContain("resolveExploreSortSelectionsForChain(");
+    expect(source).toContain(
+      "aria-pressed={valuationSortForChain === option.id}",
+    );
+    expect(source).toContain(
+      "aria-pressed={ageSortForChain === option.id}",
+    );
+    expect(source).toMatch(/disabled=\{viewChainId === 4663\}/u);
+    expect(source).toMatch(
+      /disabled=\{viewChainId === 4663 &&\s+option\.id === "oldest"\}/u,
+    );
+    expect(source).toContain(
+      "valuationSort: valuationSortForChain",
+    );
+    expect(source).toContain("ageSort: ageSortForChain");
+    expect(source).toContain(
+      "if (viewChainId === 1) {\n                                setDiscoverySort(\"none\");",
+    );
     expect(source).toContain("setValuationSort((current) =>");
     expect(source).toContain("setAgeSort((current) =>");
     expect(source).toContain('search.set(\n        "model",');

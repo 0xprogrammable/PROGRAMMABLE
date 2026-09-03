@@ -15,7 +15,29 @@
       "none",
       "wallet-transaction-value"
     ],
-    "walletSigning": "separate-owner-action"
+    "walletSigning": "separate-owner-action",
+    "platformFeePolicy": {
+      "required": true,
+      "status": "required-default-configuration",
+      "appliesTo": "new-robinhood-v4-api-custom-launches-only",
+      "changesExistingLaunches": false,
+      "changesEthereumLaunches": false,
+      "rateBps": 20,
+      "ratePpm": 2000,
+      "ratePercent": "0.20%",
+      "recipient": "0xD88539d3c4C460136a733A3Fd60cf6BF269079da",
+      "basis": null,
+      "feeCurrency": null,
+      "accountingMode": null,
+      "rounding": null,
+      "accrual": null,
+      "claimMechanism": null,
+      "enforcement": "not-guaranteed-onchain",
+      "canonicalOnchainEnforcementProven": false,
+      "guaranteedRevenue": false,
+      "feeBehaviorClaim": false,
+      "universalFeeBehaviorClaim": false
+    }
   },
   "type": "object",
   "additionalProperties": false,
@@ -1115,155 +1137,6 @@
                   }
                 }
               ]
-            }
-          }
-        }
-      ]
-    },
-    "launchProfile": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "schemaVersion",
-        "profileId",
-        "profileRevision",
-        "targetRoles",
-        "liquidityModel",
-        "fundingMode",
-        "accountingMode",
-        "assessmentBase",
-        "feeCurrency",
-        "claimMode",
-        "applicantSelectedBuyHundredthsOfBip",
-        "applicantSelectedSellHundredthsOfBip"
-      ],
-      "properties": {
-        "schemaVersion": {
-          "const": "programmable.direct-native-hook-graph-profile-selection.v3"
-        },
-        "profileId": {
-          "const": "programmable.direct-native-hook-graph.v1"
-        },
-        "profileRevision": {
-          "const": 3
-        },
-        "targetRoles": {
-          "$ref": "#/$defs/targetRoles"
-        },
-        "liquidityModel": {
-          "$ref": "#/$defs/liquidityModel"
-        },
-        "fundingMode": {
-          "enum": [
-            "none",
-            "wallet-transaction-value",
-            "eip-3009-receive-with-authorization"
-          ]
-        },
-        "accountingMode": {
-          "enum": [
-            "additive-platform-share",
-            "inclusive-selected-total"
-          ]
-        },
-        "assessmentBase": {
-          "enum": [
-            "executed-gross-declared-quote",
-            "settled-input-before-platform-fee"
-          ]
-        },
-        "feeCurrency": {
-          "enum": [
-            "declared-quote-currency",
-            "input-currency"
-          ]
-        },
-        "claimMode": {
-          "enum": [
-            "immutable-payout-recipient",
-            "claim-authority-selected-recipient"
-          ]
-        },
-        "payoutRecipient": {
-          "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
-        },
-        "applicantSelectedBuyHundredthsOfBip": {
-          "$ref": "#/$defs/feeUintString"
-        },
-        "applicantSelectedSellHundredthsOfBip": {
-          "$ref": "#/$defs/feeUintString"
-        }
-      },
-      "allOf": [
-        {
-          "if": {
-            "type": "object",
-            "properties": {
-              "claimMode": {
-                "const": "immutable-payout-recipient"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "payoutRecipient": {}
-            },
-            "required": [
-              "payoutRecipient"
-            ]
-          },
-          "else": {
-            "not": {
-              "properties": {
-                "payoutRecipient": {}
-              },
-              "required": [
-                "payoutRecipient"
-              ]
-            }
-          }
-        },
-        {
-          "if": {
-            "type": "object",
-            "properties": {
-              "assessmentBase": {
-                "const": "executed-gross-declared-quote"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "feeCurrency": {
-                "const": "declared-quote-currency"
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "feeCurrency": {
-                "const": "input-currency"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "type": "object",
-            "properties": {
-              "accountingMode": {
-                "const": "additive-platform-share"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "applicantSelectedBuyHundredthsOfBip": {
-                "$ref": "#/$defs/additiveFeeUintString"
-              },
-              "applicantSelectedSellHundredthsOfBip": {
-                "$ref": "#/$defs/additiveFeeUintString"
-              }
             }
           }
         }

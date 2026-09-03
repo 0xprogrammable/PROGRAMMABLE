@@ -73,6 +73,10 @@ import { safeOperationalRpcError } from
   "../../../lib/onchain/operational-rpc-failover.server";
 import { readProductionCustomExploreDirectoryV1 } from
   "../../../lib/server/custom-launch/explore-directory-v1";
+import {
+  readRobinhoodFinalizedExploreSnapshotV1,
+} from
+  "../../../lib/server/custom-launch/robinhood-finalized-explore-feed-v1";
 import { isCustomLaunchRegistryPublicReadEnabled } from
   "../../../lib/server/custom-launch/public-readiness";
 import type { ExploreSort } from "../../../lib/onchain/types";
@@ -1979,6 +1983,16 @@ export async function GET(request: NextRequest) {
     );
   }
   const requestedSort = parseExploreSort(search.get("sort"));
+  if (chain === 4663 && requestedSort !== "newest") {
+    return NextResponse.json(
+      {
+        error: requestedSort === "trending"
+          ? "Trending discovery is available on Ethereum only"
+          : "Robinhood Explore supports newest sort only",
+      },
+      { status: 400, headers: { "Cache-Control": "no-store" } },
+    );
+  }
   const requestedPage = integerQuery(search.get("page"), 1);
   const requestedRankingCommitment = search.get("rankingCommitment");
   const ethereumMarketCapSort = chain === 1 &&
@@ -2013,6 +2027,84 @@ export async function GET(request: NextRequest) {
       9,
       100,
     );
+    try {
+      const snapshot = await readRobinhoodFinalizedExploreSnapshotV1({
+        signal: readSignal,
+      });
+      const paginated = paginateExploreEntriesV1(snapshot.entries, {
+        query,
+        sort: requestedSort,
+        page: requestedPage,
+        pageSize,
+        socials,
+        model,
+      });
+      const tokens = paginated.tokens.map((entry) => publicExploreEntryV1({
+        ...entry,
+        valuation: { status: "unavailable" as const, reason: "source-unavailable" as const },
+      }));
+      return NextResponse.json(
+        {
+          status: "ready" as const,
+          chainId: chain,
+          ...paginated,
+          tokens,
+          sort: requestedSort,
+          query,
+          catalog: {
+            source: snapshot.source,
+            launchSource: snapshot.launchSource,
+            status: "current" as const,
+            lastIndexedAt: snapshot.generatedAt,
+            asOfBlock: snapshot.asOfBlock,
+            asOfBlockHash: snapshot.asOfBlockHash,
+            identityCount: snapshot.entries.length,
+            identityCommitment: snapshot.identityCommitment,
+            completeness: {
+              classic: "unavailable" as const,
+              stock: "excluded" as const,
+              custom: "current" as const,
+              registryCustom: "unavailable" as const,
+              routerCustom: "current" as const,
+            },
+            scope: {
+              included: ["canonical-launch-stamp-router"] as const,
+              excluded: CLASSIC_EXCLUSIONS,
+              publicCategories: ["classic", "custom"] as const,
+            },
+            routerStamp: {
+              source: ROUTER_CUSTOM_LAUNCH_SOURCE,
+              status: "current" as const,
+              finalityConfirmations: Number(ROUTER_CUSTOM_FINALITY_CONFIRMATIONS),
+              verifiedIdentityCount: snapshot.entries.length,
+              projectedIdentityCount: snapshot.entries.length,
+              generatedAt: snapshot.generatedAt,
+              asOfBlock: snapshot.asOfBlock,
+              asOfBlockHash: snapshot.asOfBlockHash,
+              identityCommitment: snapshot.identityCommitment,
+            },
+          },
+        },
+        {
+          headers: {
+            "Cache-Control":
+              "public, max-age=0, s-maxage=15, stale-while-revalidate=45",
+            "X-Programmable-Chain-Id": String(chain),
+            "X-Programmable-Launch-Source": snapshot.launchSource,
+            "X-Programmable-Read-Source": snapshot.launchSource,
+            "X-Programmable-Canonical-Read-Status": "unavailable",
+            "X-Programmable-Router-Read-Status": "current",
+            "X-Programmable-Identity-Last-Indexed-At": snapshot.generatedAt,
+          },
+        },
+      );
+    } catch (error) {
+      console.warn("Robinhood finalized Explore feed unavailable", {
+        name: error instanceof Error
+          ? error.name
+          : "RobinhoodFinalizedExploreFeedError",
+      });
+    }
     return NextResponse.json(
       {
         status: "not-deployed" as const,

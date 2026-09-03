@@ -11,7 +11,10 @@ import {
   serializeViewChainCookie,
   tryParseViewChainId,
 } from "../lib/view-chain";
-import { resolveExploreChainId } from "../lib/explore-chain";
+import {
+  isRobinhoodExploreAvailableResponse,
+  resolveExploreChainId,
+} from "../lib/explore-chain";
 
 const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -40,11 +43,33 @@ describe("view chain", () => {
     expect(serializeViewChainCookie(4663)).toContain("SameSite=Lax");
   });
 
-  it("normalizes unavailable Explore preferences to Ethereum", () => {
+  it("accepts supported Explore preferences and normalizes invalid chains", () => {
     expect(resolveExploreChainId(1)).toBe(1);
-    expect(resolveExploreChainId(4663)).toBe(1);
+    expect(resolveExploreChainId(4663)).toBe(4663);
     expect(resolveExploreChainId(8453)).toBe(1);
     expect(resolveExploreChainId("invalid")).toBe(1);
+  });
+
+  it("derives Robinhood availability only from a non-empty ready server response", () => {
+    const ready = {
+      status: "ready",
+      chainId: 4663,
+      total: 1,
+      catalog: {
+        source: "robinhood-finalized-custom-launch-feed-v4",
+        completeness: { custom: "current" },
+      },
+    };
+    expect(isRobinhoodExploreAvailableResponse(ready)).toBe(true);
+    expect(isRobinhoodExploreAvailableResponse({ ...ready, total: 0 })).toBe(false);
+    expect(isRobinhoodExploreAvailableResponse({
+      ...ready,
+      status: "not-deployed",
+    })).toBe(false);
+    expect(isRobinhoodExploreAvailableResponse({
+      ...ready,
+      catalog: { ...ready.catalog, completeness: { custom: "unavailable" } },
+    })).toBe(false);
   });
 
   it("resolves the server cookie only inside chain-bound product routes", () => {

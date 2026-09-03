@@ -29,6 +29,10 @@ import { readProductionCustomExploreDirectoryV1 } from
   "../../../../lib/server/custom-launch/explore-directory-v1";
 import { readProductionSourceVerificationDisplayV1 } from
   "../../../../lib/server/custom-launch/source-verification-display-v1";
+import {
+  readRobinhoodFinalizedExploreSnapshotV1,
+} from
+  "../../../../lib/server/custom-launch/robinhood-finalized-explore-feed-v1";
 import { routerTradeProjectForServerBoundEntryV1 } from
   "../../../../lib/server/custom-launch/router-trade-descriptor-v1";
 import {
@@ -170,6 +174,112 @@ export async function GET(request: NextRequest) {
   const requestedTokenAddress = getAddress(input);
   const address = requestedTokenAddress.toLowerCase();
   if (chain === 4663) {
+    try {
+      const robinhood = await readRobinhoodFinalizedExploreSnapshotV1({
+        signal: readSignal,
+      });
+      const entry = robinhood.entries.find(
+        (candidate) => candidate.tokenAddress.toLowerCase() === address,
+      ) ?? null;
+      const catalog = {
+        source: robinhood.source,
+        launchSource: robinhood.launchSource,
+        status: "current" as const,
+        lastIndexedAt: robinhood.generatedAt,
+        asOfBlock: robinhood.asOfBlock,
+        asOfBlockHash: robinhood.asOfBlockHash,
+        identityCount: robinhood.entries.length,
+        identityCommitment: robinhood.identityCommitment,
+        completeness: {
+          classic: "unavailable" as const,
+          stock: "excluded" as const,
+          custom: "current" as const,
+          registryCustom: "unavailable" as const,
+          routerCustom: "current" as const,
+        },
+        scope: {
+          included: ["canonical-launch-stamp-router"] as const,
+          excluded: [
+            "classic-v1", "classic-v2", "stock-paired-v1",
+            "stock-paired-v2", "stock-paired-v3",
+          ] as const,
+          publicCategories: ["classic", "custom"] as const,
+        },
+        routerStamp: {
+          source: ROUTER_CUSTOM_LAUNCH_SOURCE,
+          status: "current" as const,
+          finalityConfirmations: Number(ROUTER_CUSTOM_FINALITY_CONFIRMATIONS),
+          verifiedIdentityCount: robinhood.entries.length,
+          projectedIdentityCount: robinhood.entries.length,
+          generatedAt: robinhood.generatedAt,
+          asOfBlock: robinhood.asOfBlock,
+          asOfBlockHash: robinhood.asOfBlockHash,
+          identityCommitment: robinhood.identityCommitment,
+        },
+      };
+      const headers = {
+        "Cache-Control": SUCCESS_CACHE_CONTROL,
+        "X-Programmable-Chain-Id": String(chain),
+        "X-Programmable-Launch-Source": robinhood.launchSource,
+        "X-Programmable-Read-Source": robinhood.launchSource,
+        "X-Programmable-Canonical-Read-Status": "unavailable",
+        "X-Programmable-Router-Read-Status": "current",
+        "X-Programmable-Identity-Last-Indexed-At": robinhood.generatedAt,
+      };
+      if (entry === null) {
+        return NextResponse.json(
+          {
+            status: "ready" as const,
+            token: null,
+            customProject: null,
+            routerTradeProject: null,
+            platformFeeCertification: null,
+            sourceVerification: null,
+            creatorArticle: null,
+            snapshot: null,
+            catalog,
+          },
+          { status: 404, headers },
+        );
+      }
+      const publicToken = publicExploreEntryV1(
+        publicExplorePresentationEntryV1({
+          ...entry,
+          valuation: {
+            status: "unavailable" as const,
+            reason: "source-unavailable" as const,
+          },
+        }),
+      );
+      const sourceUpdatedAt = robinhood.sourceVerification.find(
+        (candidate) => candidate.tokenAddress.toLowerCase() === address,
+      )?.updatedAt ?? null;
+      return NextResponse.json(
+        {
+          status: "ready" as const,
+          token: publicToken,
+          customProject: null,
+          routerTradeProject: null,
+          platformFeeCertification: null,
+          sourceVerification: {
+            schemaVersion: "programmable.source-verification-display.v1" as const,
+            status: "verified" as const,
+            label: "Source verified" as const,
+            updatedAt: sourceUpdatedAt,
+          },
+          creatorArticle: null,
+          snapshot: { chainId: 4663 },
+          catalog,
+        },
+        { headers },
+      );
+    } catch (error) {
+      console.warn("Robinhood finalized token feed unavailable", {
+        name: error instanceof Error
+          ? error.name
+          : "RobinhoodFinalizedExploreFeedError",
+      });
+    }
     return NextResponse.json(
       {
         status: "not-deployed" as const,
