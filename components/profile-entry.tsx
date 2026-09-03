@@ -9,12 +9,15 @@ import { useWallet } from "@/components/wallet-provider";
 import styles from "./profile-entry.module.css";
 
 const ethereumAddressPattern = /^0x[0-9a-f]{40}$/;
-const loadProfileView = () =>
-  import("@/components/profile-view").then((module) => module.ProfileView);
-const ProfileView = dynamic(loadProfileView, {
-  loading: () => <ProfileEntryLoadingState />,
-  ssr: false,
-});
+const ProfileView = dynamic(
+  () =>
+    import("@/components/profile-view").then((module) => module.ProfileView),
+  { loading: () => <ProfileEntryLoadingState /> },
+);
+
+function preloadProfileView() {
+  void import("@/components/profile-view");
+}
 
 export function profileEntryHasPublicAccount(
   queryAccounts: readonly string[],
@@ -38,9 +41,11 @@ export function shouldLoadProfileEntryView({
 function ProfileEntryFrame({
   loading,
   onConnect,
+  onPrepareProfile,
 }: Readonly<{
   loading: boolean;
   onConnect?: () => void;
+  onPrepareProfile?: () => void;
 }>) {
   const titleId = loading
     ? "profile-entry-loading-title"
@@ -85,7 +90,13 @@ function ProfileEntryFrame({
             <span className={styles.visuallyHidden} id={descriptionId}>
               Connect to manage your profile, launches and rewards.
             </span>
-            <button className={styles.button} type="button" onClick={onConnect}>
+            <button
+              className={styles.button}
+              type="button"
+              onClick={onConnect}
+              onFocus={onPrepareProfile}
+              onPointerEnter={onPrepareProfile}
+            >
               Connect wallet
             </button>
           </>
@@ -115,5 +126,16 @@ export function ProfileEntry() {
 
   if (connecting) return <ProfileEntryLoadingState />;
 
-  return <ProfileEntryFrame loading={false} onConnect={openWallet} />;
+  function connectWallet() {
+    preloadProfileView();
+    openWallet();
+  }
+
+  return (
+    <ProfileEntryFrame
+      loading={false}
+      onConnect={connectWallet}
+      onPrepareProfile={preloadProfileView}
+    />
+  );
 }

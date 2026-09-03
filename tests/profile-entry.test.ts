@@ -53,10 +53,10 @@ describe("profile entry", () => {
       'from "@/components/profile-view"',
     );
     expect(profileEntrySource).toContain('import dynamic from "next/dynamic"');
-    expect(profileEntrySource).toContain(
-      'import("@/components/profile-view")',
+    expect(profileEntrySource).toMatch(
+      /dynamic\(\s*\(\) =>\s*import\("@\/components\/profile-view"\)/u,
     );
-    expect(profileEntrySource).toMatch(/ssr:\s*false/u);
+    expect(profileEntrySource).not.toMatch(/ssr:\s*false/u);
     expect(profileEntrySource).toContain("useSearchParams");
     expect(profileEntrySource).not.toMatch(
       /from\s+["']@\/components\/profile-view["']/u,
@@ -64,5 +64,7 @@ describe("profile entry", () => {
     expect(profileEntrySource).toMatch(
       /if \(shouldLoadProfileEntryView\([\s\S]*?return <ProfileView \/>;/u,
     );
+    expect(profileEntrySource).toContain("preloadProfileView();");
+    expect(profileEntrySource).toContain("onPointerEnter={onPrepareProfile}");
   });
 });
