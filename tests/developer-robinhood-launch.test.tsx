@@ -3,11 +3,14 @@ import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
+import { developerApiKeysInitialSection } from
+  "../app/developers/api-keys/page";
 import {
   DeveloperRobinhoodLaunch,
   MAX_ROBINHOOD_LAUNCH_BYTES,
   ROBINHOOD_CREATE_URL,
   ROBINHOOD_PREFLIGHT_URL,
+  RobinhoodFeePolicyDisclosure,
   createRobinhoodLaunch,
   isRobinhoodIdempotencyKey,
   preflightRobinhoodLaunch,
@@ -216,12 +219,8 @@ describe("Robinhood Custom launch website flow", () => {
     expect(html).toContain("Preflight required");
     expect(html).toContain("Create launch request");
     expect(html).toContain("never signs or broadcasts");
-    expect(html).toContain(
-      "Programmable policy for new Robinhood Custom launches is 0.20% (2,000 ppm), recipient <code>0xD88539d3c4C460136a733A3Fd60cf6BF269079da</code>.",
-    );
-    expect(html).toContain(
-      "The current V4 runtime does not claim immutable onchain fee enforcement, fee behavior, claiming, or guaranteed revenue. The Launch Stamp proves provenance only.",
-    );
+    expect(html).not.toContain("Robinhood fee policy");
+    expect(html).not.toContain("0xD88539d3c4C460136a733A3Fd60cf6BF269079da");
     expect(html).not.toContain("fee-policy-pending");
     expect(html).not.toContain(apiKey);
     expect(componentSource).not.toContain("localStorage");
@@ -231,6 +230,26 @@ describe("Robinhood Custom launch website flow", () => {
     expect(componentSource).toContain("disabled={busy || idempotencyLocked}");
     expect(isRobinhoodIdempotencyKey(idempotencyKey)).toBe(true);
     expect(isRobinhoodIdempotencyKey("too-short")).toBe(false);
+  });
+
+  it("renders one static, labelled fee policy disclosure outside the private launch form", () => {
+    const html = renderToStaticMarkup(<RobinhoodFeePolicyDisclosure />);
+
+    expect(html).toContain(
+      'aria-labelledby="robinhood-fee-policy-title"',
+    );
+    expect(html).toContain(
+      '<h2 id="robinhood-fee-policy-title">Robinhood fee policy</h2>',
+    );
+    expect(html).toContain(
+      "Programmable policy for new Robinhood V4 API Custom launch requests is 0.20% (2,000 ppm), recipient <code>0xD88539d3c4C460136a733A3Fd60cf6BF269079da</code>. Existing launches are unchanged.",
+    );
+    expect(html).toContain(
+      "The current V4 runtime does not claim immutable onchain fee enforcement, fee behavior, claiming, or guaranteed revenue. The Launch Stamp proves provenance only.",
+    );
+    expect(html).not.toContain('role="status"');
+    expect(html).not.toContain("aria-live");
+    expect(html).not.toContain("fee-policy-pending");
   });
 
   it("routes the Custom card into the chain-bound launch section", () => {
@@ -248,5 +267,20 @@ describe("Robinhood Custom launch website flow", () => {
       'url.searchParams.get("chainId") === "4663"',
     );
     expect(apiKeysSource).toContain('setActiveSection("launch")');
+    expect(apiKeysSource.match(/<RobinhoodFeePolicyDisclosure \/>/gu))
+      .toHaveLength(1);
+    expect(apiKeysSource.indexOf("<RobinhoodFeePolicyDisclosure />"))
+      .toBeLessThan(apiKeysSource.indexOf("{!authReady ? ("));
+    expect(apiKeysSource.indexOf("<DeveloperRobinhoodLaunch"))
+      .toBeGreaterThan(apiKeysSource.indexOf(") : !account ? ("));
+    expect(developerApiKeysInitialSection({
+      start: "custom",
+      chainId: "4663",
+    })).toBe("launch");
+    expect(developerApiKeysInitialSection({
+      start: "custom",
+      chainId: "1",
+    })).toBe("keys");
+    expect(developerApiKeysInitialSection({ chainId: "4663" })).toBe("keys");
   });
 });
