@@ -95,7 +95,7 @@ const validate = ajv.compile(packageSchema);
 const ADMISSION_SCHEMA_DIGEST =
   "sha256:a28a6de6208d6ba7b65b4b706174509570955ba9ce9714624bcb2046ab7beae7";
 const CHAIN_DEPLOYMENT_BINDING_RULE =
-  "contracts bind atomic deployment, Permit2 genesis, Safe permit authority, and external root evidence; atomic deployment, Safe snapshot, and Ethereum finality agree; programmable Router != universal Router";
+  "contracts bind atomic deployment, Permit2 genesis, Safe permit authority, and external root evidence; atomic provider transactionHash copies equal deploymentEvidence.transactionHash; atomic deployment, Safe snapshot, and Ethereum finality agree; programmable Router != universal Router";
 const ONCHAIN_EVIDENCE_BINDING_RULE =
   "chainDeploymentDescriptorDigest == keccak256(canonical chainDeployment); router and finalityPolicy match chainDeployment; transactionHash == l2Inclusion.transactionHash; L1 identities match chainDeployment ethereumFinalityEvidence; legacy checkpoint projection follows checkpointType; finalized provider readbacks equal checkpoint";
 const V4_ATOMIC_TRUST_ROOT_NAMES = Object.freeze([
@@ -388,6 +388,19 @@ test("V4 chain deployment schema locks atomic, registry, Permit2, Safe, and fina
     ["external PoolManager evidence", (deployment) => {
       deployment.contracts.poolManager.address = `0x${"9".repeat(40)}`;
     }],
+    ["atomic primary provider transaction copy", (deployment) => {
+      deployment.deploymentEvidence.providerReadbacks[0].transactionHash =
+        `0x${"9".repeat(64)}`;
+    }],
+    ["atomic secondary provider transaction copy", (deployment) => {
+      deployment.deploymentEvidence.providerReadbacks[1].transactionHash =
+        `0x${"9".repeat(64)}`;
+    }],
+    ["coordinated atomic provider transaction copies", (deployment) => {
+      for (const readback of deployment.deploymentEvidence.providerReadbacks) {
+        readback.transactionHash = `0x${"9".repeat(64)}`;
+      }
+    }],
     ["atomic and Safe transaction", (deployment) => {
       deployment.permitAuthoritySourceProvenance.transactionHash = `0x${"9".repeat(64)}`;
     }],
@@ -413,6 +426,7 @@ test("V4 chain deployment schema locks atomic, registry, Permit2, Safe, and fina
       false,
       label,
     );
+    assert.equal(validateDeployment(deployment), false, `${label} through Ajv`);
   }
 
   const cases = [
@@ -1802,6 +1816,12 @@ function validV4ChainDeploymentBindings(value) {
     !isTrustRootBinding(contracts[name]))) return false;
 
   const atomic = value.deploymentEvidence;
+  if (typeof atomic.transactionHash !== "string"
+    || !Array.isArray(atomic.providerReadbacks)
+    || atomic.providerReadbacks.length !== 2
+    || atomic.providerReadbacks.some((readback) =>
+      !isPlainRecord(readback)
+      || readback.transactionHash !== atomic.transactionHash)) return false;
   const atomicResults = atomic.resultingContracts;
   if (!Array.isArray(atomicResults)
     || atomicResults.length !== V4_ATOMIC_TRUST_ROOT_NAMES.length) return false;

@@ -580,7 +580,7 @@ const chainDeployment = closed(
   },
   {
     "x-programmable-order":
-      "contracts bind atomic deployment, Permit2 genesis, Safe permit authority, and external root evidence; atomic deployment, Safe snapshot, and Ethereum finality agree; programmable Router != universal Router",
+      "contracts bind atomic deployment, Permit2 genesis, Safe permit authority, and external root evidence; atomic provider transactionHash copies equal deploymentEvidence.transactionHash; atomic deployment, Safe snapshot, and Ethereum finality agree; programmable Router != universal Router",
   },
 );
 function frozenProfileSchema() {

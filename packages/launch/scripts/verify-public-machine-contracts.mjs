@@ -381,7 +381,7 @@ const chainDeploymentSchema = v4.components.schemas.ExactWalletTransactionV4
   .properties.chainDeployment;
 assert.equal(
   chainDeploymentSchema["x-programmable-order"],
-  "contracts bind atomic deployment, Permit2 genesis, Safe permit authority, and external root evidence; atomic deployment, Safe snapshot, and Ethereum finality agree; programmable Router != universal Router",
+  "contracts bind atomic deployment, Permit2 genesis, Safe permit authority, and external root evidence; atomic provider transactionHash copies equal deploymentEvidence.transactionHash; atomic deployment, Safe snapshot, and Ethereum finality agree; programmable Router != universal Router",
   "V4 chain deployment must bind every contract to authoritative evidence",
 );
 assertJsonEqual(
