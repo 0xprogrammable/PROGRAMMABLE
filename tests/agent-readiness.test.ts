@@ -176,7 +176,9 @@ describe("agent-readable public surface", () => {
       ),
     ).toEqual(["get"]);
     expect(programmablePublicOpenApi["x-programmable-api-scopes"]).toMatchObject({
-      "custom-launch:create": { state: "v1-v2-write-fenced-v3.3-live" },
+      "custom-launch:create": {
+        state: "v1-v2-write-fenced-v3.3-live-v4-pending-public-discovery-promotion",
+      },
       "fees:claim": { state: "reserved-disabled" },
       "buybacks:manage": { state: "reserved-disabled" },
     });
