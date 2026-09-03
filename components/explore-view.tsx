@@ -150,6 +150,23 @@ export type ExploreDiscoverySort = "none" | "trending";
 export type ExploreSocialFilter = "all" | "yes" | "no";
 export type ExploreModelFilter = "all" | "classic" | "custom-hook";
 
+export function resolveExploreSortSelectionsForChain(
+  viewChainId: ViewChainId,
+  valuationSort: ExploreValuationSort,
+  ageSort: ExploreAgeSort,
+  discoverySort: ExploreDiscoverySort,
+) {
+  if (viewChainId !== 4663) {
+    return { valuationSort, ageSort, discoverySort } as const;
+  }
+
+  return {
+    valuationSort: "none",
+    ageSort: ageSort === "oldest" ? "none" : ageSort,
+    discoverySort: "none",
+  } as const;
+}
+
 type DexscreenerExploreMarketRead = Readonly<{
   provider: "dexscreener";
   status: "complete" | "partial" | "unavailable";
@@ -308,7 +325,10 @@ type ExploreSearchRanking = Readonly<{
 }>;
 
 type ExploreCatalogBoundary = Readonly<{
-  source: "envio-classic-v3" | "durable-blob";
+  source:
+    | "envio-classic-v3"
+    | "durable-blob"
+    | "robinhood-finalized-custom-launch-feed-v4";
   launchSource:
     | "durable-blob"
     | "durable-blob+registry.custom-launched"
@@ -320,7 +340,8 @@ type ExploreCatalogBoundary = Readonly<{
     | "envio-classic-v3"
     | "envio-classic-v3+registry.custom-launched"
     | "envio-classic-v3+canonical-launch-stamp-router"
-    | "envio-classic-v3+registry.custom-launched+canonical-launch-stamp-router";
+    | "envio-classic-v3+registry.custom-launched+canonical-launch-stamp-router"
+    | "robinhood-finalized-custom-launch-feed-v4+canonical-launch-stamp-router";
   status: "current" | "last-known-good";
   lastIndexedAt: string;
   asOfBlock: string;
@@ -1842,6 +1863,45 @@ function parseExploreCatalog(value: unknown): ExploreCatalogBoundary | null {
     : null;
   if (evidence !== null && envioEvidence === null && durableEvidence === null) {
     return null;
+  }
+  if (value.source === "robinhood-finalized-custom-launch-feed-v4") {
+    const routerStamp = value.routerStamp;
+    return value.launchSource ===
+        "robinhood-finalized-custom-launch-feed-v4+canonical-launch-stamp-router" &&
+      value.status === "current" &&
+      exactIsoTimestamp(value.lastIndexedAt) &&
+      typeof value.asOfBlock === "string" &&
+      /^[1-9][0-9]*$/u.test(value.asOfBlock) &&
+      typeof value.asOfBlockHash === "string" &&
+      /^0x[0-9a-f]{64}$/u.test(value.asOfBlockHash) &&
+      Number.isSafeInteger(value.identityCount) &&
+      Number(value.identityCount) > 0 &&
+      typeof value.identityCommitment === "string" &&
+      /^sha256:[0-9a-f]{64}$/u.test(value.identityCommitment) &&
+      value.completeness.classic === "unavailable" &&
+      value.completeness.stock === "excluded" &&
+      value.completeness.custom === "current" &&
+      value.completeness.registryCustom === "unavailable" &&
+      value.completeness.routerCustom === "current" &&
+      evidence === null && scope !== null &&
+      exactStringArray(scope.included, ["canonical-launch-stamp-router"]) &&
+      exactStringArray(scope.excluded, [
+        "classic-v1", "classic-v2", "stock-paired-v1", "stock-paired-v2",
+        "stock-paired-v3",
+      ]) &&
+      exactStringArray(scope.publicCategories, ["classic", "custom"]) &&
+      isRecord(routerStamp) &&
+      routerStamp.source === "canonical-launch-stamp-router" &&
+      routerStamp.status === "current" &&
+      routerStamp.finalityConfirmations === 64 &&
+      routerStamp.verifiedIdentityCount === value.identityCount &&
+      routerStamp.projectedIdentityCount === value.identityCount &&
+      routerStamp.generatedAt === value.lastIndexedAt &&
+      routerStamp.asOfBlock === value.asOfBlock &&
+      routerStamp.asOfBlockHash === value.asOfBlockHash &&
+      routerStamp.identityCommitment === value.identityCommitment
+      ? value as ExploreCatalogBoundary
+      : null;
   }
   const durableSource = value.source === "durable-blob";
   const envioSource = value.source === "envio-classic-v3";
@@ -3457,21 +3517,30 @@ export function ExploreView({
     updatedAt: number;
   } | null>(null);
   const filterRef = useRef<HTMLDetailsElement>(null);
-  const discoverySortForChain = viewChainId === 1 ? discoverySort : "none";
-  const sort = resolveExploreServerSort(
+  const {
+    valuationSort: valuationSortForChain,
+    ageSort: ageSortForChain,
+    discoverySort: discoverySortForChain,
+  } = resolveExploreSortSelectionsForChain(
+    viewChainId,
     valuationSort,
     ageSort,
+    discoverySort,
+  );
+  const sort = resolveExploreServerSort(
+    valuationSortForChain,
+    ageSortForChain,
     discoverySortForChain,
   );
   const requiresCompleteDataset = requiresCompleteExploreDataset(
-    valuationSort,
-    ageSort,
+    valuationSortForChain,
+    ageSortForChain,
     discoverySortForChain,
   );
   const chainContentKey = `${viewChainId}`;
-  const contentKey = `${chainContentKey}\u0000${debouncedQuery}\u0000${valuationSort}\u0000${ageSort}\u0000${discoverySortForChain}\u0000${socialFilter}\u0000${modelFilter}\u0000${currentPage}\u0000${pageSize}`;
+  const contentKey = `${chainContentKey}\u0000${debouncedQuery}\u0000${valuationSortForChain}\u0000${ageSortForChain}\u0000${discoverySortForChain}\u0000${socialFilter}\u0000${modelFilter}\u0000${currentPage}\u0000${pageSize}`;
   const requestKey = `${contentKey}\u0000${retryKey}`;
-  const modelDatasetKey = `${chainContentKey}\u0000${debouncedQuery}\u0000${valuationSort}\u0000${ageSort}\u0000${discoverySortForChain}\u0000${socialFilter}\u0000${modelFilter}\u0000${retryKey}`;
+  const modelDatasetKey = `${chainContentKey}\u0000${debouncedQuery}\u0000${valuationSortForChain}\u0000${ageSortForChain}\u0000${discoverySortForChain}\u0000${socialFilter}\u0000${modelFilter}\u0000${retryKey}`;
   const activeRequestContentKey =
     requiresCompleteDataset ? modelDatasetKey : contentKey;
   const [initialState] = useState(() =>
@@ -3652,8 +3721,8 @@ export function ExploreView({
     const initialValuationSort = DEFAULT_EXPLORE_VALUATION_SORT;
     const isInitialRequest =
       debouncedQuery === "" &&
-      valuationSort === initialValuationSort &&
-      ageSort === "none" &&
+      valuationSortForChain === initialValuationSort &&
+      ageSortForChain === "none" &&
       discoverySortForChain === "none" &&
       socialFilter === "all" &&
       modelFilter === initialModelFilter &&
@@ -3737,8 +3806,8 @@ export function ExploreView({
             modelFilter,
             currentPage,
             pageSize,
-            valuationSort,
-            ageSort,
+            valuationSortForChain,
+            ageSortForChain,
             socialFilter,
           );
         }
@@ -3800,9 +3869,9 @@ export function ExploreView({
     socialFilter,
     sort,
     setCurrentPage,
-    valuationSort,
+    valuationSortForChain,
     viewChainId,
-    ageSort,
+    ageSortForChain,
     discoverySortForChain,
   ]);
 
@@ -3822,8 +3891,8 @@ export function ExploreView({
       })),
       socialFilter,
       modelFilter,
-      valuationSort,
-      ageSort,
+      valuationSortForChain,
+      ageSortForChain,
       currentPage,
       pageSize,
     );
@@ -3833,13 +3902,13 @@ export function ExploreView({
       ...paginated,
     };
   }, [
-    ageSort,
+    ageSortForChain,
     currentPage,
     debouncedQuery,
     modelFilter,
     pageSize,
     socialFilter,
-    valuationSort,
+    valuationSortForChain,
   ]);
 
   const activeChainState: ExploreState =
@@ -3890,8 +3959,8 @@ export function ExploreView({
     count: activeFilterCount,
     summary: activeSelectionSummary,
   } = exploreActiveSelectionState({
-    valuationSort,
-    ageSort,
+    valuationSort: valuationSortForChain,
+    ageSort: ageSortForChain,
     discoverySort: discoverySortForChain,
     socialFilter,
     modelFilter,
@@ -4389,10 +4458,16 @@ export function ExploreView({
                           <button
                             key={option.id}
                             className={
-                              valuationSort === option.id ? "active" : undefined
+                              valuationSortForChain === option.id
+                                ? "active"
+                                : undefined
                             }
                             type="button"
-                            aria-pressed={valuationSort === option.id}
+                            aria-label={viewChainId === 4663
+                              ? `${option.label} market cap is available on Ethereum only`
+                              : `${option.label} market cap`}
+                            aria-pressed={valuationSortForChain === option.id}
+                            disabled={viewChainId === 4663}
                             onClick={() => {
                               setValuationSort((current) =>
                                 current === option.id ? "none" : option.id,
@@ -4402,7 +4477,7 @@ export function ExploreView({
                             }}
                           >
                             <span>{option.label}</span>
-                            {valuationSort === option.id ? (
+                            {valuationSortForChain === option.id ? (
                               <Check aria-hidden="true" size={15} />
                             ) : null}
                           </button>
@@ -4421,20 +4496,30 @@ export function ExploreView({
                           <button
                             key={option.id}
                             className={
-                              ageSort === option.id ? "active" : undefined
+                              ageSortForChain === option.id
+                                ? "active"
+                                : undefined
                             }
                             type="button"
-                            aria-pressed={ageSort === option.id}
+                            aria-label={viewChainId === 4663 &&
+                                option.id === "oldest"
+                              ? "Oldest is available on Ethereum only"
+                              : option.label}
+                            aria-pressed={ageSortForChain === option.id}
+                            disabled={viewChainId === 4663 &&
+                              option.id === "oldest"}
                             onClick={() => {
                               setAgeSort((current) =>
                                 current === option.id ? "none" : option.id,
                               );
-                              setDiscoverySort("none");
+                              if (viewChainId === 1) {
+                                setDiscoverySort("none");
+                              }
                               setCurrentPage(1);
                             }}
                           >
                             <span>{option.label}</span>
-                            {ageSort === option.id ? (
+                            {ageSortForChain === option.id ? (
                               <Check aria-hidden="true" size={15} />
                             ) : null}
                           </button>

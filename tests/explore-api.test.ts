@@ -115,6 +115,7 @@ const mocks = vi.hoisted(() => ({
   customEnabled: vi.fn(() => false),
   readCustom: vi.fn(),
   readRouter: vi.fn(),
+  readRobinhood: vi.fn(),
   routerStatus: vi.fn((): "current" | "last-known-good" => "current"),
   gmgnConfigured: vi.fn(() => false),
   gmgnEligible: vi.fn<(entry: ExploreEntry) => boolean>(),
@@ -176,6 +177,9 @@ vi.mock("../lib/server/custom-launch/public-readiness", () => ({
 vi.mock("../lib/server/custom-launch/explore-directory-v1", () => ({
   readProductionCustomExploreDirectoryV1: mocks.readCustom,
 }));
+vi.mock("../lib/server/custom-launch/robinhood-finalized-explore-feed-v1", () => ({
+  readRobinhoodFinalizedExploreSnapshotV1: mocks.readRobinhood,
+}));
 vi.mock("../lib/alchemy/router-custom-public.server", () => ({
   ROUTER_CUSTOM_FINALITY_CONFIRMATIONS: 64,
   ROUTER_CUSTOM_LAUNCH_SOURCE: "canonical-launch-stamp-router",
@@ -221,6 +225,30 @@ import { customGraphExploreEntry } from "./launch-stamp-surface-fixture";
 
 const NOW = "2026-08-16T08:00:00.000Z";
 const TOKEN_COUNT = 36;
+
+function robinhoodSnapshot() {
+  const tokenAddress = customGraphExploreEntry.tokenAddress;
+  return {
+    source: "robinhood-finalized-custom-launch-feed-v4",
+    launchSource:
+      "robinhood-finalized-custom-launch-feed-v4+canonical-launch-stamp-router",
+    generatedAt: NOW,
+    asOfBlock: "50470000",
+    asOfBlockHash: `0x${"ab".repeat(32)}`,
+    identityCommitment: `sha256:${"cd".repeat(32)}`,
+    entries: [{
+      ...customGraphExploreEntry,
+      id: `4663:${tokenAddress.toLowerCase()}`,
+    }],
+    quality: {
+      status: "ready",
+      sourceRowCount: 1,
+      publishedRowCount: 1,
+      quarantinedRowCount: 0,
+    },
+    sourceVerification: [{ tokenAddress, updatedAt: NOW }],
+  } as const;
+}
 
 function token(index: number): ExploreEntry {
   const tokenAddress = `0x${index.toString(16).padStart(40, "0")}` as const;
@@ -779,6 +807,7 @@ describe("Explore static identity and Dexscreener market contract", () => {
     mocks.customEnabled.mockReturnValue(false);
     mocks.readCustom.mockResolvedValue([]);
     mocks.readRouter.mockResolvedValue([]);
+    mocks.readRobinhood.mockRejectedValue(new Error("feed not publishable"));
     mocks.routerStatus.mockReturnValue("current");
     mocks.gmgnConfigured.mockReturnValue(false);
     mocks.gmgnEligible.mockReturnValue(false);
@@ -1013,6 +1042,38 @@ describe("Explore static identity and Dexscreener market contract", () => {
     expect(mocks.readDex).not.toHaveBeenCalled();
   });
 
+  it("serves finalized Robinhood launches once the backend feed is publishable", async () => {
+    mocks.readRobinhood.mockResolvedValue(robinhoodSnapshot());
+
+    const response = await GET(
+      request("chain=4663&sort=newest&page=1&limit=9"),
+    );
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body.status).toBe("ready");
+    expect(body.chainId).toBe(4663);
+    expect(body.total).toBe(1);
+    expect(body.tokens[0]).toMatchObject({
+      id: `4663:${customGraphExploreEntry.tokenAddress.toLowerCase()}`,
+      symbol: "GRAPH",
+      valuation: { status: "unavailable", reason: "source-unavailable" },
+    });
+    expect(body.catalog).toMatchObject({
+      source: "robinhood-finalized-custom-launch-feed-v4",
+      launchSource:
+        "robinhood-finalized-custom-launch-feed-v4+canonical-launch-stamp-router",
+      identityCount: 1,
+      completeness: { custom: "current", routerCustom: "current" },
+    });
+    expect(response.headers.get("x-programmable-chain-id")).toBe("4663");
+    expect(response.headers.get("x-programmable-identity-last-indexed-at"))
+      .toBe(NOW);
+    expect(mocks.readCatalog).not.toHaveBeenCalled();
+    expect(mocks.readRouter).not.toHaveBeenCalled();
+    expect(mocks.readDex).not.toHaveBeenCalled();
+  });
+
   it("rejects Trending on Robinhood before reading either discovery provider", async () => {
     const response = await GET(
       request("chain=4663&sort=trending&page=1&limit=9"),
@@ -1026,6 +1087,23 @@ describe("Explore static identity and Dexscreener market contract", () => {
     expect(mocks.readHotSearches).not.toHaveBeenCalled();
     expect(mocks.readCatalog).not.toHaveBeenCalled();
   });
+
+  it.each(["oldest", "market-cap", "market-cap-asc"])(
+    "rejects %s on Robinhood before reading the finalized feed",
+    async (sort) => {
+      const response = await GET(
+        request(`chain=4663&sort=${sort}&page=1&limit=9`),
+      );
+
+      expect(response.status).toBe(400);
+      expect(await json(response)).toEqual({
+        error: "Robinhood Explore supports newest sort only",
+      });
+      expect(mocks.readRobinhood).not.toHaveBeenCalled();
+      expect(mocks.readCatalog).not.toHaveBeenCalled();
+      expect(mocks.readDex).not.toHaveBeenCalled();
+    },
+  );
 
   it("ranks only filtered canonical Ethereum launches and retains the stable tail", async () => {
     const foreign = "0xffffffffffffffffffffffffffffffffffffffff" as const;

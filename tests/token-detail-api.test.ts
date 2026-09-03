@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   customEnabled: vi.fn(() => false),
   readCustom: vi.fn(),
   readRouter: vi.fn(),
+  readRobinhood: vi.fn(),
   mergeRouter: vi.fn((existing: readonly unknown[], router: readonly unknown[]) => [
     ...existing,
     ...router,
@@ -37,6 +38,9 @@ vi.mock("../lib/server/custom-launch/public-readiness", () => ({
 }));
 vi.mock("../lib/server/custom-launch/explore-directory-v1", () => ({
   readProductionCustomExploreDirectoryV1: mocks.readCustom,
+}));
+vi.mock("../lib/server/custom-launch/robinhood-finalized-explore-feed-v1", () => ({
+  readRobinhoodFinalizedExploreSnapshotV1: mocks.readRobinhood,
 }));
 vi.mock("../lib/server/custom-launch/source-verification-display-v1", () => ({
   readProductionSourceVerificationDisplayV1: mocks.readSourceVerification,
@@ -85,6 +89,30 @@ import { confirmedPlatformFeePolicyV2 } from
 import { shardRouterTradeEntry } from "./shard-router-trade-fixture";
 
 const NOW = "2026-08-16T08:00:00.000Z";
+
+function robinhoodSnapshot() {
+  const tokenAddress = customGraphExploreEntry.tokenAddress;
+  return {
+    source: "robinhood-finalized-custom-launch-feed-v4",
+    launchSource:
+      "robinhood-finalized-custom-launch-feed-v4+canonical-launch-stamp-router",
+    generatedAt: NOW,
+    asOfBlock: "50470000",
+    asOfBlockHash: `0x${"ab".repeat(32)}`,
+    identityCommitment: `sha256:${"cd".repeat(32)}`,
+    entries: [{
+      ...customGraphExploreEntry,
+      id: `4663:${tokenAddress.toLowerCase()}`,
+    }],
+    quality: {
+      status: "ready",
+      sourceRowCount: 1,
+      publishedRowCount: 1,
+      quarantinedRowCount: 0,
+    },
+    sourceVerification: [{ tokenAddress, updatedAt: NOW }],
+  } as const;
+}
 
 function token(): ExploreEntry {
   const value = {
@@ -216,6 +244,7 @@ describe("Token detail static identity and Dexscreener market contract", () => {
     mocks.customEnabled.mockReturnValue(false);
     mocks.readCustom.mockResolvedValue([]);
     mocks.readRouter.mockResolvedValue([]);
+    mocks.readRobinhood.mockRejectedValue(new Error("feed not publishable"));
     mocks.mergeRouter.mockImplementation(
       (existing: readonly unknown[], router: readonly unknown[]) => [
         ...existing,
@@ -269,6 +298,38 @@ describe("Token detail static identity and Dexscreener market contract", () => {
     );
     expect(mocks.readCatalog).not.toHaveBeenCalled();
     expect(mocks.readCustom).not.toHaveBeenCalled();
+    expect(mocks.readRouter).not.toHaveBeenCalled();
+    expect(mocks.readDex).not.toHaveBeenCalled();
+  });
+
+  it("serves finalized Robinhood token details from the publishable feed", async () => {
+    mocks.readRobinhood.mockResolvedValue(robinhoodSnapshot());
+
+    const response = await GET(request(
+      customGraphExploreEntry.tokenAddress,
+      "&chain=4663",
+    ));
+    const body = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(body.status).toBe("ready");
+    expect(body.token).toMatchObject({
+      id: `4663:${customGraphExploreEntry.tokenAddress.toLowerCase()}`,
+      symbol: "GRAPH",
+      valuation: { status: "unavailable", reason: "source-unavailable" },
+    });
+    expect(body.sourceVerification).toEqual({
+      schemaVersion: "programmable.source-verification-display.v1",
+      status: "verified",
+      label: "Source verified",
+      updatedAt: NOW,
+    });
+    expect(body.snapshot).toEqual({ chainId: 4663 });
+    expect(body.catalog).toMatchObject({
+      source: "robinhood-finalized-custom-launch-feed-v4",
+      identityCount: 1,
+    });
+    expect(mocks.readCatalog).not.toHaveBeenCalled();
     expect(mocks.readRouter).not.toHaveBeenCalled();
     expect(mocks.readDex).not.toHaveBeenCalled();
   });

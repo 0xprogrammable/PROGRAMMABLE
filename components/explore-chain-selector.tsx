@@ -13,7 +13,10 @@ import {
   useViewChain,
   type ViewChainId,
 } from "@/components/view-chain";
-import { resolveExploreChainId } from "@/lib/explore-chain";
+import {
+  isRobinhoodExploreAvailableResponse,
+  resolveExploreChainId,
+} from "@/lib/explore-chain";
 import styles from "@/components/explore-chain-selector.module.css";
 
 type ExploreChainOption = Readonly<{
@@ -81,10 +84,16 @@ function ExploreChainMark({ mark }: Readonly<{ mark: ExploreChainOption["mark"] 
 export function ExploreChainSelector() {
   const { hydrated, viewChainId, setViewChainId } = useViewChain();
   const [open, setOpen] = useState(false);
+  const [robinhoodAvailable, setRobinhoodAvailable] = useState(false);
+  const exploreChainOptions = EXPLORE_CHAIN_OPTIONS.map((option) =>
+    option.id === 4663
+      ? { ...option, available: robinhoodAvailable }
+      : option
+  ) satisfies readonly ExploreChainOption[];
   const selectedViewChainId = resolveExploreChainId(viewChainId);
   const selectedIndex = Math.max(
     0,
-    EXPLORE_CHAIN_OPTIONS.findIndex(
+    exploreChainOptions.findIndex(
       (option) => option.id === selectedViewChainId,
     ),
   );
@@ -93,7 +102,24 @@ export function ExploreChainSelector() {
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const selected = EXPLORE_CHAIN_OPTIONS[selectedIndex];
+  const selected = exploreChainOptions[selectedIndex]!;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 5_000);
+    void fetch("/api/explore?chain=4663&limit=1&page=1&q=&sort=newest", {
+      cache: "no-store",
+      credentials: "same-origin",
+      signal: controller.signal,
+    }).then(async (response) => {
+      if (!response.ok) return false;
+      return isRobinhoodExploreAvailableResponse(await response.json());
+    }).then(setRobinhoodAvailable).catch(() => setRobinhoodAvailable(false));
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -137,25 +163,25 @@ export function ExploreChainSelector() {
   ) {
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActiveIndex((index + 1) % EXPLORE_CHAIN_OPTIONS.length);
+      setActiveIndex((index + 1) % exploreChainOptions.length);
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setActiveIndex(
-        (index - 1 + EXPLORE_CHAIN_OPTIONS.length) %
-          EXPLORE_CHAIN_OPTIONS.length,
+        (index - 1 + exploreChainOptions.length) %
+          exploreChainOptions.length,
       );
     } else if (event.key === "Home") {
       event.preventDefault();
       setActiveIndex(0);
     } else if (event.key === "End") {
       event.preventDefault();
-      setActiveIndex(EXPLORE_CHAIN_OPTIONS.length - 1);
+      setActiveIndex(exploreChainOptions.length - 1);
     } else if (event.key === "Escape") {
       event.preventDefault();
       closeListbox();
     } else if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      const option = EXPLORE_CHAIN_OPTIONS[index];
+      const option = exploreChainOptions[index];
       if (option) selectChain(option);
     }
   }
@@ -194,7 +220,7 @@ export function ExploreChainSelector() {
             openListbox(selectedIndex);
           } else if (event.key === "ArrowUp") {
             event.preventDefault();
-            openListbox(EXPLORE_CHAIN_OPTIONS.length - 1);
+            openListbox(exploreChainOptions.length - 1);
           } else if (event.key === "Escape" && open) {
             event.preventDefault();
             closeListbox();
@@ -213,7 +239,7 @@ export function ExploreChainSelector() {
           role="listbox"
           aria-label="Explore chains"
         >
-          {EXPLORE_CHAIN_OPTIONS.map((option, index) => {
+          {exploreChainOptions.map((option, index) => {
             const current = option.id === selectedViewChainId;
             return (
               <button

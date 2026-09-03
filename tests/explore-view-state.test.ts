@@ -32,6 +32,7 @@ import {
   preserveExplorePayloadOnRefreshFailure,
   requiresCompleteExploreDataset,
   resolveExploreServerSort,
+  resolveExploreSortSelectionsForChain,
   sortExploreEntriesBySelections,
   stabilizeExploreRevalidationPayload,
   tokenHasSocialLinks,
@@ -1492,6 +1493,55 @@ describe("Explore refresh state", () => {
         expect.objectContaining({ id: highNew.id }),
         expect.objectContaining({ id: highOld.id }),
       ],
+    });
+  });
+
+  it("derives Robinhood sort choices without clearing the Ethereum selections", () => {
+    expect(
+      resolveExploreSortSelectionsForChain(
+        1,
+        "highest",
+        "oldest",
+        "trending",
+      ),
+    ).toEqual({
+      valuationSort: "highest",
+      ageSort: "oldest",
+      discoverySort: "trending",
+    });
+
+    const robinhoodSelections = resolveExploreSortSelectionsForChain(
+      4663,
+      "highest",
+      "oldest",
+      "trending",
+    );
+    expect(robinhoodSelections).toEqual({
+      valuationSort: "none",
+      ageSort: "none",
+      discoverySort: "none",
+    });
+    expect(resolveExploreServerSort(
+      robinhoodSelections.valuationSort,
+      robinhoodSelections.ageSort,
+      robinhoodSelections.discoverySort,
+    )).toBe("newest");
+    expect(requiresCompleteExploreDataset(
+      robinhoodSelections.valuationSort,
+      robinhoodSelections.ageSort,
+      robinhoodSelections.discoverySort,
+    )).toBe(false);
+    expect(
+      resolveExploreSortSelectionsForChain(
+        4663,
+        "lowest",
+        "newest",
+        "trending",
+      ),
+    ).toEqual({
+      valuationSort: "none",
+      ageSort: "newest",
+      discoverySort: "none",
     });
   });
 

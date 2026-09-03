@@ -58,6 +58,28 @@ const publicSchemas = new Map(await Promise.all(
     )),
   ]),
 ));
+const robinhoodV4PlatformFeePolicy = Object.freeze({
+  required: true,
+  status: "required-default-configuration",
+  appliesTo: "new-robinhood-v4-api-custom-launches-only",
+  changesExistingLaunches: false,
+  changesEthereumLaunches: false,
+  rateBps: 20,
+  ratePpm: 2_000,
+  ratePercent: "0.20%",
+  recipient: "0xD88539d3c4C460136a733A3Fd60cf6BF269079da",
+  basis: null,
+  feeCurrency: null,
+  accountingMode: null,
+  rounding: null,
+  accrual: null,
+  claimMechanism: null,
+  enforcement: "not-guaranteed-onchain",
+  canonicalOnchainEnforcementProven: false,
+  guaranteedRevenue: false,
+  feeBehaviorClaim: false,
+  universalFeeBehaviorClaim: false,
+});
 const ajv = new Ajv2020({
   allErrors: true,
   strict: true,
@@ -142,7 +164,25 @@ test("public and packaged V4 pack schemas are byte-for-byte equivalent JSON cont
     maximumTargets: 16,
     fundingModes: ["none", "wallet-transaction-value"],
     walletSigning: "separate-owner-action",
+    platformFeePolicy: robinhoodV4PlatformFeePolicy,
   });
+  assert.equal(Object.hasOwn(packageSchema.$defs, "launchProfile"), false);
+  assert.doesNotMatch(
+    JSON.stringify(packageSchema),
+    /0x4957f49620AFf3Adbbe8195a4f633E49cc93376c/u,
+  );
+  assert.deepEqual(
+    openapi.components.schemas.CustomLaunchCapabilitiesV2.properties.safety.properties,
+    {
+      serverAuthoritative: { const: true },
+      clientBypassAccepted: { const: false },
+      walletSignatureProduced: { const: false },
+      transactionBroadcast: { const: false },
+      feeBehaviorClaim: { const: false },
+      universalFeeBehaviorClaim: { const: false },
+      genericClaimingLive: { const: false },
+    },
+  );
 });
 
 test("V4 Safe source commitment is recomputed from the exact non-Sourcify source subject", () => {

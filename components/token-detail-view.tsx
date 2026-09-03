@@ -2189,15 +2189,17 @@ function TokenDetailContent({
           </div>
 
           <div className={styles.marketChart}>
-            <TokenPriceChart
-              tokenAddress={token.tokenAddress}
-              tokenName={token.name}
-              launchModel={classicTradeLaunchModel}
-              totalSupply={chartTotalSupply(token)}
-              currentMarketCapUsd={chartCurrentMarketCapUsd(token)}
-              preview={preview}
-              onVolumeChange={setChartVolume}
-            />
+            {chainId === 1 ? (
+              <TokenPriceChart
+                tokenAddress={token.tokenAddress}
+                tokenName={token.name}
+                launchModel={classicTradeLaunchModel}
+                totalSupply={chartTotalSupply(token)}
+                currentMarketCapUsd={chartCurrentMarketCapUsd(token)}
+                preview={preview}
+                onVolumeChange={setChartVolume}
+              />
+            ) : null}
             <MetricGrid metrics={metrics} />
           </div>
         </section>

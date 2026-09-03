@@ -4,6 +4,73 @@ import { describe, expect, it } from "vitest";
 
 import { programmablePublicOpenApi } from "../lib/public-openapi";
 
+const robinhoodEntry = {
+  exploreKind: "token",
+  id: "4663:0x1111111111111111111111111111111111111111",
+  name: "Robinhood Custom Release",
+  symbol: "RHCR",
+  description: "A finalized Programmable Custom launch on Robinhood Chain.",
+  imageUrl: "https://ipfs.io/ipfs/bafybeigdyrzt5sfp7udm7hu76br3m5pnpytwhq",
+  links: [
+    { kind: "website", url: "https://programmable.market" },
+    { kind: "x", url: "https://x.com/programmable" },
+  ],
+  tokenAddress: "0x1111111111111111111111111111111111111111",
+  hookAddress: "0xa3b48907aCDD42A1Ec74E1D9208122eC34af4A88",
+  poolId: `0x${"11".repeat(32)}`,
+  launchedAt: "2026-09-02T18:30:00.000Z",
+  launchModel: "custom-graph",
+  launchModelVersion: "programmable-launch-stamp-router-v1",
+  liquidityPath: "programmable-v4",
+  totalSwapFeeBps: null,
+  valuation: { status: "unavailable", reason: "source-unavailable" },
+  launchCategoryProvenance: {
+    category: "custom",
+    source: "canonical-launch-stamp-router",
+  },
+};
+
+const robinhoodCatalog = {
+  source: "robinhood-finalized-custom-launch-feed-v4",
+  launchSource:
+    "robinhood-finalized-custom-launch-feed-v4+canonical-launch-stamp-router",
+  status: "current",
+  lastIndexedAt: "2026-09-03T07:30:00.000Z",
+  asOfBlock: "52929919",
+  asOfBlockHash: `0x${"22".repeat(32)}`,
+  identityCount: 1,
+  identityCommitment: `sha256:${"33".repeat(32)}`,
+  completeness: {
+    classic: "unavailable",
+    stock: "excluded",
+    custom: "current",
+    registryCustom: "unavailable",
+    routerCustom: "current",
+  },
+  scope: {
+    included: ["canonical-launch-stamp-router"],
+    excluded: [
+      "classic-v1",
+      "classic-v2",
+      "stock-paired-v1",
+      "stock-paired-v2",
+      "stock-paired-v3",
+    ],
+    publicCategories: ["classic", "custom"],
+  },
+  routerStamp: {
+    source: "canonical-launch-stamp-router",
+    status: "current",
+    finalityConfirmations: 64,
+    verifiedIdentityCount: 1,
+    projectedIdentityCount: 1,
+    generatedAt: "2026-09-03T07:30:00.000Z",
+    asOfBlock: "52929919",
+    asOfBlockHash: `0x${"22".repeat(32)}`,
+    identityCommitment: `sha256:${"33".repeat(32)}`,
+  },
+};
+
 function responseValidator(name: "ExploreListResponse" | "TokenDetailResponse") {
   const ajv = new Ajv2020({ allErrors: true, strict: false });
   addFormats(ajv);
@@ -245,6 +312,27 @@ describe("public Explore OpenAPI contract", () => {
     expect(validate({ ...ready, marketRead: incompleteGmgn })).toBe(false);
   });
 
+  it("validates the finalized Robinhood ready list without a market read", () => {
+    const validate = responseValidator("ExploreListResponse");
+    const ready = {
+      status: "ready",
+      chainId: 4663,
+      tokens: [robinhoodEntry],
+      page: 1,
+      pageSize: 9,
+      total: 1,
+      totalPages: 1,
+      sort: "newest",
+      query: "",
+      catalog: robinhoodCatalog,
+    };
+
+    expect(validate(ready), JSON.stringify(validate.errors)).toBe(true);
+    expect(ready).not.toHaveProperty("marketRead");
+    expect(validate({ ...ready, marketRead: null })).toBe(true);
+    expect(validate({ ...ready, sort: "oldest" })).toBe(false);
+  });
+
   it("documents the market response headers emitted by ready Explore reads", () => {
     const response = programmablePublicOpenApi.paths["/api/explore"].get
       .responses["200"];
@@ -377,6 +465,7 @@ describe("public Explore OpenAPI contract", () => {
 
     expect(validate(planned), JSON.stringify(validate.errors)).toBe(true);
     expect(validate({ ...planned, catalog: {} })).toBe(false);
+    expect(validate({ ...planned, sort: "oldest" })).toBe(false);
   });
 
   it("documents chain-scoped token reads and their planned response", () => {
@@ -406,6 +495,48 @@ describe("public Explore OpenAPI contract", () => {
     };
     expect(validate(planned), JSON.stringify(validate.errors)).toBe(true);
     expect(validate({ ...planned, catalog: {} })).toBe(false);
+  });
+
+  it("validates a finalized Robinhood ready token detail", () => {
+    const validate = responseValidator("TokenDetailResponse");
+    const detail = {
+      status: "ready",
+      token: robinhoodEntry,
+      customProject: null,
+      routerTradeProject: null,
+      platformFeeCertification: null,
+      sourceVerification: {
+        schemaVersion: "programmable.source-verification-display.v1",
+        status: "verified",
+        label: "Source verified",
+        updatedAt: "2026-09-03T07:29:00.000Z",
+      },
+      creatorArticle: null,
+      snapshot: { chainId: 4663 },
+      catalog: robinhoodCatalog,
+    };
+
+    expect(validate(detail), JSON.stringify(validate.errors)).toBe(true);
+    expect(validate({
+      ...detail,
+      token: null,
+      sourceVerification: null,
+      snapshot: null,
+    }), JSON.stringify(validate.errors)).toBe(true);
+    expect(
+      programmablePublicOpenApi.paths["/api/explore/token"].get
+        .responses["404"].content["application/json"].schema,
+    ).toEqual({
+      $ref: "#/components/schemas/TokenDetailLookupReadyResponse",
+    });
+    expect(programmablePublicOpenApi.components.schemas.TokenDetailReadyResponse
+      .properties.catalog).toEqual({
+        $ref: "#/components/schemas/CatalogBoundary",
+      });
+    expect(validate({
+      ...detail,
+      catalog: { ...robinhoodCatalog, source: "unverified" },
+    })).toBe(false);
   });
 
   it("documents token market headers only where a market read can occur", () => {

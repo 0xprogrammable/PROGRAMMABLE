@@ -21,6 +21,29 @@ const documents = new Map(await Promise.all([1, 2, 3].map(async (version) => {
 const openapi = await readJson(openApiPath);
 documents.set("custom-launch-v4.json", openapi);
 
+const robinhoodV4PlatformFeePolicy = Object.freeze({
+  required: true,
+  status: "required-default-configuration",
+  appliesTo: "new-robinhood-v4-api-custom-launches-only",
+  changesExistingLaunches: false,
+  changesEthereumLaunches: false,
+  rateBps: 20,
+  ratePpm: 2_000,
+  ratePercent: "0.20%",
+  recipient: "0xD88539d3c4C460136a733A3Fd60cf6BF269079da",
+  basis: null,
+  feeCurrency: null,
+  accountingMode: null,
+  rounding: null,
+  accrual: null,
+  claimMechanism: null,
+  enforcement: "not-guaranteed-onchain",
+  canonicalOnchainEnforcementProven: false,
+  guaranteedRevenue: false,
+  feeBehaviorClaim: false,
+  universalFeeBehaviorClaim: false,
+});
+
 const clone = (value) => structuredClone(value);
 const closed = (required, properties, rest = {}) => ({
   type: "object",
@@ -2200,6 +2223,10 @@ for (const [name, schema] of standalone) {
 }
 
 const packConfig = await readJson(packagedPackConfigPath);
+packConfig["x-programmable-contract"].platformFeePolicy = clone(
+  robinhoodV4PlatformFeePolicy,
+);
+delete packConfig.$defs.launchProfile;
 packConfig.$defs.chainDeployment = clone(chainDeployment);
 const packagedPackConfigSource = `${JSON.stringify(packConfig, null, 2)}\n`;
 await writeFile(packagedPackConfigPath, packagedPackConfigSource);

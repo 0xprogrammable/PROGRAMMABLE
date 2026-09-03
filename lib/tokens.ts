@@ -173,6 +173,16 @@ export const CANONICAL_LAUNCH_STAMP_V1 = Object.freeze({
   poolManagerAddress: "0x000000000004444c5dc75cB358380D2e3dE08A90",
 } as const);
 
+export const CANONICAL_ROBINHOOD_LAUNCH_STAMP_V1 = Object.freeze({
+  chainId: 4663,
+  routerAddress: "0x34965F2A2ee9254522232C32F02056E92BE0C98a",
+  routerRuntimeCodeHash:
+    "0x1dbbdaaad901ea3c6134dca0d4872a4789b3c071bf8ccfb44edd65d26d817388",
+  routerStartBlock: "50469365",
+  finalityConfirmations: 64,
+  poolManagerAddress: "0x8366a39CC670B4001A1121B8F6A443A643e40951",
+} as const);
+
 type LaunchStampExpectedIdentity = Readonly<{
   chainId?: number;
   tokenAddress?: `0x${string}`;
@@ -378,26 +388,33 @@ export function isLaunchStampProvenanceV1(
   value: unknown,
   expected: LaunchStampExpectedIdentity = {},
 ): value is LaunchStampProvenanceV1 {
+  const canonical = isRecord(value)
+    ? value.chainId === CANONICAL_LAUNCH_STAMP_V1.chainId
+      ? CANONICAL_LAUNCH_STAMP_V1
+      : value.chainId === CANONICAL_ROBINHOOD_LAUNCH_STAMP_V1.chainId
+        ? CANONICAL_ROBINHOOD_LAUNCH_STAMP_V1
+        : null
+    : null;
   if (
     !isRecord(value) ||
     value.schemaVersion !== "programmable.launch-stamp-provenance.v1" ||
     !Number.isSafeInteger(value.chainId) ||
-    value.chainId !== CANONICAL_LAUNCH_STAMP_V1.chainId ||
+    canonical === null ||
     !isAddress(value.routerAddress) ||
     !sameHex(
       value.routerAddress,
-      CANONICAL_LAUNCH_STAMP_V1.routerAddress,
+      canonical.routerAddress,
     ) ||
     !isBytes32(value.routerRuntimeCodeHash) ||
     !sameHex(
       value.routerRuntimeCodeHash,
-      CANONICAL_LAUNCH_STAMP_V1.routerRuntimeCodeHash,
+      canonical.routerRuntimeCodeHash,
     ) ||
     !isUnsignedDecimal(value.routerStartBlock) ||
-    value.routerStartBlock !== CANONICAL_LAUNCH_STAMP_V1.routerStartBlock ||
+    value.routerStartBlock !== canonical.routerStartBlock ||
     !Number.isSafeInteger(value.finalityConfirmations) ||
     value.finalityConfirmations !==
-      CANONICAL_LAUNCH_STAMP_V1.finalityConfirmations ||
+      canonical.finalityConfirmations ||
     (value.kind !== "custom-graph" && value.kind !== "classic") ||
     !isBytes32(value.launchId) ||
     !isBytes32(value.stampHash) ||
@@ -416,7 +433,7 @@ export function isLaunchStampProvenanceV1(
     !isAddress(value.poolManagerAddress) ||
     !sameHex(
       value.poolManagerAddress,
-      CANONICAL_LAUNCH_STAMP_V1.poolManagerAddress,
+      canonical.poolManagerAddress,
     ) ||
     !isBytes32(value.poolId) ||
     !areCanonicalCurrencies(value.poolKey) ||

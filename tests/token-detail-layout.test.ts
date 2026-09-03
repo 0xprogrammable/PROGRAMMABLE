@@ -90,6 +90,9 @@ describe("token detail layout", () => {
     expect(detailSource).toMatch(
       /<div className=\{styles\.marketChart\}>[\s\S]*?<TokenPriceChart[\s\S]*?<MetricGrid metrics=\{metrics\} \/>[\s\S]*?<\/div>/s,
     );
+    expect(detailSource).toMatch(
+      /\{chainId === 1 \? \([\s\S]*?<TokenPriceChart[\s\S]*?\) : null\}/s,
+    );
     expect(detailSource).not.toContain("<VerifiedLaunchRecord");
     expect(detailSource).not.toContain("<TokenCommunityChat");
     expect(detailStyles).toMatch(
