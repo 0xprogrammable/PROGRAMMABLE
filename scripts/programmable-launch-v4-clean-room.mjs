@@ -77,8 +77,8 @@ const execFileAsync = promisify(execFile);
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 class CleanRoomError extends Error {
-  constructor(code) {
-    super(code);
+  constructor(code, options) {
+    super(code, options);
     this.name = "CleanRoomError";
     this.code = code;
   }
@@ -382,7 +382,12 @@ export function assertReleaseMatchesReviewedCoordinate(release, coordinate) {
 }
 
 async function loadReviewedReleaseCoordinate() {
-  const binding = auditV4ReleaseBinding({ repositoryRoot: REPOSITORY_ROOT });
+  let binding;
+  try {
+    binding = auditV4ReleaseBinding({ repositoryRoot: REPOSITORY_ROOT });
+  } catch (error) {
+    throw new CleanRoomError("V4_RELEASE_BINDING_NOT_READY", { cause: error });
+  }
   const coordinatePath = path.join(REPOSITORY_ROOT, REVIEWED_RELEASE_COORDINATE_PATH);
   await assertRegularFile(coordinatePath, "REVIEWED_RELEASE_COORDINATE", 1_048_576);
   const bytes = await readFile(coordinatePath);

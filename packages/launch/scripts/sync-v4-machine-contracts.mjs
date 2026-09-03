@@ -72,10 +72,6 @@ const finalityPolicy = closed(
     policyDigest: sha256,
   },
 );
-const contractBinding = closed(["address", "runtimeCodeHash"], {
-  address,
-  runtimeCodeHash: nonzeroHex32,
-});
 const contractNames = [
   "programmableLaunchStampRouter",
   "permitAuthority",
@@ -87,6 +83,48 @@ const contractNames = [
   "permit2",
   "universalRouter",
 ];
+const pinnedContractBindings = Object.freeze({
+  programmableLaunchStampRouter: Object.freeze({
+    address: "0x34965F2A2ee9254522232C32F02056E92BE0C98a",
+    runtimeCodeHash: "0x1dbbdaaad901ea3c6134dca0d4872a4789b3c071bf8ccfb44edd65d26d817388",
+  }),
+  permitAuthority: Object.freeze({
+    address: "0xeD617CE7f82e2AB589aDeFFD319D1D872Bc8De06",
+    runtimeCodeHash: "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
+  }),
+  graphFactory: Object.freeze({
+    address: "0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd",
+    runtimeCodeHash: "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8",
+  }),
+  poolManager: Object.freeze({
+    address: "0x8366a39CC670B4001A1121B8F6A443A643e40951",
+    runtimeCodeHash: "0xbd3881180b547f5fe817545743cfb4343e96b1bc6640dcd70c106b0066e95626",
+  }),
+  positionManager: Object.freeze({
+    address: "0x58daec3116aae6D93017bAAea7749052E8a04fA7",
+    runtimeCodeHash: "0xc873e135dc9aaec88489cfbad146b4cb49d6a32e0d80326377784b7ba17670b2",
+  }),
+  stateView: Object.freeze({
+    address: "0xF3334192D15450CdD385c8B70e03f9A6bD9E673b",
+    runtimeCodeHash: "0x7d9c591e0956fd89d98feb4ffcfe8bf1f7a62bd485edd979fa21d104b49878a6",
+  }),
+  v4Quoter: Object.freeze({
+    address: "0x8Dc178eFB8111BB0973Dd9d722ebeFF267c98F94",
+    runtimeCodeHash: "0xd707b1da8cb165e5ea35a3b4450d971eb562ec171e23492aa117036b78a868f6",
+  }),
+  permit2: Object.freeze({
+    address: "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+    runtimeCodeHash: "0x5208783f52488f7d3493e5e38311ab707c1d75457fe472a19b0b4d57d66a7fca",
+  }),
+  universalRouter: Object.freeze({
+    address: "0x06AfBA43Fd06227fA663b0DAecF536f6EaA6bf99",
+    runtimeCodeHash: "0xbe8e8191bb42d843c2e948a5a55772eaab864ce01e54dcd47c9d089170b302d5",
+  }),
+});
+const pinnedContractBinding = (name) => closed(["address", "runtimeCodeHash"], {
+  address: { const: pinnedContractBindings[name].address },
+  runtimeCodeHash: { const: pinnedContractBindings[name].runtimeCodeHash },
+});
 const permit2GenesisProviderReadback = (providerId, trustDomain) => closed(
   [
     "schemaVersion", "providerId", "trustDomain", "blockNumber", "blockHash",
@@ -535,11 +573,14 @@ const chainDeployment = closed(
         "3347899",
       ),
     ),
-    contracts: closed(contractNames, Object.fromEntries(contractNames.map((name) => [name, contractBinding]))),
+    contracts: closed(
+      contractNames,
+      Object.fromEntries(contractNames.map((name) => [name, pinnedContractBinding(name)])),
+    ),
   },
   {
     "x-programmable-order":
-      "Safe atomicRootStateEvidenceDigest == permitAuthority result stateEvidenceDigest",
+      "contracts bind atomic deployment, Permit2 genesis, Safe permit authority, and external root evidence; atomic provider transactionHash copies equal deploymentEvidence.transactionHash; atomic deployment, Safe snapshot, and Ethereum finality agree; programmable Router != universal Router",
   },
 );
 function frozenProfileSchema() {
@@ -1027,7 +1068,92 @@ const exactWallet = closed(
   },
 );
 
-const onchainEvidence = closed(
+const finalityStage = {
+  enum: ["sequencer_soft_confirmation", "ethereum_posted", "ethereum_finalized"],
+};
+const boundedLogIndex = { type: "integer", minimum: 0, maximum: 2_147_483_647 };
+const l2Inclusion = closed(
+  [
+    "schemaVersion", "chainId", "caip2", "transactionHash", "blockNumber", "blockHash",
+    "blockTimestamp", "receiptStatus", "launchEventLogIndex", "routeEventLogIndex",
+  ],
+  {
+    schemaVersion: { const: "programmable.custom-launch-l2-inclusion.v1" },
+    chainId: { const: "4663" },
+    caip2: { const: "eip155:4663" },
+    transactionHash: nonzeroHex32,
+    blockNumber: positiveUint,
+    blockHash: nonzeroHex32,
+    blockTimestamp: positiveUint,
+    receiptStatus: { const: "success" },
+    launchEventLogIndex: {
+      ...boundedLogIndex,
+      description:
+        "Log index of the Router launch event; it must follow routeEventLogIndex in the same successful receipt.",
+    },
+    routeEventLogIndex: {
+      ...boundedLogIndex,
+      description:
+        "Log index of the Router route event; it must precede launchEventLogIndex in the same successful receipt.",
+    },
+  },
+  { "x-programmable-order": "routeEventLogIndex < launchEventLogIndex" },
+);
+const l1Posting = closed(
+  [
+    "schemaVersion", "chainId", "caip2", "rollup", "sequencerInbox", "batchNumber",
+    "transactionHash", "blockNumber", "blockHash", "logIndex",
+  ],
+  {
+    schemaVersion: { const: "programmable.custom-launch-l1-posting.v1" },
+    chainId: { const: "1" },
+    caip2: { const: "eip155:1" },
+    rollup: { const: "0x23A19d23e89166adedbDcB432518AB01e4272D94" },
+    sequencerInbox: { const: "0xBd0D173EEb87D57A09521c24388a12789F33ba96" },
+    batchNumber: uint,
+    transactionHash: nonzeroHex32,
+    blockNumber: positiveUint,
+    blockHash: nonzeroHex32,
+    logIndex: boundedLogIndex,
+  },
+);
+const l1FinalizedProviderReadback = (providerId, trustDomain) => closed(
+  ["providerId", "trustDomain", "blockNumber", "blockHash"],
+  {
+    providerId: { const: providerId },
+    trustDomain: { const: trustDomain },
+    blockNumber: positiveUint,
+    blockHash: nonzeroHex32,
+  },
+);
+const l1FinalizedProviderReadbackSchema = {
+  oneOf: [
+    l1FinalizedProviderReadback("drpc", "drpc.org"),
+    l1FinalizedProviderReadback("quicknode", "quicknode.com"),
+  ],
+};
+const l1FinalizedCheckpoint = closed(
+  [
+    "schemaVersion", "chainId", "caip2", "consensusCheckpointTag", "blockNumber",
+    "blockHash", "providerReadbacks",
+  ],
+  {
+    schemaVersion: {
+      const: "programmable.custom-launch-l1-finalized-checkpoint.v1",
+    },
+    chainId: { const: "1" },
+    caip2: { const: "eip155:1" },
+    consensusCheckpointTag: { const: "finalized" },
+    blockNumber: positiveUint,
+    blockHash: nonzeroHex32,
+    providerReadbacks: tuple(
+      l1FinalizedProviderReadback("drpc", "drpc.org"),
+      l1FinalizedProviderReadback("quicknode", "quicknode.com"),
+    ),
+  },
+);
+
+const onchainEvidenceV2 = closed(
   [
     "schemaVersion",
     "apiVersion",
@@ -1068,15 +1194,135 @@ const onchainEvidence = closed(
     blockNumber: uint,
     blockHash: nonzeroHex32,
     logIndex: { type: "integer", minimum: 0 },
-    checkpointType: {
-      enum: ["sequencer_soft_confirmation", "ethereum_posted", "ethereum_finalized"],
-    },
+    checkpointType: finalityStage,
     finalityPolicy,
     commitments,
     walletTransactionPreimageHash: sha256,
     evidenceDigest: sha256,
     terminal: { type: "boolean" },
     observedAt: dateTime,
+  },
+);
+
+const legacyCheckpointProjectionDescription =
+  "Deprecated stage-checkpoint projection: l2Inclusion at sequencer_soft_confirmation, l1Posting at ethereum_posted, and l1FinalizedCheckpoint at ethereum_finalized. This is not a transaction locator; use the nested L2/L1 structures instead.";
+const legacyLogIndexProjectionDescription =
+  "Deprecated stage-checkpoint projection: l2Inclusion.launchEventLogIndex at sequencer_soft_confirmation, and l1Posting.logIndex at ethereum_posted or ethereum_finalized. A finalized checkpoint has no log index. Use the nested L2/L1 structures instead.";
+const onchainEvidenceV3 = closed(
+  [
+    "schemaVersion",
+    "apiVersion",
+    "chainId",
+    "caip2",
+    "chainDeploymentId",
+    "chainDeploymentDescriptorDigest",
+    "chainDeployment",
+    "profile",
+    "router",
+    "routerRuntimeCodeHash",
+    "routerLaunchId",
+    "transactionHash",
+    "blockNumber",
+    "blockHash",
+    "logIndex",
+    "checkpointType",
+    "l2Inclusion",
+    "l1Posting",
+    "l1FinalizedCheckpoint",
+    "finalityPolicy",
+    "commitments",
+    "walletTransactionPreimageHash",
+    "evidenceDigest",
+    "terminal",
+    "observedAt",
+  ],
+  {
+    schemaVersion: { const: "programmable.custom-launch-onchain-evidence.v3" },
+    apiVersion: { const: "v4" },
+    chainId: { const: "4663" },
+    caip2: { const: "eip155:4663" },
+    chainDeploymentId: { const: "robinhood-mainnet-custom-launch-v1" },
+    chainDeploymentDescriptorDigest: nonzeroHex32,
+    chainDeployment,
+    profile,
+    router: address,
+    routerRuntimeCodeHash: nonzeroHex32,
+    routerLaunchId: nonzeroHex32,
+    transactionHash: {
+      ...nonzeroHex32,
+      description:
+        "Robinhood L2 transaction hash. It must equal l2Inclusion.transactionHash at every stage.",
+    },
+    blockNumber: {
+      ...positiveUint,
+      deprecated: true,
+      description: legacyCheckpointProjectionDescription,
+    },
+    blockHash: {
+      ...nonzeroHex32,
+      deprecated: true,
+      description: legacyCheckpointProjectionDescription,
+    },
+    logIndex: {
+      ...boundedLogIndex,
+      deprecated: true,
+      description: legacyLogIndexProjectionDescription,
+    },
+    checkpointType: finalityStage,
+    l2Inclusion,
+    l1Posting: nullable(l1Posting),
+    l1FinalizedCheckpoint: nullable(l1FinalizedCheckpoint),
+    finalityPolicy,
+    commitments,
+    walletTransactionPreimageHash: sha256,
+    evidenceDigest: sha256,
+    terminal: { type: "boolean" },
+    observedAt: dateTime,
+  },
+  {
+    allOf: [
+      {
+        if: {
+          properties: { checkpointType: { const: "sequencer_soft_confirmation" } },
+          required: ["checkpointType"],
+        },
+        then: {
+          properties: {
+            l1Posting: { type: "null" },
+            l1FinalizedCheckpoint: { type: "null" },
+            terminal: { const: false },
+          },
+        },
+      },
+      {
+        if: {
+          properties: { checkpointType: { const: "ethereum_posted" } },
+          required: ["checkpointType"],
+        },
+        then: {
+          properties: {
+            l1Posting,
+            l1FinalizedCheckpoint: { type: "null" },
+            terminal: { const: false },
+          },
+        },
+      },
+      {
+        if: {
+          properties: { checkpointType: { const: "ethereum_finalized" } },
+          required: ["checkpointType"],
+        },
+        then: {
+          properties: {
+            l1Posting,
+            l1FinalizedCheckpoint,
+            terminal: { const: true },
+          },
+        },
+      },
+    ],
+    "x-programmable-order":
+      "chainDeploymentDescriptorDigest == keccak256(canonical chainDeployment); router and finalityPolicy match chainDeployment; transactionHash == l2Inclusion.transactionHash; L1 identities match chainDeployment ethereumFinalityEvidence; legacy checkpoint projection follows checkpointType; finalized provider readbacks equal checkpoint",
   },
 );
 
@@ -1389,6 +1635,23 @@ const sourceVerificationExactSourceBinding = closed(
     bindingDigest: sha256,
   },
 );
+const sourceVerificationExactComponent = closed(
+  [
+    "targetId", "address", "status", "providerObservation", "exactSourceAuthority",
+    "exactSourceBinding", "updatedAt",
+  ],
+  {
+    targetId: identifier,
+    address: { type: "string", pattern: "^0x[0-9a-f]{40}$" },
+    status: { const: "exact_match" },
+    providerObservation: sourceVerificationProviderObservation,
+    exactSourceAuthority: {
+      const: "protected-hosted-build-finalized-transaction-bytecode",
+    },
+    exactSourceBinding: sourceVerificationExactSourceBinding,
+    updatedAt: millisecondDateTime,
+  },
+);
 const sourceVerificationComponent = {
   oneOf: [
     ...["queued", "retrying"].map((status) => closed(
@@ -1407,23 +1670,7 @@ const sourceVerificationComponent = {
         nextAttemptAt: millisecondDateTime,
       },
     )),
-    closed(
-      [
-        "targetId", "address", "status", "providerObservation", "exactSourceAuthority",
-        "exactSourceBinding", "updatedAt",
-      ],
-      {
-        targetId: identifier,
-        address: { type: "string", pattern: "^0x[0-9a-f]{40}$" },
-        status: { const: "exact_match" },
-        providerObservation: sourceVerificationProviderObservation,
-        exactSourceAuthority: {
-          const: "protected-hosted-build-finalized-transaction-bytecode",
-        },
-        exactSourceBinding: sourceVerificationExactSourceBinding,
-        updatedAt: millisecondDateTime,
-      },
-    ),
+    sourceVerificationExactComponent,
     closed(
       [
         "targetId", "address", "status", "providerObservation", "exactSourceAuthority",
@@ -1605,7 +1852,7 @@ const resource = closed(
     walletHandoffUrl: nullable({ type: "string", format: "uri" }),
     expiresAt: nullable(dateTime),
     secondsRemaining: nullable({ type: "number", minimum: 0 }),
-    onchain: nullable(onchainEvidence),
+    onchain: nullable({ oneOf: [onchainEvidenceV2, onchainEvidenceV3] }),
     failure: nullable(closed(["code", "message", "retryable"], {
       code: { type: "string", minLength: 1, maxLength: 256 },
       message: { type: "string", minLength: 1, maxLength: 8192 },
@@ -1809,16 +2056,28 @@ const capabilities = closed(
   },
 );
 
-const publicOnchainEvidence = clone(onchainEvidence);
+const publicOnchainEvidence = clone(onchainEvidenceV3);
 delete publicOnchainEvidence.properties.walletTransactionPreimageHash;
 publicOnchainEvidence.required = publicOnchainEvidence.required.filter(
   (name) => name !== "walletTransactionPreimageHash",
 );
+publicOnchainEvidence.properties.checkpointType = { const: "ethereum_finalized" };
+publicOnchainEvidence.properties.l1Posting = clone(l1Posting);
+publicOnchainEvidence.properties.l1FinalizedCheckpoint = clone(l1FinalizedCheckpoint);
+publicOnchainEvidence.properties.terminal = { const: true };
+const finalizedSourceVerificationStatus = clone(sourceVerificationStatus);
+finalizedSourceVerificationStatus.description =
+  "Public finalized metadata is emitted only after every component has an authoritative exact source/build/compiler/settings/finalized-transaction/bytecode binding. Queued, retrying, and needs-attention source states remain authenticated history and are never public feed items.";
+finalizedSourceVerificationStatus.properties.status = { const: "exact_match" };
+finalizedSourceVerificationStatus.properties.components.items = clone(
+  sourceVerificationExactComponent,
+);
 const finalizedMetadata = closed(
   [
     "schemaVersion", "apiVersion", "launchId", "chainId", "caip2", "chainDeploymentId",
-    "chainDeploymentDescriptorDigest", "chainDeployment", "profile", "projectMetadata", "funding",
-    "liquidityModel", "commitments", "onchain", "sourceVerification", "createdAt", "finalizedAt",
+    "chainDeploymentDescriptorDigest", "chainDeployment", "profile", "platformId", "category",
+    "projectMetadata", "funding", "liquidityModel", "commitments", "onchain",
+    "sourceVerification", "createdAt", "finalizedAt",
   ],
   {
     schemaVersion: { const: "programmable.finalized-custom-launch-metadata.v4" },
@@ -1830,14 +2089,26 @@ const finalizedMetadata = closed(
     chainDeploymentDescriptorDigest: nonzeroHex32,
     chainDeployment,
     profile,
+    platformId: {
+      const: "programmable",
+      description: "Server-authored canonical platform identity; clients do not supply or infer it.",
+    },
+    category: {
+      const: "custom",
+      description: "Server-authored canonical launch category; clients do not supply or infer it.",
+    },
     projectMetadata: inherited.projectMetadata,
     funding,
     liquidityModel,
     commitments,
     onchain: publicOnchainEvidence,
-    sourceVerification: sourceVerificationStatus,
+    sourceVerification: finalizedSourceVerificationStatus,
     createdAt: dateTime,
     finalizedAt: dateTime,
+  },
+  {
+    "x-programmable-order":
+      "chainDeploymentDescriptorDigest, chainDeployment, profile, and commitments equal onchain counterparts",
   },
 );
 const listEnvelope = closed(
@@ -1860,15 +2131,42 @@ const finalizedListEnvelope = closed(
     chainId: { const: "4663" },
     caip2: { const: "eip155:4663" },
     generatedAt: dateTime,
-    quality: closed(["status", "sourceRowCount", "publishedRowCount", "quarantinedRowCount"], {
-      status: { enum: ["ready", "partial", "stale", "unavailable"] },
-      sourceRowCount: { type: "integer", minimum: 0 },
-      publishedRowCount: { type: "integer", minimum: 0 },
-      quarantinedRowCount: { type: "integer", minimum: 0 },
-    }),
+    quality: closed(
+      ["status", "sourceRowCount", "publishedRowCount", "quarantinedRowCount"],
+      {
+        status: {
+          const: "ready",
+          description:
+            "A successful finalized-feed response is complete and ready; malformed eligible V3 rows fail the request instead of producing a partial response.",
+        },
+        sourceRowCount: {
+          type: "integer",
+          minimum: 0,
+          description:
+            "Global number of canonical eligible V3-finalized and authoritatively source-verified rows in this finalized-dataset snapshot.",
+        },
+        publishedRowCount: {
+          type: "integer",
+          minimum: 0,
+          description:
+            "Global number of canonical eligible V3-finalized and authoritatively source-verified rows emittable under this public contract; it equals sourceRowCount, while the current page is a subset of this total.",
+        },
+        quarantinedRowCount: {
+          const: 0,
+          description:
+            "Always zero on a successful response. A malformed eligible V3-finalized row fails the entire request and is never excluded row by row.",
+        },
+      },
+      {
+        description:
+          "Quality counts are global finalized-dataset snapshot totals over canonical eligible V3-finalized and authoritatively source-verified rows, not current-page counts. A successful response publishes all eligible rows and quarantines none.",
+        "x-programmable-order": "sourceRowCount == publishedRowCount",
+      },
+    ),
     launches: array(finalizedMetadata),
     nextCursor: nullable(clone(opaqueListCursor)),
   },
+  { "x-programmable-order": "launches.length <= quality.publishedRowCount" },
 );
 const listPaginationParameters = [
   {
@@ -1893,7 +2191,7 @@ const standalone = new Map([
   ["source-verification-status.json", annotate("Custom Launch source-verification status V4", "source-verification-status.json", sourceVerificationStatus)],
   ["capabilities.json", annotate("Custom Launch capabilities V2 for API V4", "capabilities.json", capabilities)],
   ["preflight.json", annotate("Custom Launch preflight V2 for API V4", "preflight.json", preflight)],
-  ["onchain-evidence.json", annotate("Custom Launch onchain evidence V2 for API V4", "onchain-evidence.json", onchainEvidence)],
+  ["onchain-evidence.json", annotate("Custom Launch onchain evidence V3 for API V4", "onchain-evidence.json", onchainEvidenceV3)],
   ["exact-wallet-transaction.json", annotate("Exact wallet transaction V4", "exact-wallet-transaction.json", exactWallet)],
 ]);
 
@@ -1914,7 +2212,12 @@ openapi.components.schemas = {
   CustomLaunchPreflightV2: standalone.get("preflight.json"),
   CustomLaunchResourceV4: standalone.get("custom-launch.json"),
   SourceVerificationStatusV4: standalone.get("source-verification-status.json"),
-  CustomLaunchOnchainEvidenceV2: standalone.get("onchain-evidence.json"),
+  CustomLaunchL2InclusionV1: clone(l2Inclusion),
+  CustomLaunchL1PostingV1: clone(l1Posting),
+  CustomLaunchL1FinalizedProviderReadbackV1: clone(l1FinalizedProviderReadbackSchema),
+  CustomLaunchL1FinalizedCheckpointV1: clone(l1FinalizedCheckpoint),
+  CustomLaunchOnchainEvidenceV2: clone(onchainEvidenceV2),
+  CustomLaunchOnchainEvidenceV3: standalone.get("onchain-evidence.json"),
   ExactWalletTransactionV4: standalone.get("exact-wallet-transaction.json"),
   CustomLaunchFinalizedMetadataV4: finalizedMetadata,
   CustomLaunchListV4: listEnvelope,

@@ -108,7 +108,114 @@ assert.equal(
 assert.equal(
   v4.components.schemas.CustomLaunchOnchainEvidenceV2.properties.schemaVersion.const,
   "programmable.custom-launch-onchain-evidence.v2",
-  "V4 evidence schema name",
+  "V4 historical evidence schema name",
+);
+assert.equal(
+  v4.components.schemas.CustomLaunchOnchainEvidenceV3.properties.schemaVersion.const,
+  "programmable.custom-launch-onchain-evidence.v3",
+  "V4 current evidence schema name",
+);
+const authenticatedOnchain = v4.components.schemas.CustomLaunchResourceV4.properties.onchain;
+assertJsonEqual(
+  authenticatedOnchain.oneOf[0].oneOf.map((schema) => schema.properties.schemaVersion.const),
+  [
+    "programmable.custom-launch-onchain-evidence.v2",
+    "programmable.custom-launch-onchain-evidence.v3",
+  ],
+  "V4 authenticated resource historical/current evidence compatibility",
+);
+assertJsonEqual(
+  authenticatedOnchain.oneOf[1],
+  { type: "null" },
+  "V4 authenticated resource nullable pre-inclusion evidence",
+);
+for (const [componentName, schemaVersion] of [
+  ["CustomLaunchL2InclusionV1", "programmable.custom-launch-l2-inclusion.v1"],
+  ["CustomLaunchL1PostingV1", "programmable.custom-launch-l1-posting.v1"],
+  [
+    "CustomLaunchL1FinalizedCheckpointV1",
+    "programmable.custom-launch-l1-finalized-checkpoint.v1",
+  ],
+]) {
+  assert.equal(
+    v4.components.schemas[componentName].properties.schemaVersion.const,
+    schemaVersion,
+    `${componentName} schema name`,
+  );
+}
+assert.equal(
+  v4.components.schemas.CustomLaunchL1PostingV1.properties.rollup.const,
+  "0x23A19d23e89166adedbDcB432518AB01e4272D94",
+  "V4 L1 posting rollup trust root",
+);
+assert.equal(
+  v4.components.schemas.CustomLaunchL1PostingV1.properties.sequencerInbox.const,
+  "0xBd0D173EEb87D57A09521c24388a12789F33ba96",
+  "V4 L1 posting inbox trust root",
+);
+assertJsonEqual(
+  v4.components.schemas.CustomLaunchL1FinalizedCheckpointV1.properties
+    .providerReadbacks.prefixItems.map((schema) => [
+      schema.properties.providerId.const,
+      schema.properties.trustDomain.const,
+    ]),
+  [["drpc", "drpc.org"], ["quicknode", "quicknode.com"]],
+  "V4 finalized Ethereum provider trust roots",
+);
+assert.equal(
+  v4.components.schemas.CustomLaunchFinalizedMetadataV4.properties.platformId.const,
+  "programmable",
+  "V4 public finalized platform identity",
+);
+assert.equal(
+  v4.components.schemas.CustomLaunchFinalizedMetadataV4.properties.category.const,
+  "custom",
+  "V4 public finalized category",
+);
+assert.equal(
+  v4.components.schemas.CustomLaunchFinalizedMetadataV4.properties.onchain
+    .properties.schemaVersion.const,
+  "programmable.custom-launch-onchain-evidence.v3",
+  "V4 public finalized evidence requires V3",
+);
+assert.equal(
+  v4.components.schemas.CustomLaunchOnchainEvidenceV3["x-programmable-order"],
+  "chainDeploymentDescriptorDigest == keccak256(canonical chainDeployment); router and finalityPolicy match chainDeployment; transactionHash == l2Inclusion.transactionHash; L1 identities match chainDeployment ethereumFinalityEvidence; legacy checkpoint projection follows checkpointType; finalized provider readbacks equal checkpoint",
+  "V4 onchain evidence binds embedded Router and finality configuration",
+);
+assert.equal(
+  v4.components.schemas.CustomLaunchFinalizedMetadataV4["x-programmable-order"],
+  "chainDeploymentDescriptorDigest, chainDeployment, profile, and commitments equal onchain counterparts",
+  "V4 finalized metadata binds outer fields to onchain evidence",
+);
+assert.equal(
+  Object.hasOwn(
+    v4.components.schemas.CustomLaunchFinalizedMetadataV4.properties.onchain.properties,
+    "walletTransactionPreimageHash",
+  ),
+  false,
+  "V4 public finalized evidence omits the authenticated wallet preimage hash",
+);
+const finalizedQuality = v4.components.schemas.CustomLaunchFinalizedListV4.properties.quality;
+assert.equal(
+  v4.components.schemas.CustomLaunchFinalizedListV4["x-programmable-order"],
+  "launches.length <= quality.publishedRowCount",
+  "V4 finalized page cannot exceed the global published total",
+);
+assert.equal(
+  finalizedQuality["x-programmable-order"],
+  "sourceRowCount == publishedRowCount",
+  "V4 finalized feed publishes every canonical eligible V3 row",
+);
+assert.equal(
+  finalizedQuality.properties.status.const,
+  "ready",
+  "V4 successful finalized feed is ready",
+);
+assert.equal(
+  finalizedQuality.properties.quarantinedRowCount.const,
+  0,
+  "V4 successful finalized feed never quarantines a malformed row",
 );
 assert.equal(
   v4.components.schemas.ExactWalletTransactionV4.properties.schemaVersion.const,
@@ -196,7 +303,7 @@ const v4StandaloneComponents = Object.freeze({
   "source-verification-status.json": "SourceVerificationStatusV4",
   "capabilities.json": "CustomLaunchCapabilitiesV2",
   "preflight.json": "CustomLaunchPreflightV2",
-  "onchain-evidence.json": "CustomLaunchOnchainEvidenceV2",
+  "onchain-evidence.json": "CustomLaunchOnchainEvidenceV3",
   "exact-wallet-transaction.json": "ExactWalletTransactionV4",
 });
 for (const [schemaName, componentName] of Object.entries(v4StandaloneComponents)) {
@@ -274,13 +381,60 @@ const chainDeploymentSchema = v4.components.schemas.ExactWalletTransactionV4
   .properties.chainDeployment;
 assert.equal(
   chainDeploymentSchema["x-programmable-order"],
-  "Safe atomicRootStateEvidenceDigest == permitAuthority result stateEvidenceDigest",
-  "V4 chain deployment must publish its Safe/atomic state-evidence cross-binding",
+  "contracts bind atomic deployment, Permit2 genesis, Safe permit authority, and external root evidence; atomic provider transactionHash copies equal deploymentEvidence.transactionHash; atomic deployment, Safe snapshot, and Ethereum finality agree; programmable Router != universal Router",
+  "V4 chain deployment must bind every contract to authoritative evidence",
 );
 assertJsonEqual(
   v4.components.schemas.PackConfigV4.$defs.chainDeployment,
   chainDeploymentSchema,
   "V4 packaged and transport chain-deployment contracts",
+);
+const expectedV4TrustRoots = {
+  programmableLaunchStampRouter: {
+    address: "0x34965F2A2ee9254522232C32F02056E92BE0C98a",
+    runtimeCodeHash: "0x1dbbdaaad901ea3c6134dca0d4872a4789b3c071bf8ccfb44edd65d26d817388",
+  },
+  permitAuthority: {
+    address: "0xeD617CE7f82e2AB589aDeFFD319D1D872Bc8De06",
+    runtimeCodeHash: "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
+  },
+  graphFactory: {
+    address: "0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd",
+    runtimeCodeHash: "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8",
+  },
+  poolManager: {
+    address: "0x8366a39CC670B4001A1121B8F6A443A643e40951",
+    runtimeCodeHash: "0xbd3881180b547f5fe817545743cfb4343e96b1bc6640dcd70c106b0066e95626",
+  },
+  positionManager: {
+    address: "0x58daec3116aae6D93017bAAea7749052E8a04fA7",
+    runtimeCodeHash: "0xc873e135dc9aaec88489cfbad146b4cb49d6a32e0d80326377784b7ba17670b2",
+  },
+  stateView: {
+    address: "0xF3334192D15450CdD385c8B70e03f9A6bD9E673b",
+    runtimeCodeHash: "0x7d9c591e0956fd89d98feb4ffcfe8bf1f7a62bd485edd979fa21d104b49878a6",
+  },
+  v4Quoter: {
+    address: "0x8Dc178eFB8111BB0973Dd9d722ebeFF267c98F94",
+    runtimeCodeHash: "0xd707b1da8cb165e5ea35a3b4450d971eb562ec171e23492aa117036b78a868f6",
+  },
+  permit2: {
+    address: "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+    runtimeCodeHash: "0x5208783f52488f7d3493e5e38311ab707c1d75457fe472a19b0b4d57d66a7fca",
+  },
+  universalRouter: {
+    address: "0x06AfBA43Fd06227fA663b0DAecF536f6EaA6bf99",
+    runtimeCodeHash: "0xbe8e8191bb42d843c2e948a5a55772eaab864ce01e54dcd47c9d089170b302d5",
+  },
+};
+assertJsonEqual(
+  Object.fromEntries(Object.entries(chainDeploymentSchema.properties.contracts.properties)
+    .map(([name, binding]) => [name, {
+      address: binding.properties.address.const,
+      runtimeCodeHash: binding.properties.runtimeCodeHash.const,
+    }])),
+  expectedV4TrustRoots,
+  "V4 chain deployment contract bindings must const-pin all nine trust roots",
 );
 const atomicDeploymentEvidence = chainDeploymentSchema.properties.deploymentEvidence;
 assertClosedSchemaFields(atomicDeploymentEvidence, [
@@ -393,6 +547,14 @@ assert.deepEqual(
 );
 for (const result of atomicDeploymentEvidence.properties.resultingContracts.prefixItems) {
   const contract = result.properties.contract.const;
+  assertJsonEqual(
+    expectedV4TrustRoots[contract],
+    {
+      address: result.properties.address.const,
+      runtimeCodeHash: result.properties.runtimeCodeHash.const,
+    },
+    `V4 atomic ${contract} result must bind its chain-deployment trust root`,
+  );
   assertClosedSchemaFields(result, [
     "contract", "address", "runtimeCodeHash", "previousBlockRuntimeCodeHash",
     "providerReadbacks", "stateEvidenceDigest",
@@ -508,6 +670,15 @@ assert.deepEqual(
   ],
   "V4 Permit2 genesis readbacks must be the exact ordered production quorum",
 );
+assertJsonEqual(
+  expectedV4TrustRoots.permit2,
+  {
+    address: permit2GenesisProvenance.properties.address.const,
+    runtimeCodeHash: permit2GenesisProvenance.properties
+      .providerReadbacks.prefixItems[0].properties.runtimeCodeHash.const,
+  },
+  "V4 Permit2 trust root must bind its genesis provenance",
+);
 const externalRootDeploymentEvidence = chainDeploymentSchema
   .properties.externalRootDeploymentEvidence;
 const expectedExternalRoots = [
@@ -593,6 +764,14 @@ const expectedRegistrySource = {
 };
 for (const [index, entry] of externalRootDeploymentEvidence.prefixItems.entries()) {
   const expectedRoot = expectedExternalRoots[index];
+  assertJsonEqual(
+    expectedV4TrustRoots[expectedRoot.contract],
+    {
+      address: entry.properties.address.const,
+      runtimeCodeHash: entry.properties.runtimeCodeHash.const,
+    },
+    `V4 external ${expectedRoot.contract} evidence must bind its trust root`,
+  );
   assertClosedSchemaFields(entry, [
     "schemaVersion", "contract", "kind", "address", "runtimeCodeHash",
     "transactionHash", "previousBlockNumber", "previousBlockHash",
@@ -679,6 +858,15 @@ assert.equal(
   safeConfigurationEvidence.properties.proxyRuntimeCodeHash.const,
   "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
   "V4 Safe evidence must pin the proxy runtime code hash",
+);
+assertJsonEqual(
+  expectedV4TrustRoots.permitAuthority,
+  {
+    address: chainDeploymentSchema.properties.permitAuthoritySourceProvenance
+      .properties.address.const,
+    runtimeCodeHash: safeConfigurationEvidence.properties.proxyRuntimeCodeHash.const,
+  },
+  "V4 PermitAuthority trust root must bind its Safe provenance and proxy runtime",
 );
 assertJsonEqual(
   Object.fromEntries(Object.entries(
@@ -935,6 +1123,23 @@ assert.equal(
 assert.ok(
   v4.components.schemas.CustomLaunchFinalizedMetadataV4.required.includes("sourceVerification"),
   "V4 finalized metadata must require source-verification readback",
+);
+const finalizedSourceVerification = v4.components.schemas.CustomLaunchFinalizedMetadataV4
+  .properties.sourceVerification;
+assert.equal(
+  finalizedSourceVerification.properties.status.const,
+  "exact_match",
+  "V4 public finalized metadata must require exact aggregate source verification",
+);
+assert.equal(
+  finalizedSourceVerification.properties.components.items.properties.status.const,
+  "exact_match",
+  "V4 public finalized metadata must require every source component to be exact",
+);
+assert.deepEqual(
+  sourceVerificationStatusV4.properties.status.enum,
+  ["queued", "retrying", "exact_match", "needs_attention"],
+  "V4 authenticated source history must retain all source-verification states",
 );
 assertV4ListEnvelope(
   v4,

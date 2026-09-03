@@ -2848,12 +2848,10 @@
               ],
               "properties": {
                 "address": {
-                  "type": "string",
-                  "pattern": "^0x[0-9a-fA-F]{40}$"
+                  "const": "0x34965F2A2ee9254522232C32F02056E92BE0C98a"
                 },
                 "runtimeCodeHash": {
-                  "type": "string",
-                  "pattern": "^0x(?!0{64}$)[0-9a-f]{64}$"
+                  "const": "0x1dbbdaaad901ea3c6134dca0d4872a4789b3c071bf8ccfb44edd65d26d817388"
                 }
               }
             },
@@ -2866,12 +2864,10 @@
               ],
               "properties": {
                 "address": {
-                  "type": "string",
-                  "pattern": "^0x[0-9a-fA-F]{40}$"
+                  "const": "0xeD617CE7f82e2AB589aDeFFD319D1D872Bc8De06"
                 },
                 "runtimeCodeHash": {
-                  "type": "string",
-                  "pattern": "^0x(?!0{64}$)[0-9a-f]{64}$"
+                  "const": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c"
                 }
               }
             },
@@ -2884,12 +2880,10 @@
               ],
               "properties": {
                 "address": {
-                  "type": "string",
-                  "pattern": "^0x[0-9a-fA-F]{40}$"
+                  "const": "0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd"
                 },
                 "runtimeCodeHash": {
-                  "type": "string",
-                  "pattern": "^0x(?!0{64}$)[0-9a-f]{64}$"
+                  "const": "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8"
                 }
               }
             },
@@ -2902,12 +2896,10 @@
               ],
               "properties": {
                 "address": {
-                  "type": "string",
-                  "pattern": "^0x[0-9a-fA-F]{40}$"
+                  "const": "0x8366a39CC670B4001A1121B8F6A443A643e40951"
                 },
                 "runtimeCodeHash": {
-                  "type": "string",
-                  "pattern": "^0x(?!0{64}$)[0-9a-f]{64}$"
+                  "const": "0xbd3881180b547f5fe817545743cfb4343e96b1bc6640dcd70c106b0066e95626"
                 }
               }
             },
@@ -2920,12 +2912,10 @@
               ],
               "properties": {
                 "address": {
-                  "type": "string",
-                  "pattern": "^0x[0-9a-fA-F]{40}$"
+                  "const": "0x58daec3116aae6D93017bAAea7749052E8a04fA7"
                 },
                 "runtimeCodeHash": {
-                  "type": "string",
-                  "pattern": "^0x(?!0{64}$)[0-9a-f]{64}$"
+                  "const": "0xc873e135dc9aaec88489cfbad146b4cb49d6a32e0d80326377784b7ba17670b2"
                 }
               }
             },
@@ -2938,12 +2928,10 @@
               ],
               "properties": {
                 "address": {
-                  "type": "string",
-                  "pattern": "^0x[0-9a-fA-F]{40}$"
+                  "const": "0xF3334192D15450CdD385c8B70e03f9A6bD9E673b"
                 },
                 "runtimeCodeHash": {
-                  "type": "string",
-                  "pattern": "^0x(?!0{64}$)[0-9a-f]{64}$"
+                  "const": "0x7d9c591e0956fd89d98feb4ffcfe8bf1f7a62bd485edd979fa21d104b49878a6"
                 }
               }
             },
@@ -2956,12 +2944,10 @@
               ],
               "properties": {
                 "address": {
-                  "type": "string",
-                  "pattern": "^0x[0-9a-fA-F]{40}$"
+                  "const": "0x8Dc178eFB8111BB0973Dd9d722ebeFF267c98F94"
                 },
                 "runtimeCodeHash": {
-                  "type": "string",
-                  "pattern": "^0x(?!0{64}$)[0-9a-f]{64}$"
+                  "const": "0xd707b1da8cb165e5ea35a3b4450d971eb562ec171e23492aa117036b78a868f6"
                 }
               }
             },
@@ -2974,12 +2960,10 @@
               ],
               "properties": {
                 "address": {
-                  "type": "string",
-                  "pattern": "^0x[0-9a-fA-F]{40}$"
+                  "const": "0x000000000022D473030F116dDEE9F6B43aC78BA3"
                 },
                 "runtimeCodeHash": {
-                  "type": "string",
-                  "pattern": "^0x(?!0{64}$)[0-9a-f]{64}$"
+                  "const": "0x5208783f52488f7d3493e5e38311ab707c1d75457fe472a19b0b4d57d66a7fca"
                 }
               }
             },
@@ -2992,19 +2976,17 @@
               ],
               "properties": {
                 "address": {
-                  "type": "string",
-                  "pattern": "^0x[0-9a-fA-F]{40}$"
+                  "const": "0x06AfBA43Fd06227fA663b0DAecF536f6EaA6bf99"
                 },
                 "runtimeCodeHash": {
-                  "type": "string",
-                  "pattern": "^0x(?!0{64}$)[0-9a-f]{64}$"
+                  "const": "0xbe8e8191bb42d843c2e948a5a55772eaab864ce01e54dcd47c9d089170b302d5"
                 }
               }
             }
           }
         }
       },
-      "x-programmable-order": "Safe atomicRootStateEvidenceDigest == permitAuthority result stateEvidenceDigest"
+      "x-programmable-order": "contracts bind atomic deployment, Permit2 genesis, Safe permit authority, and external root evidence; atomic provider transactionHash copies equal deploymentEvidence.transactionHash; atomic deployment, Safe snapshot, and Ethereum finality agree; programmable Router != universal Router"
     },
     "chainDeploymentDescriptorDigest": {
       "type": "string",
