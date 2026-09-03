@@ -138,7 +138,6 @@ export function LandingPage() {
               fetchPriority="high"
               loading="eager"
               sizes="100vw"
-              unoptimized
             />
           </picture>
           <span className={styles.heroTwinkles}>
