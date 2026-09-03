@@ -7,7 +7,7 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Custom Launch API · Programmable",
   description:
-    "Package, submit and track live Ethereum V3 launches, and inspect the planned Robinhood Chain V4 contract.",
+    "Package, submit and track live Ethereum V3 launches, and inspect the deployed Robinhood Chain V4 release candidate.",
   alternates: { canonical: "/docs/developers/custom-launch" },
 };
 
@@ -215,8 +215,9 @@ export default function CustomLaunchApiDocsPage() {
         with nonretryable{" "}
         <code>CUSTOM_LAUNCH_V2_READ_ONLY</code> and{" "}
         <code>CUSTOM_LAUNCH_V1_READ_ONLY</code>. Only V3.3 accepts new submissions.
-        Robinhood V4 version 4.0.0 is a source candidate, not a published release
-        or live API.
+        Robinhood V4 version 4.0.0 is not a published CLI release. Its Router
+        and backend routes are deployed as a release candidate awaiting public
+        discovery promotion.
       </p>
 
       <section id="quickstart">
@@ -303,14 +304,16 @@ export default function CustomLaunchApiDocsPage() {
 
       <section id="robinhood-v4">
         <div className={styles.sectionIntro}>
-          <h2>Keep the Robinhood V4 source candidate separate</h2>
+          <h2>Treat Robinhood V4 as a deployed release candidate</h2>
           <p>
             Robinhood Chain Mainnet uses <code>chainId: 4663</code> and{" "}
-            <code>eip155:4663</code>. Discovery still reports{" "}
-            <code>planned</code>, <code>planned-not-deployed</code>,{" "}
-            <code>publicWrites: false</code> and{" "}
-            <code>publicAuthorization: false</code>. The V4 release binding stays{" "}
-            <code>releaseReady: false</code>.
+            <code>eip155:4663</code>. The Router and backend routes are
+            deployed, while this release snapshot remains{" "}
+            <code>pending-public-discovery-promotion</code> with{" "}
+            <code>publicWrites: false</code>,{" "}
+            <code>publicAuthorization: false</code> and{" "}
+            <code>releaseReady: false</code>. Deployed runtime is not activated
+            public discovery.
           </p>
         </div>
 
@@ -326,8 +329,9 @@ export default function CustomLaunchApiDocsPage() {
           <a href="/schemas/custom-launch/v4/source-verification-status.json">
             source-verification schema
           </a>{" "}
-          are integration pointers, not deployment or public-availability
-          evidence.
+          describe the release candidate. They are not proof of current public
+          activation, write authorization or CLI installability; re-read live
+          discovery before use.
         </p>
 
         <dl className={`${styles.resultList} ${styles.lifecycleList}`}>

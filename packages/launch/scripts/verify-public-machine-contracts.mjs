@@ -1191,8 +1191,13 @@ assert.match(
 );
 assert.match(
   readmeSource,
-  /Package version `4\.0\.0`[\s\S]{0,180}planned pre-release source\s+candidate/u,
-  "packaged README must identify V4 as a planned pre-release source candidate",
+  /Package version `4\.0\.0`[\s\S]{0,180}unpublished pre-release source\s+candidate/u,
+  "packaged README must identify V4 as an unpublished pre-release source candidate",
+);
+assert.match(
+  readmeSource,
+  /Router and backend routes are deployed,[\s\S]{0,240}pending-public-discovery-promotion/u,
+  "packaged README must distinguish deployed V4 routes from pending public discovery promotion",
 );
 assert.match(
   readmeSource,

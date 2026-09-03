@@ -199,11 +199,11 @@ export const programmablePublicOpenApi = {
   openapi: "3.1.0",
   info: {
     title: "Programmable developer APIs",
-    version: "1.8.0",
+    version: "1.9.0",
     summary:
-      "Verified launch discovery, live Ethereum V3 creation and planned Robinhood V4 integration.",
+      "Verified launch discovery, live Ethereum V3 creation and the public self-serve Robinhood V4 release candidate.",
     description:
-      "The programmable.market discovery endpoints remain unauthenticated and read-only. At the separately hosted Custom Launch API, fresh writes use the public V3.3 contract and credential-principal lifecycle reads accept wallet keys, partner roots and bounded partner subkeys on Ethereum Mainnet. V2 and V1 history remain readable, while both legacy creation routes are write-fenced with non-retryable 409 CUSTOM_LAUNCH_V2_READ_ONLY and CUSTOM_LAUNCH_V1_READ_ONLY responses. Robinhood Chain V4 version 4.0.0 is a source candidate only: public writes, public authorization and release readiness remain false. CLI and model checks prepare a request; only the API server decides whether verified evidence permits a wallet handoff. Legacy Registry and GitHub submission intake is closed. An API key and the CLI never sign or broadcast a controller-wallet transaction.",
+      "The programmable.market discovery endpoints remain unauthenticated and read-only. At the separately hosted Custom Launch API, fresh writes use the public Ethereum V3.3 contract. Robinhood Chain V4 Router and backend are deployed and ready, and target a public self-serve launch path; this static release candidate awaits public discovery promotion, so clients must require live publicWrites, publicAuthorization and releaseReady fields before creating. The required default policy for new Robinhood V4 API Custom launches is 20 bps to the published recipient. It is policy configuration, not proof of canonical onchain fee enforcement, a charged fee or platform revenue, and missing onchain fee enforcement is not itself a write blocker. V2 and V1 history remain readable, while both legacy creation routes are write-fenced with non-retryable 409 CUSTOM_LAUNCH_V2_READ_ONLY and CUSTOM_LAUNCH_V1_READ_ONLY responses. CLI and model checks prepare a request; only the API server decides whether verified evidence permits a wallet handoff. Legacy Registry and GitHub submission intake is closed. An API key and the CLI never sign or broadcast a controller-wallet transaction.",
     contact: {
       name: "Programmable",
       url: `${SITE_ORIGIN}/docs/developers`,
@@ -235,7 +235,7 @@ export const programmablePublicOpenApi = {
     {
       name: "Custom launch",
       description:
-        "Fresh wallet-key, partner-root and bounded-partner-subkey writes use Ethereum V3.3. Robinhood V4 is planned and non-authorizing. V2 and V1 remain available for existing history only. Manage wallet keys at programmable.market/developers/api-keys.",
+        "Fresh wallet-key, partner-root and bounded-partner-subkey writes use Ethereum V3.3. Robinhood V4 Router and backend are deployed and ready; the public self-serve release candidate awaits public discovery promotion. Resolve activation from the live discovery authority. Its required 20 bps default policy is not a canonical onchain-enforcement or revenue claim. V2 and V1 remain available for existing history only. Manage wallet keys at programmable.market/developers/api-keys.",
     },
   ],
   paths: {
@@ -281,7 +281,7 @@ export const programmablePublicOpenApi = {
             name: "chain",
             in: "query",
             description:
-              "Chain-scoped discovery. Ethereum Mainnet is live; Robinhood Chain currently returns an honest planned-not-deployed response with no catalog or tokens.",
+              "Chain-scoped Explore discovery. Ethereum Mainnet is live; the Robinhood Explore read-model lane currently returns an honest planned-not-deployed response with no catalog or tokens. This does not describe Router or Custom API deployment.",
             schema: { type: "integer", enum: [1, 4663], default: 1 },
           },
           {
@@ -349,7 +349,7 @@ export const programmablePublicOpenApi = {
           "200": {
             ...jsonResponse(
               component("ExploreListResponse"),
-              "Verified launch page or an honest planned-not-deployed chain response.",
+              "Verified launch page or an honest planned-not-deployed Explore-lane response.",
             ),
             headers: {
               ...exploreIdentityResponseHeaders,
@@ -376,7 +376,7 @@ export const programmablePublicOpenApi = {
         operationId: "getVerifiedToken",
         summary: "Look up one verified token",
         description:
-          "Looks up an exact token identity on the selected chain. Ethereum Mainnet is live. Robinhood Chain currently returns an honest planned-not-deployed response without reading Ethereum. A 404 response is a completed verified lookup with no public identity, not a provider timeout.",
+          "Looks up an exact token identity on the selected chain. Ethereum Mainnet is live. The Robinhood Explore read-model lane currently returns an honest planned-not-deployed response without reading chain 4663; this does not describe Router or Custom API deployment. A 404 response is a completed verified lookup with no public identity, not a provider timeout.",
         tags: ["Discovery"],
         security: [],
         parameters: [
@@ -400,7 +400,7 @@ export const programmablePublicOpenApi = {
           "200": {
             ...jsonResponse(
               component("TokenDetailResponse"),
-              "Verified token, Registry-verified Custom project, or honest planned-not-deployed chain response.",
+              "Verified token, Registry-verified Custom project, or honest planned-not-deployed Explore-lane response.",
             ),
             headers: {
               ...exploreIdentityResponseHeaders,
@@ -3496,8 +3496,10 @@ export const programmablePublicOpenApi = {
       },
     },
     v4: {
-      status: "planned",
-      activationStage: "planned-not-deployed",
+      status: "release-candidate",
+      runtimeStatus: "routes-deployed",
+      activationStage: "pending-public-discovery-promotion",
+      targetLaunchPath: "public-self-serve",
       apiVersion: "4",
       profileVersion: "4.0.0",
       cliVersion: "4.0.0",
@@ -3515,7 +3517,20 @@ export const programmablePublicOpenApi = {
       sourceVerificationSchemaUrl:
         `${SITE_ORIGIN}/schemas/custom-launch/v4/source-verification-status.json`,
       capabilitiesPath: "/v4/chains/4663/capabilities",
+      readinessPath: "/v4/chains/4663/readiness",
+      finalizedMetadataPath: "/v4/chains/4663/finalized-custom-launches",
       statusPath: "/v4/chains/4663/custom-launches/{launchId}",
+      terminalIndexerGuideUrl:
+        `${SITE_ORIGIN}/docs/developers/robinhood-terminal-indexer`,
+      terminalIndexerFixtureUrl:
+        `${SITE_ORIGIN}/fixtures/robinhood-terminal-indexer-v1.json`,
+      launchStampRouterAbiUrl:
+        `${SITE_ORIGIN}/contracts/robinhood/ProgrammableLaunchStampRouterV1.abi.json`,
+      launchStampRouterAbiSha256:
+        "sha256:bb4e728e9f9c850eb01f928e8a798ac206a82e241a8d93b3b3c686635c88ed86",
+      launchStampRouterProfileNormalizedAbiSha256:
+        "sha256:ab25262ce1cb907eba1cb820492754c0cd5d7278eb5fd6a024ba24c767323ac0",
+      launchStampRouterProfileNormalizedAbiHashing: "jq -cS plus trailing LF",
       statusCommand:
         "programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until finalized",
       statuses: [
@@ -3533,6 +3548,39 @@ export const programmablePublicOpenApi = {
       ],
       actionRequiredMeaning: "server-authored-remediation-not-wallet-action",
       cliWalletAuthority: false,
+      platformFeePolicyStatus: "required-default-configuration",
+      feeBehaviorClaim: false,
+      universalFeeBehaviorClaim: false,
+      platformFeePolicy: {
+        required: true,
+        status: "required-default-configuration",
+        appliesTo: "new-robinhood-v4-api-custom-launches-only",
+        changesExistingLaunches: false,
+        changesEthereumLaunches: false,
+        rateBps: 20,
+        ratePpm: 2_000,
+        ratePercent: "0.20%",
+        recipient: "0xD88539d3c4C460136a733A3Fd60cf6BF269079da",
+        basis: null,
+        feeCurrency: null,
+        accountingMode: null,
+        rounding: null,
+        accrual: null,
+        claimMechanism: null,
+        enforcement: "not-guaranteed-onchain",
+        canonicalOnchainEnforcementProven: false,
+        guaranteedRevenue: false,
+        feeBehaviorClaim: false,
+        universalFeeBehaviorClaim: false,
+      },
+      genericFeeClaiming: "not-live",
+      externalIndexingGuaranteed: false,
+      releaseBlockers: [
+        "public-cli-release",
+        "generated-release-evidence",
+        "clean-room-end-to-end-proof",
+        "public-indexing-canary",
+      ],
       sourceVerificationStartsAfter: "finalized",
       sourceVerificationIndependentFromFinality: true,
       indexingTradingAndPublicationIndependent: true,
@@ -3551,7 +3599,7 @@ export const programmablePublicOpenApi = {
     market:
       "Router verification requires pool initialization and fixed runtime and pool bindings, not active liquidity or tradability; the Custom graph owns liquidity behavior.",
     actions:
-      "Fresh Ethereum V3.3 creation and lifecycle reads preserve exact idempotent request bytes, bounded best-effort reconciliation of pending history rows and precise single-resource polling. V2 and V1 history remain readable and both legacy creation routes remain write-fenced. Robinhood V4 remains planned with publicWrites, publicAuthorization and releaseReady false. CLI, client and model output is preparation only; the API server independently enforces objective static hard blocks and exact Router simulation. Missing behavior execution leaves routability, liquidity and fee claims unverified, while an authenticated executed failure blocks wallet handoff. Exact-source provider verification starts after finality, runs independently and never revises launch finality. API keys never sign, broadcast, trade, claim fees, manage buybacks, or write profiles. The CLI also never signs or broadcasts.",
+      "Fresh Ethereum V3.3 creation and lifecycle reads preserve exact idempotent request bytes, bounded best-effort reconciliation of pending history rows and precise single-resource polling. Robinhood V4 Router and backend are deployed and ready and target public self-serve, while this static release candidate awaits public discovery promotion; live discovery is the activation authority. The required 20 bps default configuration is not a canonical onchain fee-enforcement, charged-fee or revenue claim, and missing onchain fee enforcement is not itself a write blocker. V2 and V1 history remain readable and both legacy creation routes remain write-fenced. CLI, client and model output is preparation only; the API server independently enforces objective static hard blocks and exact Router simulation. Missing behavior execution leaves routability, liquidity and fee claims unverified, while an authenticated executed hard-invariant failure blocks wallet handoff. Exact-source provider verification starts after finality, runs independently and never revises launch finality. API keys never sign, broadcast, trade, claim fees, manage buybacks, or write profiles. The CLI also never signs or broadcasts.",
   },
   "x-programmable-wallet-authorization-gate": {
     decisionAuthority: "api-server",
@@ -3575,9 +3623,10 @@ export const programmablePublicOpenApi = {
   },
   "x-programmable-api-scopes": {
     "custom-launch:create": {
-      state: "v1-v2-write-fenced-v3.3-live",
+      state:
+        "v1-v2-write-fenced-v3.3-live-v4-pending-public-discovery-promotion",
       description:
-        "Fresh writes use public V3.3. V2 and V1 POST remain non-retryable write fences with CUSTOM_LAUNCH_V2_READ_ONLY and CUSTOM_LAUNCH_V1_READ_ONLY.",
+        "Fresh public writes use Ethereum V3.3. Robinhood V4 targets public self-serve after its non-fee release predicates are deployed; require live discovery fields before create. Its 20 bps recipient configuration is required policy but not guaranteed canonical onchain enforcement. V2 and V1 POST remain non-retryable write fences with CUSTOM_LAUNCH_V2_READ_ONLY and CUSTOM_LAUNCH_V1_READ_ONLY.",
     },
     "custom-launch:read": {
       state: "grantable",

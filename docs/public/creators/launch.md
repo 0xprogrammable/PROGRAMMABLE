@@ -6,14 +6,28 @@ description: Package, submit and track one deterministic Custom project
 
 Public V3.3 general-hook creation and lifecycle reads are live on Ethereum Mainnet. V2 and V1 history and schemas remain readable, while fresh authenticated POSTs return nonretryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Only V3.3 accepts new submissions. Legacy Registry and GitHub submission intake is closed.
 
-Robinhood Chain V4 is planned and not deployed, so it is not a public launch path. Its stable discovery contract is published
-for integration work, but public writes remain disabled until deployment, simulation, wallet-binding, Router-finality,
-source-verification and indexing gates pass. Do not send funds to a V4 route based on documentation alone. When it is
-activated, API authentication will use only `$PROGRAMMABLE_API_KEY`, while the connected controller wallet will still
-review and sign separately. The server selects the chain-bound policy profile; a project or client cannot choose it.
+Robinhood Chain V4 Router and backend are deployed and ready and target a public self-serve launch path. This source
+snapshot remains `pending-public-discovery-promotion`; deployed runtime is not activated public discovery. Require live
+`publicWrites: true`, `publicAuthorization: true` and `releaseReady: true` discovery before submitting or sending
+funds. Ordinary wallet-bound API keys carry `custom-launch:create` and `custom-launch:read` without a per-user
+allowlist; after live activation those scopes can authorize the chain-bound V4 route for `4663`. Chain `4663` is
+selected by the V4 route and request context, while any server-side allowed-chain restriction is API authorization,
+not wallet or signing authority. When live, authentication uses only `$PROGRAMMABLE_API_KEY`, while the controller
+wallet reviews and signs separately. The server selects the canonical chain-bound admission policy; a project or
+client cannot choose it.
+
+The required policy and default configuration applies only to new Robinhood V4 API Custom launches: `20 bps` (`0.20%`, `2,000 ppm`)
+to `0xD88539d3c4C460136a733A3Fd60cf6BF269079da`. Existing launches and Ethereum are unchanged. This is not live fee
+behavior, canonical onchain enforcement, charged-fee or revenue evidence. Basis, fee currency,
+additive-versus-inclusive accounting, rounding, accrual and claim mechanics remain unpublished. Missing canonical
+onchain fee enforcement is not itself a write blocker. UI and documentation must disclose these required default
+terms. Require or set them only where the active schema actually carries them: the current V4 request, pack,
+finalized-resource and Router bytes do not prove fee-policy binding, application or enforcement. A direct deployment
+outside the Launch Stamp Router path receives no Programmable launch stamp.
+Any mutable-admin risk must remain explicit.
 An external contract reference does not become trusted by being named in a V4 config. The server must verify its exact
 `eip155:4663` address, live runtime hash, source evidence, graph role and checkpoint; an arbitrary or unbound reference
-blocks admission. This planned rule is not deployment or live-capability evidence.
+blocks admission. This rule is not release, fee-behavior or live-capability evidence.
 The reviewed foundation source commitment is
 `0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730`; it is not a deployed-address claim.
 Sourcify v2 provider-native `match` is required for source publication evidence; exact source authority is the separate protected-build/finalized-bytecode binding. Robinhood Blockscout is optional, currently unproven and

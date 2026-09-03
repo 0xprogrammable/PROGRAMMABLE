@@ -15,9 +15,9 @@ description: Official Programmable product, source, community and analytics link
 | Custom Launch V1 OpenAPI | [live reads and write fence](https://programmable.market/openapi/custom-launch-v1.json)                    |
 | Custom Launch V2 OpenAPI | [V2 reads, schemas and write fence](https://programmable.market/openapi/custom-launch-v2.json)                     |
 | Custom Launch V3 OpenAPI | [preparatory profile 3.4 contract; live/default remains discovery-bound profile 3.3](https://programmable.market/openapi/custom-launch-v3.json) |
-| Custom Launch V4 OpenAPI | [planned Robinhood Chain contract; public writes disabled](https://programmable.market/openapi/custom-launch-v4.json) |
-| Custom Launch V4 schema | [planned Robinhood Chain pack config](https://programmable.market/schemas/custom-launch/v4/pack-config.json) |
-| Custom Launch V4 source status | [planned post-finality source-verification schema](https://programmable.market/schemas/custom-launch/v4/source-verification-status.json) |
+| Custom Launch V4 OpenAPI | [deployed Robinhood release-candidate contract; public discovery promotion pending](https://programmable.market/openapi/custom-launch-v4.json) |
+| Custom Launch V4 schema | [Robinhood release-candidate pack config](https://programmable.market/schemas/custom-launch/v4/pack-config.json) |
+| Custom Launch V4 source status | [post-finality source-verification schema](https://programmable.market/schemas/custom-launch/v4/source-verification-status.json) |
 | Custom Launch CLI 4.0.0 | [Robinhood V4 source candidate at the verified public source commit; not installable or released](https://github.com/programmablehq/PROGRAMMABLE/tree/53926119030772040eca34b4796a36353c9da2d2/packages/launch) |
 | Custom Launch API      | [api.programmable.market](https://api.programmable.market)                                                         |
 | Custom API readiness    | [api.programmable.market/readyz](https://api.programmable.market/readyz)                                           |
@@ -40,8 +40,9 @@ Legacy Registry and GitHub submission intake is closed. Use the read-only
 developer service and current deployment manifest when verifying Ethereum source or deployment data. Community posts
 and analytics are useful context but do not replace the contract address, canonical chain record or versioned release evidence.
 
-Robinhood Chain V4 remains planned and not deployed. Its stable V4 links are integration pointers, not evidence that
-writes, deployed trust roots, trading, generic fee claiming, buyback management or external indexing are live. API-key
+Robinhood Chain V4 has a deployed Router and backend routes. This release snapshot remains
+`pending-public-discovery-promotion`; its stable V4 links and deployed runtime are not evidence that public writes,
+trading, generic fee claiming, buyback management or external indexing are live. API-key
 handoff uses only `$PROGRAMMABLE_API_KEY`, while wallet authorization remains separate and server-selected policy
 profiles cannot be chosen by clients. CLI `3.3.9` remains the installable live Ethereum V3 release. The V4 `4.0.0`
 source candidate is not installable, `publicWrites` and `publicAuthorization` remain false, and `releaseReady` remains

@@ -7,7 +7,8 @@ Release and installability are version-specific.
 ## Install the current public Ethereum V3 release
 
 The commands below intentionally install the published CLI `3.3.9`. No `programmable-launch-v4.0.0` GitHub Release
-asset exists while Robinhood V4 remains `planned`, `planned-not-deployed`, and `releaseReady: false`.
+asset exists. Robinhood V4 has a deployed Router and backend routes, but this release snapshot remains
+`pending-public-discovery-promotion` with `releaseReady: false`.
 
 ```sh
 programmable_cli_dir="$(mktemp -d)"
@@ -48,11 +49,13 @@ the exact Router transaction, then the connected controller reviews and signs it
 
 ## Robinhood Chain V4 source candidate
 
-Package version `4.0.0` in this repository, including local `npm pack` output, is a planned pre-release source
-candidate for Robinhood Chain Mainnet (`chainId: 4663`, `eip155:4663`). It is not a published or publicly installable
-release and must not be described as live. Product discovery still reports `status: planned`,
-`activationStage: planned-not-deployed`, `publicWrites: false` and `publicAuthorization: false`; the release binding
-remains `releaseReady: false`. The installable production CLI is still `3.3.9` for Ethereum V3.
+Package version `4.0.0` in this repository, including local `npm pack` output, is an unpublished pre-release source
+candidate for Robinhood Chain Mainnet (`chainId: 4663`, `eip155:4663`). The Router and backend routes are deployed,
+but the CLI package is not publicly installable and the lane must not be described as publicly activated. This release
+snapshot reports `status: release-candidate`, `runtimeStatus: routes-deployed`,
+`activationStage: pending-public-discovery-promotion`, `publicWrites: false` and
+`publicAuthorization: false`; `releaseReady` remains false. The installable production CLI is still `3.3.9` for
+Ethereum V3.
 
 V4 requires an explicit API version and chain. The CLI default remains Ethereum V3, preserving V1, V2 and V3
 behavior. The V4 source candidate can prepare and validate exact bytes, submit only when the server eventually
@@ -74,7 +77,7 @@ wallet-handoff states, not proof of a signature or broadcast. `sequencer_soft_co
 
 Source verification begins after finality and remains independent. `finalized` does not imply an exact source match,
 and provider failure does not revise finality. Indexing, trading readiness, Explore visibility, third-party listing and
-publication also remain separate states. The planned [V4 OpenAPI](https://programmable.market/openapi/custom-launch-v4.json),
+publication also remain separate states. The release-candidate [V4 OpenAPI](https://programmable.market/openapi/custom-launch-v4.json),
 [pack-config schema](https://programmable.market/schemas/custom-launch/v4/pack-config.json) and
 [source-verification schema](https://programmable.market/schemas/custom-launch/v4/source-verification-status.json)
 are integration pointers, not deployment or public-availability evidence.

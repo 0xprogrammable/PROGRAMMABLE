@@ -4,7 +4,9 @@ description: Index Programmable launches with finality, cursor completeness and 
 
 # Index Programmable launches
 
-An Ethereum indexer can use the normalized v2 feed or reproduce Router records directly. Robinhood Chain V4 uses the separate planned feed described below. In every case, finality, cursor traversal and unknown data need explicit handling.
+An Ethereum indexer can use the normalized v2 feed or reproduce Router records directly. Robinhood Chain V4 uses the
+separate deployed release-candidate feed described below. In every case, finality, cursor traversal and unknown data
+need explicit handling.
 
 The normalized launch feed returns versioned records for Classic and Registry-verified Custom launches. Consumers should follow every cursor until completion, remove duplicate launch ids and retain records when optional price, chart or liquidity data is unavailable. A missing chart or quote is not permission to discard a valid launch record.
 
@@ -14,49 +16,78 @@ Price and liquidity data should carry its own source, timestamp, status and qual
 
 The Ethereum public status endpoint reports feed freshness, chain head, scan coverage and current counts. Production consumers should alert on lag and incomplete traversal instead of treating service availability as freshness.
 
-## Prepare Robinhood V4 indexing before activation
+## Integrate Robinhood V4 before public discovery promotion
 
-Robinhood Chain Mainnet (`chainId: 4663`, `eip155:4663`) has a stable planned
+Robinhood Chain Mainnet (`chainId: 4663`, `eip155:4663`) has a deployed Router, backend routes and stable
 [V4 OpenAPI contract](https://programmable.market/openapi/custom-launch-v4.json). You can generate types, validate
-feed fixtures, map ABI topics and build cursor, quality and reorg handling now. This is integration preparation only.
-While discovery says `planned` and `planned-not-deployed`, live V4 ingestion is unavailable. A downloadable schema,
-an onchain foundation deployment or an HTTP `200` for the schema does not activate the API. Start network polling only
-after [Programmable discovery](https://programmable.market/.well-known/programmable.json),
-`GET /v4/chains/4663/capabilities` and `/readyz` bind the live chain deployment and finalized feed. The planned V4
-capabilities and finalized-feed routes currently return `404`, and the public Developer API v2 does not support chain
-`4663`; it remains an Ethereum integration surface. The deployed foundation has no Router-stamped launch event yet.
+feed fixtures, map ABI topics and build cursor, quality and reorg handling now. This release snapshot remains
+`pending-public-discovery-promotion` with `publicWrites: false`, `publicAuthorization: false` and
+`releaseReady: false`; deployed runtime and an HTTP `200` do not activate writes. Read
+[Programmable discovery](https://programmable.market/.well-known/programmable.json),
+`GET /v4/chains/4663/capabilities` and `GET /v4/chains/4663/readiness` as separate live authorities. The fixture's
+empty response is a schema-valid parser vector, not a production observation. Always fetch the live feed. The public
+Developer API v2 remains an Ethereum-only surface.
 
-After activation, read the public, keyless
+For provenance discovery, read the public, keyless
 `GET /v4/chains/4663/finalized-custom-launches` feed. Validate every response and item against both chain identifiers,
 then apply these rules:
 
-- Publish only items with `onchain.terminal: true` and `onchain.checkpointType: ethereum_finalized`. Store the chain
-  deployment ID and descriptor digest, Router, Router runtime hash, Router launch ID, transaction hash, block number and
-  hash, log index, finality-policy binding, evidence digest and observation time. A sequencer soft confirmation or
-  Ethereum posting is not finality.
-- Store `projectMetadata.token` with `projectMetadata.tokenMetadataBinding.tokenTargetId`. Resolve the token address by
-  matching that target ID to `sourceVerification.components[*].targetId` and its address; never identify a token by
-  name or symbol alone.
-- Keep each source-verification component keyed by both `targetId` and address and preserve its server-authored status.
-  Finalized means the launch reached Robinhood-to-Ethereum finality; it does not mean every component is an
-  `exact_match`.
-- Read top-level `quality.status` as `ready`, `partial`, `stale` or `unavailable`, together with the source, published
-  and quarantined row counts. A successful response is not a complete inventory when quality is not `ready`.
+- Publish only items with server-authored `platformId: programmable`, `category: custom`,
+  `onchain.schemaVersion: programmable.custom-launch-onchain-evidence.v3`, `onchain.terminal: true` and
+  `onchain.checkpointType: ethereum_finalized`. Require non-null `onchain.l2Inclusion`, `onchain.l1Posting` and
+  `onchain.l1FinalizedCheckpoint`; a sequencer soft confirmation or Ethereum posting is not finality. Independently
+  verify that platform/category is backed by Router launch kind 1 rather than project metadata.
+- Store `projectMetadata.token` as name/symbol metadata, not an address. Replay `onchain.l2Inclusion.transactionHash`
+  on chain 4663, match its L2 block number/hash and Router launch/route event indexes, then resolve
+  `launchStamp(onchain.routerLaunchId)` at `onchain.l2Inclusion.blockNumber`. If this coordinate is unavailable or
+  disagrees, provenance is `INDETERMINATE`. Require the top-level `onchain.transactionHash` to equal this L2
+  transaction hash. Cross-check the token target ID and source-verification component separately; never identify a
+  token by name or symbol alone.
+- Treat `onchain.l1Posting` as the Ethereum batch-posting event and `onchain.l1FinalizedCheckpoint` as the distinct
+  common finalized checkpoint. Require chain `eip155:1`, rollup
+  `0x23A19d23e89166adedbDcB432518AB01e4272D94`, SequencerInbox
+  `0xBd0D173EEb87D57A09521c24388a12789F33ba96`, and the posting batch and event coordinate. Require the checkpoint's
+  two ordered provider readbacks to be `drpc` / `drpc.org`, then
+  `quicknode` / `quicknode.com`, matching the ordered identities in
+  `chainDeployment.deploymentEvidence.ethereumFinalityEvidence`; both readbacks must agree with the common checkpoint.
+  The deprecated flat `onchain.blockNumber`, `blockHash` and `logIndex` trio is only a stage projection, not a
+  transaction locator. At the finalized stage its block fields alias the finalized checkpoint while its log index
+  belongs to the earlier posting event; never combine it with the top-level L2 transaction hash. Historical V2
+  evidence remains private authenticated history and is never a public-feed candidate. Only a separate, fully
+  revalidated canonical V3-finalized projection may qualify on its own evidence.
+- Require `sourceVerification.status: exact_match` and every component status to be `exact_match` with its complete
+  authoritative binding. Keep each component keyed by both `targetId` and address. A provider-only Sourcify
+  observation is not publication authority. Queued, retrying and needs-attention states remain visible only on the
+  authenticated private resource and are never public-feed candidates.
+- Only canonical eligible V3-finalized rows with that authoritative exact-source verification are public candidates;
+  V2 evidence remains private history. The quality counters are global totals for that finalized dataset, not counts
+  for the current page. Every successful response is `ready`, with `sourceRowCount` equal to `publishedRowCount` and
+  `quarantinedRowCount` equal to zero. The current page's `launches.length` may be smaller than published but never
+  larger. A malformed eligible V3 candidate fails the entire endpoint request; consumers must not accept a row-wise
+  quarantine or partial result.
+
+At this source snapshot, no per-launch protected exact-source composite is proven and persisted for public promotion,
+so this guide claims no existing public item. That is pending source-authority capture, persistence and promotion—not
+an RPC-provider outage. Sourcify's observation carries `releaseAuthority: false`; optional Robinhood Blockscout cannot
+satisfy or block the authority and cannot revise finality. Separately, the changed V4 OpenAPI bytes still leave the
+clean-room release binding at `V4_RELEASE_BINDING_NOT_READY` until refreshed release hashes close.
 
 The request accepts an optional `limit` from 1 to 25 and defaults to 10. The response returns an opaque `nextCursor`;
 pass each non-null value back unchanged as `cursor` and never decode or construct one. Declare traversal complete only
 after `nextCursor` is null and quality remains `ready`.
 
-Direct Robinhood Router indexing starts only after activated discovery or its canonical manifest publishes the exact
-live Router address, runtime hash, ABI and event bindings, start block and finality policy, and provider readback agrees
-with that binding. Do not backfill from a source candidate, an address embedded in a schema or one deployment
-transaction. Advance the public checkpoint only through the published Robinhood-to-Ethereum finality proof.
-Enable a terminal's Robinhood launch label only after those manifest roots are active, a finalized canary is present in
-the feed and the complete traversal reports `quality.status: ready`.
+Direct Robinhood Router provenance indexing is independent of write activation. Start only from the exact published
+Router address, runtime hash, ABI and event bindings, start block and finality policy, after provider readback agrees
+with that binding. Do not backfill from an unverified address embedded in a schema or from one deployment transaction.
+Advance the public checkpoint only through the published Robinhood-to-Ethereum finality proof.
+Enable a terminal's Robinhood launch label only after those Router roots verify at the V3 `l2Inclusion` receipt block,
+a finalized item is present in the feed and the complete traversal reports `quality.status: ready`.
 
-Indexability proves neither trading compatibility nor current price, liquidity, fee behavior, source verification or
-safety. The optional post-finality Universal Router trading-descriptor path is deliberately disabled, and V4 finalized
-items publish no such descriptor. A V4 Quoter call does not prove that an arbitrary hook can execute through Universal
+Direct Router indexability alone proves neither trading compatibility nor current price, liquidity, fee behavior,
+source verification or safety. A successfully OpenAPI-validated public-finalized item separately requires aggregate
+and component-level authoritative source verification at `exact_match`; that still is not a safety endorsement. The
+optional post-finality Universal Router trading-descriptor path is deliberately disabled, and V4 finalized items
+publish no such descriptor. A V4 Quoter call does not prove that an arbitrary hook can execute through Universal
 Router. Unless a later public schema and capabilities contract enables a server-authored descriptor backed by an exact
 Universal Router execution proof, terminals should display launch identity only and must not infer a route from a
 Router address, PoolKey or project metadata.

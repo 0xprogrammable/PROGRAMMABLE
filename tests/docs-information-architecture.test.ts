@@ -124,6 +124,11 @@ describe("Docs information architecture", () => {
           },
           {
             depth: 1,
+            href: "/docs/developers/robinhood-terminal-indexer",
+            label: "Robinhood terminal integration",
+          },
+          {
+            depth: 1,
             href: "/docs/developers/verify",
             label: "Verify a token or pool",
           },

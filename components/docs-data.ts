@@ -25,6 +25,7 @@ const tokenModelPaths = [
 
 const developerReferencePaths = [
   "/docs/developers/custom-launch",
+  "/docs/developers/robinhood-terminal-indexer",
   "/docs/developers/verify",
   "/docs/developers/indexing",
   "/docs/developers/machine-readable",
@@ -128,6 +129,11 @@ export const docsNavigation: readonly DocsNavigationGroup[] = [
         depth: 1,
         href: "/docs/developers/custom-launch",
         label: "Custom Launch API",
+      },
+      {
+        depth: 1,
+        href: "/docs/developers/robinhood-terminal-indexer",
+        label: "Robinhood terminal integration",
       },
       {
         depth: 1,
@@ -246,13 +252,13 @@ export const docsSearchItems: DocsSearchItem[] = [
   {
     title: "Developer overview",
     description:
-      "Use live Ethereum V3, inspect planned Robinhood V4, or choose a verification and indexing path.",
+      "Use live Ethereum V3, inspect the deployed Robinhood V4 release candidate, or choose a verification and indexing path.",
     href: "/docs/developers",
   },
   {
     title: "Custom Launch API",
     description:
-      "Submit live Ethereum V3.3 requests, inspect planned Robinhood V4, or read V2 and V1 compatibility history.",
+      "Submit live Ethereum V3.3 requests, inspect Robinhood V4 pending public discovery promotion, or read V2 and V1 compatibility history.",
     href: "/docs/developers/custom-launch",
     keywords: [
       "custom API",
@@ -265,6 +271,22 @@ export const docsSearchItems: DocsSearchItem[] = [
       "source candidate 4.0.0",
       "sequencer soft confirmed",
       "ethereum posted",
+    ],
+  },
+  {
+    title: "Robinhood terminal and indexer integration",
+    description:
+      "Bind to chain 4663, index finalized Router stamps and preserve explicit fee, market and security result states.",
+    href: "/docs/developers/robinhood-terminal-indexer",
+    keywords: [
+      "Robinhood Chain",
+      "chain 4663",
+      "eip155 4663",
+      "trading terminal",
+      "GMGN",
+      "Fomo",
+      "finalized feed",
+      "Programmable Custom",
     ],
   },
   {
@@ -282,7 +304,7 @@ export const docsSearchItems: DocsSearchItem[] = [
   {
     title: "Machine-readable docs",
     description:
-      "Use live V3 and planned V4 OpenAPI, contracts, Markdown and agent context.",
+      "Use live V3 and deployed release-candidate V4 OpenAPI, contracts, Markdown and agent context.",
     href: "/docs/developers/machine-readable",
     keywords: ["agent", "AI agent", "LLM", "V4 OpenAPI", "source verification"],
   },

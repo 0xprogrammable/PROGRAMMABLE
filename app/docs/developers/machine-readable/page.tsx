@@ -11,7 +11,7 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Machine-readable docs · Programmable",
   description:
-    "Live Ethereum V3 resources, planned Robinhood V4 contracts, compatibility history, manifests and verification files.",
+    "Live Ethereum V3 resources, the deployed Robinhood V4 release candidate, compatibility history, manifests and verification files.",
   alternates: { canonical: "/docs/developers/machine-readable" },
 };
 
@@ -102,9 +102,9 @@ export default function MachineReadableDocsPage() {
               <code>/openapi/custom-launch-v4.json</code>
             </a>
             <span>
-              Planned Robinhood Chain Mainnet V4 contract. Public writes and
-              authorization remain disabled; this pointer is not deployment
-              evidence.
+              Deployed Robinhood Chain Mainnet V4 release-candidate contract.
+              Public discovery promotion, writes and authorization remain
+              inactive; this pointer is not activation evidence.
             </span>
           </li>
           <li>
@@ -193,21 +193,22 @@ export default function MachineReadableDocsPage() {
 
       <section id="robinhood-v4">
         <div className={styles.sectionIntro}>
-          <h2>Read Robinhood V4 as a planned contract</h2>
+          <h2>Read Robinhood V4 as a deployed release candidate</h2>
           <p>
             CLI <code>3.3.9</code> remains the installable live Ethereum V3
-            release. Package <code>4.0.0</code> is a Robinhood V4 source candidate,
-            not a published release or live service.
+            release. The V4 Router and backend routes are deployed; package{" "}
+            <code>4.0.0</code> remains an unpublished source candidate.
           </p>
         </div>
 
         <ul className={styles.checkList}>
           <li>
-            Discovery remains <code>planned</code> and{" "}
-            <code>planned-not-deployed</code>, with{" "}
+            This release snapshot remains{" "}
+            <code>pending-public-discovery-promotion</code>, with{" "}
             <code>publicWrites: false</code>,{" "}
             <code>publicAuthorization: false</code> and{" "}
-            <code>releaseReady: false</code>.
+            <code>releaseReady: false</code>. Deployed runtime does not itself
+            activate public discovery.
           </li>
           <li>
             V4 uses <code>received</code>, <code>validating</code>,{" "}

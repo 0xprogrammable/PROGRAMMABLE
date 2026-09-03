@@ -14,14 +14,14 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Developer integration · Programmable",
   description:
-    "Use live Ethereum V3, inspect planned Robinhood V4, verify Router stamps or index launches.",
+    "Use live Ethereum V3, prepare for Robinhood V4 public self-serve, verify Router stamps or index launches.",
   alternates: { canonical: "/docs/developers" },
   openGraph: {
     type: "website",
     siteName: "Programmable",
     title: "Programmable developer integration",
     description:
-      "Custom Launch API, verification and indexing guides for Programmable launches on Ethereum.",
+      "Custom Launch API, verification and indexing guides for Programmable launches on Ethereum and Robinhood Chain.",
     url: "/docs/developers",
     images: [
       {
@@ -53,7 +53,7 @@ export default function DeveloperDocsPage() {
   return (
     <DocsShell
       currentPath="/docs/developers"
-      description="Create and track live Ethereum V3 launches, inspect planned Robinhood V4, verify Router-stamped tokens and pools, or index launches."
+      description="Create and track live Ethereum V3 launches, integrate the Robinhood V4 public self-serve contract, verify Router-stamped tokens and pools, or index launches."
       kicker="Developer integration"
       sections={developerSections}
       title="Integrate Programmable launches"
@@ -94,21 +94,22 @@ export default function DeveloperDocsPage() {
           </li>
           <li id="robinhood-v4">
             <h3>
-              <Link href="/docs/developers/custom-launch#robinhood-v4">
-                Inspect planned Robinhood V4
+              <Link href="/docs/developers/robinhood-terminal-indexer">
+                Integrate Robinhood terminals and indexers
               </Link>
             </h3>
             <p>
-              Read the chain-4663 machine contract and distinct wallet and
-              finality lifecycle. CLI 3.3.9 remains the installable Ethereum V3
-              release; V4 4.0.0 is a source candidate with public writes,
-              authorization and release readiness still false.
+              Bind to the chain-4663 Router and finalized feed, map verified
+              records to Programmable Custom, and keep provenance, finality,
+              security, market support and fee behavior separate. Resolve V4
+              write activation live; the required fee policy is not proof of
+              onchain enforcement or revenue.
             </p>
             <Link
               className={styles.textLink}
-              href="/docs/developers/custom-launch#robinhood-v4"
+              href="/docs/developers/robinhood-terminal-indexer"
             >
-              Read the Robinhood V4 boundary
+              Read the Robinhood terminal integration contract
             </Link>
           </li>
           <li id="identity">
@@ -308,12 +309,19 @@ export default function DeveloperDocsPage() {
             </span>
           </li>
           <li>
-            <a href="/openapi/custom-launch-v4.json">
-              Planned Robinhood V4 OpenAPI
-            </a>
+            <Link href="/docs/developers/robinhood-terminal-indexer">
+              Robinhood terminal and indexer integration
+            </Link>
             <span>
-              Source-candidate 4.0.0 contract. It does not prove deployment or
-              public write availability.
+              Chain-bound identity, Router events, finalized feed, pagination,
+              finality, reorg handling and explicit result states.
+            </span>
+          </li>
+          <li>
+            <a href="/openapi/custom-launch-v4.json">Robinhood V4 OpenAPI</a>
+            <span>
+              Public self-serve release contract. Resolve production activation
+              from live discovery.
             </span>
           </li>
           <li>

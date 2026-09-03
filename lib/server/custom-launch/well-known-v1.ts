@@ -20,7 +20,7 @@ export function programmableWellKnownDocumentV1(
     platformId: "programmable" as const,
     name: "Programmable Developer Platform",
     description:
-      "Canonical discovery for Programmable Classic and Custom launches. Fresh V3.3 general-hook writes and lifecycle reads accept wallet keys, partner roots and bounded partner subkeys on Ethereum Mainnet. Robinhood Chain V4 is planned and not deployed; its public routes stay disabled until deployment, policy, finality and indexing gates pass. V2 and V1 remain readable but their creation routes are write-fenced.",
+      "Canonical discovery for Programmable Classic and Custom launches. Fresh V3.3 general-hook writes and lifecycle reads accept wallet keys, partner roots and bounded partner subkeys on Ethereum Mainnet. Robinhood Chain V4 Router and backend are deployed and ready; the public self-serve release candidate awaits public discovery promotion. Its required 20 bps default policy is not a canonical onchain fee-enforcement or revenue claim. V2 and V1 remain readable but their creation routes are write-fenced.",
     apiVersion: "2" as const,
     apiBaseUrl: "https://developers.programmable.family/api/v2",
     statusUrl: "https://developers.programmable.family/api/v2/status",
@@ -462,8 +462,10 @@ export function programmableWellKnownDocumentV1(
           retryAfter: "honor-on-429-or-503" as const,
         }),
         v4: Object.freeze({
-          status: "planned" as const,
-          activationStage: "planned-not-deployed" as const,
+          status: "release-candidate" as const,
+          runtimeStatus: "routes-deployed" as const,
+          activationStage: "pending-public-discovery-promotion" as const,
+          targetLaunchPath: "public-self-serve" as const,
           publicAuthorization: false as const,
           publicWrites: false as const,
           releaseReady: false as const,
@@ -473,6 +475,7 @@ export function programmableWellKnownDocumentV1(
           caip2: "eip155:4663" as const,
           network: "Robinhood Chain Mainnet" as const,
           capabilitiesPath: "/v4/chains/4663/capabilities" as const,
+          readinessPath: "/v4/chains/4663/readiness" as const,
           preflightPath:
             "/v4/chains/4663/custom-launches/preflight" as const,
           createPath: "/v4/chains/4663/custom-launches" as const,
@@ -488,6 +491,18 @@ export function programmableWellKnownDocumentV1(
             "https://programmable.market/schemas/custom-launch/v4/source-verification-status.json",
           guideUrl:
             "https://programmable.market/docs/developers/custom-launch#robinhood-v4",
+          terminalIndexerGuideUrl:
+            "https://programmable.market/docs/developers/robinhood-terminal-indexer",
+          terminalIndexerFixtureUrl:
+            "https://programmable.market/fixtures/robinhood-terminal-indexer-v1.json",
+          launchStampRouterAbiUrl:
+            "https://programmable.market/contracts/robinhood/ProgrammableLaunchStampRouterV1.abi.json",
+          launchStampRouterAbiSha256:
+            "sha256:bb4e728e9f9c850eb01f928e8a798ac206a82e241a8d93b3b3c686635c88ed86" as const,
+          launchStampRouterProfileNormalizedAbiSha256:
+            "sha256:ab25262ce1cb907eba1cb820492754c0cd5d7278eb5fd6a024ba24c767323ac0" as const,
+          launchStampRouterProfileNormalizedAbiHashing:
+            "jq -cS plus trailing LF" as const,
           admissionDescriptorUrl:
             "https://github.com/programmablehq/Launch-Policy/blob/main/policy/custom-launch-admission-v4.json",
           sourceRepository:
@@ -538,6 +553,8 @@ export function programmableWellKnownDocumentV1(
             finalityIndependent: true as const,
           }),
           deploymentEvidence: Object.freeze({
+            status: "generator-promotion-pending" as const,
+            liveAuthorityPath: "/v4/chains/4663/readiness" as const,
             chainDeploymentDescriptorDigest: null,
             chainDeploymentId: null,
             finalityPolicyDigest: null,
@@ -582,6 +599,33 @@ export function programmableWellKnownDocumentV1(
           erc20FundingStatus: "not-advertised-until-separate-proof" as const,
           safetyClaim: false as const,
           feeBehaviorClaim: false as const,
+          universalFeeBehaviorClaim: false as const,
+          platformFeePolicyStatus:
+            "required-default-configuration" as const,
+          platformFeePolicy: Object.freeze({
+            required: true as const,
+            status: "required-default-configuration" as const,
+            appliesTo:
+              "new-robinhood-v4-api-custom-launches-only" as const,
+            changesExistingLaunches: false as const,
+            changesEthereumLaunches: false as const,
+            rateBps: 20 as const,
+            ratePpm: 2_000 as const,
+            ratePercent: "0.20%" as const,
+            recipient:
+              "0xD88539d3c4C460136a733A3Fd60cf6BF269079da" as const,
+            basis: null,
+            feeCurrency: null,
+            accountingMode: null,
+            rounding: null,
+            accrual: null,
+            claimMechanism: null,
+            enforcement: "not-guaranteed-onchain" as const,
+            canonicalOnchainEnforcementProven: false as const,
+            guaranteedRevenue: false as const,
+            feeBehaviorClaim: false as const,
+            universalFeeBehaviorClaim: false as const,
+          }),
           genericFeeClaiming: "not-live" as const,
           genericBuybackManagement: "not-live" as const,
           externalIndexingGuaranteed: false as const,
@@ -590,12 +634,10 @@ export function programmableWellKnownDocumentV1(
             github: "closed" as const,
           }),
           activationBlockers: Object.freeze([
-            "programmable-chain-deployments",
-            "server-chain-fork-simulation",
-            "wallet-chain-binding",
-            "finalized-router-evidence",
-            "source-verification-provider-binding",
-            "chain-indexing-readiness",
+            "public-cli-release",
+            "generated-release-evidence",
+            "clean-room-end-to-end-proof",
+            "public-indexing-canary",
           ] as const),
         }),
       }),
@@ -617,9 +659,12 @@ export function programmableWellKnownDocumentV1(
         caip2: "eip155:4663" as const,
         name: "Robinhood Chain Mainnet",
         explorerUrl: "https://robinhoodchain.blockscout.com",
-        status: "planned" as const,
+        status: "release-candidate" as const,
         customLaunchApiVersion: "4" as const,
-        activationStage: "planned-not-deployed" as const,
+        runtimeStatus: "routes-deployed" as const,
+        activationStage: "pending-public-discovery-promotion" as const,
+        targetLaunchPath: "public-self-serve" as const,
+        publicAuthorization: false as const,
         publicWrites: false as const,
         releaseReady: false as const,
         externalIndexingGuaranteed: false as const,

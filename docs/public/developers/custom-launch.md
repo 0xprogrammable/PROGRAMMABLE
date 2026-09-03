@@ -10,9 +10,10 @@ subkeys on Ethereum Mainnet. V2 and V1 history and schemas remain available, whi
 `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Only V3.3 accepts new submissions. Legacy
 Registry and GitHub submission intake is closed.
 
-The installable public CLI remains `@programmable/launch` `3.3.9` for the live Ethereum V3 contract. Version `4.0.0`
-exists only as a Robinhood V4 source candidate in the reviewed repository. It is not a published or installable
-release, and its presence does not change V4 `publicWrites: false` or `releaseReady: false`.
+The installable public CLI remains `@programmable/launch` `3.3.9` for the live Ethereum V3 contract. The Robinhood
+V4 Router and backend routes are deployed as a release candidate. Version `4.0.0` remains an unpublished,
+non-installable source candidate, and deployed runtime does not change this snapshot's `publicWrites: false` or
+`releaseReady: false`.
 
 V2 detail reads are observation-only while an existing request is `prepared` or `simulating`: GET does not advance
 simulation or authorization and cannot expose a new `walletTransaction`. Existing `authorized` and `submitted`
@@ -27,15 +28,15 @@ and current resources. The [V2 OpenAPI document](https://programmable.market/ope
 compatibility contracts. The [raw agent guide](https://programmable.market/developers/custom-launch-api-v1.md) is
 executable by a cold external agent.
 
-## Robinhood Chain V4 is planned
+## Robinhood Chain V4 is a deployed release candidate
 
-Robinhood Chain Mainnet (`chainId: 4663`, `eip155:4663`) is published in discovery as `planned` and `planned-not-deployed`.
-It has no public V4 write authorization yet. The API server, not a request field or client, selects
-`robinhood-launch-readiness` and `robinhood-production-launch` from the authenticated chain binding. Do not send real
-funds or treat a V4 route as live until discovery changes only after the chain deployments, fork simulation, wallet
-binding, finalized Router evidence, source-verification and indexing gates have all passed.
+Robinhood Chain Mainnet (`chainId: 4663`, `eip155:4663`) has a deployed Router and backend routes. This release
+snapshot is `pending-public-discovery-promotion`; `publicWrites`, `publicAuthorization` and `releaseReady` remain
+false until promotion. The API server, not a request field or client, selects `robinhood-launch-readiness` and
+`robinhood-production-launch` from the authenticated chain binding. Deployed runtime is not activated discovery:
+do not submit or send funds until all three live discovery gates are true.
 
-The stable planned contract uses
+The release-candidate contract uses
 `/v4/chains/4663/capabilities`, `/v4/chains/4663/custom-launches/preflight`,
 `/v4/chains/4663/custom-launches`, `/v4/chains/4663/custom-launches/{launchId}` and
 `/v4/chains/4663/finalized-custom-launches`. Read the
@@ -58,24 +59,25 @@ finalized. Legacy Registry and GitHub intake stay closed.
 A bounded V4 external-contract reference is admissible only after the protected API server verifies its exact
 `eip155:4663` address, live runtime hash, source-verification evidence, declared graph role and verification
 checkpoint. Naming an arbitrary, cross-chain, missing-code, stale-hash or otherwise unbound contract does not make it
-a trust root and blocks admission. This planned validation contract is not evidence that V4 or the reference is live.
+a trust root and blocks admission. This validation rule is not evidence of public write activation or reference
+behavior.
 
 The reviewed foundation source closure is bound by
-`0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730`; this is a source commitment, not a
-deployment or live-address claim. The reviewed no-CBOR inputs require Sourcify v2 provider-native `match`; the
+`0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730`; this source commitment is not, by itself,
+deployment or live-address evidence. The reviewed no-CBOR inputs require Sourcify v2 provider-native `match`; the
 exact-source claim comes from the separate protected-source, reproducible-build, finalized-transaction and deployed-bytecode binding.
 Robinhood Blockscout is optional, currently unproven and degraded. It cannot support an exact-source claim, and its
 failure cannot block or revise finality.
 
-While discovery says `planned`, every field in its V4 `deploymentEvidence` record is null, including every contract
-root. Canary status is valid only after the server publishes the exact deployment ID and descriptor digest, foundation
-source commitment, finality-policy digest, finalized block, pinned finalized-evidence reference, and address,
-runtime-hash and start-block tuples for the Router, GraphFactory, PermitAuthority Safe, PoolManager, PositionManager,
-Permit2, StateView, Universal Router and V4 Quoter. Partial evidence cannot promote the lane.
+The release candidate binds non-null V4 `deploymentEvidence` for its deployed trust roots. Production clients must
+still fetch the live deployment ID and descriptor digest, foundation source commitment, finality-policy digest,
+finalized block, pinned finalized-evidence reference, and address, runtime-hash and start-block tuples for the Router,
+GraphFactory, PermitAuthority Safe, PoolManager, PositionManager, Permit2, StateView, Universal Router and V4 Quoter.
+Partial or stale evidence cannot activate or promote the lane.
 
 ### V4 lifecycle and wallet handoff
 
-The planned V4 resource has a separate chain-aware lifecycle. These states do not replace the live Ethereum V3
+The V4 resource has a separate chain-aware lifecycle. These states do not replace the live Ethereum V3
 states:
 
 | Status | Meaning |
@@ -104,7 +106,8 @@ programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch 
 Provider source verification starts only after `finalized` and remains an independent server-authored process.
 `finalized` does not mean `exact_match`, and a provider retry or failure does not revise chain finality. Likewise,
 source verification, Programmable indexing, third-party indexing, trading readiness, Explore visibility and any public
-announcement are separate outcomes. No V4 route, schema or source candidate proves any of them is live.
+announcement are separate outcomes. Deployed V4 routes, schemas and source files do not prove public write activation
+or any of those independent outcomes.
 
 ## Existing-project integration
 

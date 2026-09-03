@@ -1,0 +1,359 @@
+{
+  "schemaVersion": "programmable.robinhood-terminal-indexer-fixture.v1",
+  "fixturePurpose": "fail-closed integration contract",
+  "fixtureVersionDate": "2026-09-03",
+  "liveAuthority": {
+    "wellKnownUrl": "https://programmable.market/.well-known/programmable.json",
+    "capabilitiesUrl": "https://api.programmable.market/v4/chains/4663/capabilities",
+    "readinessUrl": "https://api.programmable.market/v4/chains/4663/readiness",
+    "finalizedLaunchesUrl": "https://api.programmable.market/v4/chains/4663/finalized-custom-launches"
+  },
+  "integrationBoundary": {
+    "target": "public-self-serve",
+    "activationStatus": "pending-public-discovery-promotion",
+    "runtimeStatus": "deployed-ready",
+    "activationAuthority": "https://programmable.market/.well-known/programmable.json",
+    "liveCreateGate": {
+      "required": true,
+      "paths": [
+        "customLaunchApi.versions.v4.publicWrites",
+        "customLaunchApi.versions.v4.publicAuthorization",
+        "customLaunchApi.versions.v4.releaseReady"
+      ],
+      "expected": [true, true, true]
+    },
+    "feeBehaviorClaim": false,
+    "marketSupportClaim": false,
+    "currentReleaseBlockers": {
+      "cleanRoomBinding": "V4_RELEASE_BINDING_NOT_READY",
+      "cleanRoomReason": "The changed OpenAPI bytes are not yet closed into refreshed V4 release-binding hashes.",
+      "publicItemEvidence": "pending-per-launch-authoritative-exact-source-capture-persistence-promotion",
+      "existingPublicItemClaim": false,
+      "providerOutageClaim": false,
+      "sourcifyProviderReleaseAuthority": false,
+      "robinhoodBlockscoutRequired": false,
+      "note": "Public finalized eligibility requires a protected per-launch source closure, reproducible hosted build and compiler settings, finalized creation transaction, and exact creation/runtime bytecode binding for every component. Provider observation alone cannot promote an item or revise finality."
+    },
+    "note": "This fixture is a parser and fail-closed test vector, not proof that production writes are active. Fetch every live authority URL before creating, ingesting or displaying a launch."
+  },
+  "chain": {
+    "chainId": "4663",
+    "caip2": "eip155:4663",
+    "name": "Robinhood Chain Mainnet",
+    "provenanceStartBlock": "50469365"
+  },
+  "classification": {
+    "platformId": "programmable",
+    "category": "custom",
+    "label": "Programmable Custom",
+    "routerLaunchKind": 1,
+    "serverAuthoredIdentityPaths": ["platformId", "category"],
+    "identityBindingRule": "Require the server-authored platformId/category constants and independently verify Router launch kind 1. Never derive this identity from projectMetadata.",
+    "identityKey": [
+      "eip155:4663",
+      "0x34965F2A2ee9254522232C32F02056E92BE0C98a",
+      "onchain.routerLaunchId"
+    ]
+  },
+  "registry": {
+    "generation": "programmable-launch-stamp-router-v1",
+    "kind": "router-embedded-launch-stamp-registry",
+    "address": "0x34965F2A2ee9254522232C32F02056E92BE0C98a",
+    "separateRegistryAddress": null,
+    "legacyCustomRegistryAuthoritative": false,
+    "reads": [
+      "launchIdByToken(address)",
+      "launchIdByPool(address,bytes32)",
+      "launchIdByComponent(address)",
+      "launchStamp(bytes32)",
+      "stampProof(address)",
+      "componentRuntimeCodeHash(address)"
+    ]
+  },
+  "contracts": {
+    "launchStampRouter": {
+      "name": "ProgrammableLaunchStampRouterV1",
+      "address": "0x34965F2A2ee9254522232C32F02056E92BE0C98a",
+      "deploymentBlock": "50469365",
+      "runtimeCodeHash": "0x1dbbdaaad901ea3c6134dca0d4872a4789b3c071bf8ccfb44edd65d26d817388",
+      "sourceSha256": "sha256:ef87aa9338c364634bffda64423bd3fb096c1630a45cc58ecf854d24959ff163",
+      "profileNormalizedAbiSha256": "sha256:ab25262ce1cb907eba1cb820492754c0cd5d7278eb5fd6a024ba24c767323ac0",
+      "profileNormalizedAbiHashing": "jq -cS plus trailing LF",
+      "downloadAbiUrl": "https://programmable.market/contracts/robinhood/ProgrammableLaunchStampRouterV1.abi.json",
+      "downloadAbiSha256": "sha256:bb4e728e9f9c850eb01f928e8a798ac206a82e241a8d93b3b3c686635c88ed86"
+    },
+    "graphFactory": {
+      "address": "0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd",
+      "deploymentBlock": "50469365",
+      "runtimeCodeHash": "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8",
+      "canonicalBuildAbiSha256": "sha256:2d253b16e76c43bc6736a6dadb28881c7f8d52a1c4b8cf8aa22a20b0c6aaa5f4"
+    },
+    "permitAuthority": {
+      "address": "0xeD617CE7f82e2AB589aDeFFD319D1D872Bc8De06",
+      "deploymentBlock": "50469365",
+      "runtimeCodeHash": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c"
+    },
+    "poolManager": {
+      "address": "0x8366a39CC670B4001A1121B8F6A443A643e40951",
+      "runtimeCodeHash": "0xbd3881180b547f5fe817545743cfb4343e96b1bc6640dcd70c106b0066e95626"
+    }
+  },
+  "events": [
+    {
+      "name": "ProgrammableLaunchStampedV1",
+      "signature": "ProgrammableLaunchStampedV1(bytes32,address,address,address,bytes32,bytes32)",
+      "topic0": "0x6cf479a102f1eebc9244f48f8d68f6aa52b4c5a4516318df58ba46614a5b14f2",
+      "indexedInputs": ["launchId", "token", "hook"],
+      "dataInputs": ["poolManager", "poolId", "stampHash"],
+      "discovery": true
+    },
+    {
+      "name": "ProgrammableLaunchRouteStampedV1",
+      "signature": "ProgrammableLaunchRouteStampedV1(bytes32,uint8,bytes32,bytes32,bytes32)",
+      "topic0": "0x45e7cc355b63ca67d6278a0d8d23470ce2a0741a9c60283d7dee712df7a877a5",
+      "indexedInputs": ["launchId", "kind", "routePayloadHash"],
+      "dataInputs": ["expectedResultHash", "permitDigest"],
+      "discovery": true
+    },
+    {
+      "name": "ProgrammableComponentStampedV1",
+      "signature": "ProgrammableComponentStampedV1(bytes32,address,uint8,bytes32)",
+      "topic0": "0x8147265e7396d6400cee8d049456a1f7438fdfbe2a7c81c976d51ba67e52ff4b",
+      "indexedInputs": ["launchId", "component", "kind"],
+      "dataInputs": ["runtimeCodeHash"],
+      "discovery": true
+    },
+    {
+      "name": "EIP712DomainChanged",
+      "signature": "EIP712DomainChanged()",
+      "topic0": "0x0a6387c9ea3628b88a633bb4f3b151770f70085117a15f9bf3787cda53f13d31",
+      "indexedInputs": [],
+      "dataInputs": [],
+      "discovery": false
+    }
+  ],
+  "feed": {
+    "method": "GET",
+    "path": "/v4/chains/4663/finalized-custom-launches",
+    "authentication": "none",
+    "pagination": {
+      "limitQuery": "limit",
+      "cursorQuery": "cursor",
+      "nextCursorField": "nextCursor",
+      "rule": "Pass an unchanged non-null nextCursor as the next cursor value.",
+      "cycleRule": "Track every non-null cursor and return INDETERMINATE if a cursor repeats."
+    },
+    "requiredTerminalEvidence": {
+      "platformId": "programmable",
+      "category": "custom",
+      "onchain.schemaVersion": "programmable.custom-launch-onchain-evidence.v3",
+      "onchain.terminal": true,
+      "onchain.checkpointType": "ethereum_finalized",
+      "onchain.l2Inclusion": "required-object",
+      "onchain.l2Inclusion.schemaVersion": "programmable.custom-launch-l2-inclusion.v1",
+      "onchain.l2Inclusion.chainId": "4663",
+      "onchain.l2Inclusion.caip2": "eip155:4663",
+      "onchain.l2Inclusion.receiptStatus": "success",
+      "onchain.l1Posting": "required-object",
+      "onchain.l1Posting.schemaVersion": "programmable.custom-launch-l1-posting.v1",
+      "onchain.l1Posting.chainId": "1",
+      "onchain.l1Posting.caip2": "eip155:1",
+      "onchain.l1Posting.rollup": "0x23A19d23e89166adedbDcB432518AB01e4272D94",
+      "onchain.l1Posting.sequencerInbox": "0xBd0D173EEb87D57A09521c24388a12789F33ba96",
+      "onchain.l1FinalizedCheckpoint": "required-object",
+      "onchain.l1FinalizedCheckpoint.schemaVersion": "programmable.custom-launch-l1-finalized-checkpoint.v1",
+      "onchain.l1FinalizedCheckpoint.chainId": "1",
+      "onchain.l1FinalizedCheckpoint.caip2": "eip155:1",
+      "onchain.l1FinalizedCheckpoint.consensusCheckpointTag": "finalized",
+      "sourceVerification.status": "exact_match",
+      "sourceVerification.components[*].status": "exact_match"
+    },
+    "openApiValidation": {
+      "url": "https://programmable.market/openapi/custom-launch-v4.json",
+      "responseSchema": "#/components/schemas/CustomLaunchFinalizedListV4",
+      "itemSchema": "#/components/schemas/CustomLaunchFinalizedMetadataV4",
+      "rule": "Validate the complete response and every launches[] item against the authoritative OpenAPI schemas before using this minimum identity evidence. The list below is not the full DTO contract."
+    },
+    "minimumIdentityEvidence": {
+      "source": "minimum identity and finality paths from one OpenAPI-validated launches[] item",
+      "minimumPaths": [
+        "launchId",
+        "platformId",
+        "category",
+        "chainId",
+        "caip2",
+        "projectMetadata.token",
+        "onchain.terminal",
+        "onchain.checkpointType",
+        "onchain.router",
+        "onchain.routerLaunchId",
+        "onchain.transactionHash",
+        "onchain.l2Inclusion.transactionHash",
+        "onchain.l2Inclusion.blockNumber",
+        "onchain.l2Inclusion.blockHash",
+        "onchain.l2Inclusion.blockTimestamp",
+        "onchain.l2Inclusion.receiptStatus",
+        "onchain.l2Inclusion.launchEventLogIndex",
+        "onchain.l2Inclusion.routeEventLogIndex",
+        "onchain.l1Posting.transactionHash",
+        "onchain.l1Posting.rollup",
+        "onchain.l1Posting.sequencerInbox",
+        "onchain.l1Posting.batchNumber",
+        "onchain.l1Posting.blockNumber",
+        "onchain.l1Posting.blockHash",
+        "onchain.l1Posting.logIndex",
+        "onchain.l1FinalizedCheckpoint.blockNumber",
+        "onchain.l1FinalizedCheckpoint.blockHash",
+        "onchain.l1FinalizedCheckpoint.consensusCheckpointTag",
+        "onchain.l1FinalizedCheckpoint.providerReadbacks",
+        "sourceVerification.status",
+        "sourceVerification.components"
+      ],
+      "constantAssertions": {
+        "platformId": "programmable",
+        "category": "custom",
+        "chainId": "4663",
+        "caip2": "eip155:4663",
+        "onchain.schemaVersion": "programmable.custom-launch-onchain-evidence.v3",
+        "onchain.terminal": true,
+        "onchain.checkpointType": "ethereum_finalized",
+        "onchain.router": "0x34965F2A2ee9254522232C32F02056E92BE0C98a",
+        "onchain.l1Posting.rollup": "0x23A19d23e89166adedbDcB432518AB01e4272D94",
+        "onchain.l1Posting.sequencerInbox": "0xBd0D173EEb87D57A09521c24388a12789F33ba96",
+        "onchain.l1FinalizedCheckpoint.consensusCheckpointTag": "finalized",
+        "sourceVerification.status": "exact_match"
+      },
+      "identityRule": "Use (eip155:4663, onchain.router, onchain.routerLaunchId); do not substitute the API request launchId.",
+      "tokenAddressRule": "projectMetadata.token contains name and symbol only. Resolve the token address from launchStamp(onchain.routerLaunchId) at onchain.l2Inclusion.blockNumber after verifying that exact L2 receipt coordinate and the complete Router binding.",
+      "publicationRule": "Classify as Programmable Custom only after the server-authored identity constants, complete V3 finality evidence, Router registry kind-1 bindings and every authoritative exact-source component independently verify.",
+      "sourceVerificationRule": "Require sourceVerification.status and every component status to be exact_match with the complete authoritative exact-source binding. A provider-only Sourcify observation is not publication authority; queued, retrying and needs_attention remain authenticated private history."
+    },
+    "coordinateSemantics": {
+      "canonicalCoordinates": {
+        "l2ReceiptAndRouterEvents": "onchain.l2Inclusion",
+        "l1BatchPostingEvent": "onchain.l1Posting",
+        "l1CommonFinalizedCheckpoint": "onchain.l1FinalizedCheckpoint"
+      },
+      "l1FinalizedProviderReadbackOrder": [
+        { "providerId": "drpc", "trustDomain": "drpc.org" },
+        { "providerId": "quicknode", "trustDomain": "quicknode.com" }
+      ],
+      "l1ProviderBindingRule": "Require the two providerReadbacks in this exact order and bind their identities to chainDeployment.deploymentEvidence.ethereumFinalityEvidence; both blockNumber/blockHash pairs must equal the common finalized checkpoint.",
+      "legacyStageProjectionFields": [
+        "onchain.blockNumber",
+        "onchain.blockHash",
+        "onchain.logIndex"
+      ],
+      "legacyStageProjectionDeprecated": true,
+      "legacyProjectionRule": "The flat trio is not a transaction locator. At ethereum_finalized, blockNumber/blockHash alias l1FinalizedCheckpoint while logIndex aliases l1Posting.logIndex. Never combine the trio with top-level transactionHash.",
+      "l2TransactionAliasRule": "Require onchain.transactionHash to equal onchain.l2Inclusion.transactionHash. Both identify the Robinhood L2 launch transaction.",
+      "l2EventOrderRule": "onchain.l2Inclusion.routeEventLogIndex must be less than onchain.l2Inclusion.launchEventLogIndex in the same verified Router receipt.",
+      "directRouterVerificationRule": "Replay onchain.l2Inclusion.transactionHash on chain 4663, require its block number/hash and Router launch/route event indexes to match, then perform every Router read at onchain.l2Inclusion.blockNumber. If any V3 nested coordinate is missing or disagrees, provenance is INDETERMINATE.",
+      "historicalV2Rule": "Historical V2 evidence remains private authenticated history and is never a public-feed candidate. A separately and fully revalidated canonical V3-finalized projection may qualify on its own evidence."
+    },
+    "exampleResponsePurpose": "Schema-valid empty-feed parser vector; not a captured production observation.",
+    "exampleResponse": {
+      "schemaVersion": "programmable.custom-launch-list.v4",
+      "apiVersion": "v4",
+      "chainId": "4663",
+      "caip2": "eip155:4663",
+      "generatedAt": "2026-09-03T00:00:00.000Z",
+      "quality": {
+        "status": "ready",
+        "sourceRowCount": 0,
+        "publishedRowCount": 0,
+        "quarantinedRowCount": 0
+      },
+      "launches": [],
+      "nextCursor": null
+    },
+    "qualitySemantics": {
+      "scope": "Global totals for the finalized publication dataset, not counts for the current page.",
+      "candidateRule": "Only canonical eligible V3-finalized rows with complete authoritative exact-source verification are public candidates. V2 evidence and queued, retrying or needs_attention source states remain private history and are never public candidates.",
+      "sourceRowCount": "Global number of canonical eligible V3-finalized and authoritatively source-verified candidates. On every successful response it equals publishedRowCount.",
+      "publishedRowCount": "Global number of canonical eligible V3-finalized and authoritatively source-verified candidates published by this contract. launches.length on one page may be smaller and must never exceed this total.",
+      "quarantinedRowCount": "Always zero on a successful response. A malformed eligible V3 candidate fails the entire endpoint request instead of producing row-wise quarantine or partial output.",
+      "statusRule": "Every successful response has status ready, sourceRowCount equal to publishedRowCount and quarantinedRowCount equal to zero."
+    }
+  },
+  "lifecycle": {
+    "requestStatuses": [
+      "received",
+      "validating",
+      "action_required",
+      "authorized",
+      "awaiting_wallet_signature",
+      "wallet_action_required",
+      "submitted",
+      "sequencer_soft_confirmed",
+      "ethereum_posted",
+      "finalized",
+      "failed"
+    ],
+    "publicFeedStatus": "finalized",
+    "finalityStages": [
+      "sequencer_soft_confirmation",
+      "ethereum_posted",
+      "ethereum_finalized"
+    ],
+    "terminalFinalityStage": "ethereum_finalized"
+  },
+  "feePolicy": {
+    "required": true,
+    "status": "required-default-configuration",
+    "scope": "new Robinhood V4 API Custom launches only",
+    "changesExistingLaunches": false,
+    "changesEthereumLaunches": false,
+    "directRouterOrOutsideApiBindingClaim": false,
+    "perLaunchApplicabilityWithoutExplicitBackendBinding": "UNVERIFIED",
+    "defaultConfiguration": {
+      "rateBps": 20,
+      "ratePpm": 2000,
+      "ratePercent": "0.20%",
+      "recipient": "0xD88539d3c4C460136a733A3Fd60cf6BF269079da"
+    },
+    "enforcement": "not-guaranteed-onchain",
+    "feeBehaviorClaim": false,
+    "universalFeeBehaviorClaim": false,
+    "genericClaimingLive": false,
+    "chargedFeeResult": "UNAVAILABLE",
+    "basis": null,
+    "feeCurrency": null,
+    "accountingMode": null,
+    "rounding": null,
+    "accrual": null,
+    "claimMechanism": null,
+    "canonicalOnchainEnforcementProven": false,
+    "guaranteedRevenue": false
+  },
+  "resultAxes": {
+    "provenance": {
+      "STAMPED": "Every Router binding, canonical read and event correlation succeeds at the verified onchain.l2Inclusion block.",
+      "NOT_STAMPED": "A Router identity lookup at the verified onchain.l2Inclusion block succeeds and returns zero.",
+      "INDETERMINATE": "Router runtime, ABI, provider or required V3 L2/L1 evidence is missing or disagrees."
+    },
+    "feedAvailability": {
+      "AVAILABLE": "The finalized feed reports ready quality and a complete page.",
+      "UNAVAILABLE": "The finalized feed or its required quality authority cannot be read."
+    },
+    "finality": {
+      "FINALIZED": "The feed item carries V3 l2Inclusion, l1Posting and l1FinalizedCheckpoint objects, onchain.terminal true and checkpointType ethereum_finalized.",
+      "INDETERMINATE": "The item lacks or conflicts on any required server-authored V3 L2 inclusion, L1 posting or L1 finalized-checkpoint field."
+    },
+    "writeActivation": {
+      "ACTIVE": "All three live discovery create gates are true.",
+      "INACTIVE": "The live discovery authority explicitly reports at least one create gate false.",
+      "UNAVAILABLE": "The live discovery document or a required create gate cannot be read."
+    },
+    "feeBehavior": {
+      "UNAVAILABLE": "Required policy configuration is known, but actual basis, charged amount, accounting, accrual, claim mechanics, onchain enforcement and revenue are not proven."
+    },
+    "security": {
+      "UNVERIFIED": "A launch stamp is provenance, not an audit or safety endorsement."
+    },
+    "marketSupport": {
+      "UNVERIFIED": "A launch stamp does not prove liquidity, pricing, routability or venue support."
+    }
+  },
+  "independenceRule": "Index an existing finalized STAMPED launch independently of publicWrites and fee behavior. Never let an unavailable write-activation, fee, security or market axis overwrite its provenance result."
+}
