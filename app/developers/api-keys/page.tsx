@@ -11,6 +11,26 @@ export const metadata: Metadata = {
   },
 };
 
-export default function DeveloperApiKeysPage() {
-  return <DeveloperApiKeys />;
+type DeveloperApiKeysSearchParams = Promise<
+  Record<string, string | string[] | undefined>
+>;
+
+export function developerApiKeysInitialSection(
+  searchParams: Record<string, string | string[] | undefined>,
+) {
+  return searchParams.start === "custom"
+    && searchParams.chainId === "4663"
+    ? "launch" as const
+    : "keys" as const;
+}
+
+export default async function DeveloperApiKeysPage({
+  searchParams,
+}: Readonly<{ searchParams: DeveloperApiKeysSearchParams }>) {
+  const resolvedSearchParams = await searchParams;
+  return (
+    <DeveloperApiKeys
+      initialSection={developerApiKeysInitialSection(resolvedSearchParams)}
+    />
+  );
 }

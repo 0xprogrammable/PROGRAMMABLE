@@ -21,7 +21,10 @@ import {
 
 import styles from "@/components/developer-api-keys.module.css";
 import { DeveloperLaunchHistory } from "@/components/developer-launch-history";
-import { DeveloperRobinhoodLaunch } from
+import {
+  DeveloperRobinhoodLaunch,
+  RobinhoodFeePolicyDisclosure,
+} from
   "@/components/developer-robinhood-launch";
 import {
   useWallet,
@@ -78,12 +81,16 @@ type ApiKeyMutationState =
 type ListState = "idle" | "loading" | "ready" | "error";
 type ActiveSection = "keys" | "launch" | "history";
 type ApiKeyLoadMode = "initial" | "refresh" | "mutation";
+type DeveloperApiKeysProps = Readonly<{
+  initialSection?: ActiveSection;
+}>;
 type DeveloperApiKeysViewProps = Readonly<{
   account: `0x${string}` | null;
   authReady: boolean;
   connecting: boolean;
   getAccessToken: () => Promise<string | null>;
   getIdentityToken: () => Promise<string | null>;
+  initialSection: ActiveSection;
   openWallet: () => void;
   sendCustomLaunchWalletAction: (
     input: CustomLaunchWalletActionV1,
@@ -578,7 +585,9 @@ function ExpirySelect({
   );
 }
 
-export function DeveloperApiKeys() {
+export function DeveloperApiKeys({
+  initialSection = "keys",
+}: DeveloperApiKeysProps) {
   const {
     authReady,
     connecting,
@@ -601,6 +610,7 @@ export function DeveloperApiKeys() {
       connecting={connecting}
       getAccessToken={getAccessToken}
       getIdentityToken={getIdentityToken}
+      initialSection={initialSection}
       openWallet={openWallet}
       sendCustomLaunchWalletAction={sendCustomLaunchWalletAction}
       sendCustomLaunchWalletActionV4={sendCustomLaunchWalletActionV4}
@@ -617,6 +627,7 @@ function DeveloperApiKeysView({
   connecting,
   getAccessToken,
   getIdentityToken,
+  initialSection,
   openWallet,
   sendCustomLaunchWalletAction,
   sendCustomLaunchWalletActionV4,
@@ -654,7 +665,9 @@ function DeveloperApiKeysView({
   const [revokeError, setRevokeError] = useState("");
   const [rotateError, setRotateError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
-  const [activeSection, setActiveSection] = useState<ActiveSection>("keys");
+  const [activeSection, setActiveSection] = useState<ActiveSection>(
+    initialSection,
+  );
   const [initialLaunchId, setInitialLaunchId] = useState<string | null>(null);
   const [initialLaunchChainId, setInitialLaunchChainId] = useState<"4663" | null>(null);
   const [refreshingKeys, setRefreshingKeys] = useState(false);
@@ -1223,6 +1236,10 @@ function DeveloperApiKeysView({
           </p>
         </div>
       </header>
+
+      {activeSection === "launch" ? (
+        <RobinhoodFeePolicyDisclosure />
+      ) : null}
 
       {!authReady ? (
         walletSessionTimedOut ? (

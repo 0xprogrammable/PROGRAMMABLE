@@ -201,6 +201,28 @@ export function isRobinhoodIdempotencyKey(value: string) {
   return idempotencyKeyPattern.test(value);
 }
 
+export function RobinhoodFeePolicyDisclosure() {
+  return (
+    <section
+      className={styles.policyDisclosure}
+      aria-labelledby="robinhood-fee-policy-title"
+    >
+      <h2 id="robinhood-fee-policy-title">Robinhood fee policy</h2>
+      <p>
+        Programmable policy for new Robinhood V4 API Custom launch requests is
+        0.20% (2,000 ppm), recipient{" "}
+        <code>0xD88539d3c4C460136a733A3Fd60cf6BF269079da</code>. Existing
+        launches are unchanged.
+      </p>
+      <p>
+        The current V4 runtime does not claim immutable onchain fee
+        enforcement, fee behavior, claiming, or guaranteed revenue. The
+        Launch Stamp proves provenance only.
+      </p>
+    </section>
+  );
+}
+
 export async function preflightRobinhoodLaunch(
   fetcher: Fetcher,
   apiKey: string,
@@ -615,23 +637,6 @@ export function DeveloperRobinhoodLaunch({
         <p className={styles.fieldNote} id="robinhood-idempotency-note">
           Keep this value unchanged if a create request needs to be retried.
         </p>
-
-        <section
-          className={styles.policyDisclosure}
-          aria-labelledby="robinhood-fee-policy-title"
-        >
-          <h3 id="robinhood-fee-policy-title">Robinhood fee policy</h3>
-          <p>
-            Programmable policy for new Robinhood Custom launches is 0.20%
-            (2,000 ppm), recipient{" "}
-            <code>0xD88539d3c4C460136a733A3Fd60cf6BF269079da</code>.
-          </p>
-          <p>
-            The current V4 runtime does not claim immutable onchain fee
-            enforcement, fee behavior, claiming, or guaranteed revenue. The
-            Launch Stamp proves provenance only.
-          </p>
-        </section>
 
         {proof ? (
           <div className={styles.preflightResult} data-deployable={proof.deployable}>

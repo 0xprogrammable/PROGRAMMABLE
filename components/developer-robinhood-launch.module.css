@@ -190,10 +190,12 @@
   border-radius: var(--webde-radius-control);
   display: grid;
   gap: 6px;
+  margin-bottom: 16px;
+  max-width: 900px;
   padding: 12px 14px;
 }
 
-.policyDisclosure h3 {
+.policyDisclosure h2 {
   color: var(--webde-ink);
   font-size: 13px;
   font-weight: 620;
