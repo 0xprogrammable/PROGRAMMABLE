@@ -47,6 +47,15 @@
   text-wrap: balance;
 }
 
+.titleRow {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  justify-content: flex-start;
+  width: 100%;
+}
+
 .runnersSection {
   padding: 0 0 80px;
   position: relative;
@@ -1453,6 +1462,11 @@
   .pageHeading :is(h1, h2) {
     font-size: clamp(38px, 11vw, 48px);
     max-width: none;
+  }
+
+  .titleRow {
+    align-items: center;
+    gap: 12px;
   }
 
   .runnersIntro {

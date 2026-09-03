@@ -11,6 +11,7 @@ import {
   serializeViewChainCookie,
   tryParseViewChainId,
 } from "../lib/view-chain";
+import { resolveExploreChainId } from "../lib/explore-chain";
 
 const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -23,6 +24,7 @@ describe("view chain", () => {
     expect(isViewChainId("4663")).toBe(false);
     expect(tryParseViewChainId("1")).toBe(1);
     expect(tryParseViewChainId("4663")).toBe(4663);
+    expect(tryParseViewChainId("8453")).toBeNull();
     expect(tryParseViewChainId("11155111")).toBeNull();
     expect(parseViewChainId(null)).toBe(1);
     expect(parseViewChainId("invalid")).toBe(1);
@@ -36,6 +38,13 @@ describe("view chain", () => {
     );
     expect(serializeViewChainCookie(4663)).toContain("Path=/");
     expect(serializeViewChainCookie(4663)).toContain("SameSite=Lax");
+  });
+
+  it("normalizes unavailable Explore preferences to Ethereum", () => {
+    expect(resolveExploreChainId(1)).toBe(1);
+    expect(resolveExploreChainId(4663)).toBe(1);
+    expect(resolveExploreChainId(8453)).toBe(1);
+    expect(resolveExploreChainId("invalid")).toBe(1);
   });
 
   it("resolves the server cookie only inside chain-bound product routes", () => {
@@ -91,30 +100,27 @@ describe("view chain", () => {
     expect(existsSync("app/token/layout.tsx")).toBe(false);
   });
 
-  it("switches directly between chains beside the header wallet action", () => {
+  it("scopes the truthful chain selector to Explore instead of the header", () => {
     const navigation = read("components/site-navigation.tsx");
-    const styles = read("components/site-navigation.module.css");
+    const explore = read("components/explore-view.tsx");
+    const selector = read("components/explore-chain-selector.tsx");
+    const styles = read("components/explore-chain-selector.module.css");
 
-    expect(navigation.indexOf("<HeaderChainToggle")).toBeLessThan(
-      navigation.indexOf("<HeaderWalletButton"),
-    );
-    expect(navigation.indexOf("<HeaderWalletButton")).toBeLessThan(
-      navigation.indexOf("ref={menuButtonRef}"),
-    );
-    expect(navigation).toContain("viewChainId === 1 ? 4663 : 1");
-    expect(navigation).toContain("setViewChainId(alternateViewChainId)");
-    expect(navigation).toContain("Switch to ${alternateLabel}");
+    expect(navigation).not.toContain("HeaderChainToggle");
+    expect(navigation).not.toContain("switchNetwork");
+    expect(explore).toContain("<ExploreChainSelector />");
+    expect(selector).toContain('aria-haspopup="listbox"');
+    expect(selector).toContain('role="listbox"');
+    expect(selector).toContain('role="option"');
+    expect(selector).toContain('label: "Ethereum"');
+    expect(selector).toContain('label: "Robinhood"');
+    expect(selector).toContain('label: "Base"');
+    expect(selector.match(/available: false/gu)).toHaveLength(2);
+    expect(selector).toContain("setViewChainId(option.viewChainId)");
+    expect(selector).not.toContain("useWallet");
+    expect(selector).not.toContain("switchNetwork");
     expect(styles).toContain("/brand/networks/robinhood-feather-white.svg");
-    expect(navigation).not.toContain("chainPopover");
-    expect(navigation).not.toContain("Choose network");
-    expect(navigation).not.toContain('role="menu"');
-    expect(navigation).toContain("inert={menuOpen ? undefined : true}");
-    expect(navigation).toContain('if (event.key !== "Escape") return;');
-    expect(styles).toMatch(
-      /\.chainTrigger\s*\{[^}]*height:\s*48px;[^}]*width:\s*48px;/s,
-    );
-    expect(styles).toMatch(
-      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.chainTrigger,/,
-    );
+    expect(styles).toMatch(/\.trigger\s*\{[^}]*min-height:\s*44px;/s);
+    expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
   });
 });

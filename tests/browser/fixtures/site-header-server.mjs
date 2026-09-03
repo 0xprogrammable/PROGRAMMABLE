@@ -10,7 +10,7 @@ export async function createSiteHeaderServer() {
   const state = `
     import React, {createContext, useContext, useState} from 'react';
     const Context = createContext(null);
-    export function Fixture({children}) {
+    export function Fixture({children, selector}) {
       const [wallet, setWallet] = useState({account:'0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', chainId:'0x1'});
       const [viewChainId, setViewChainId] = useState(1);
       const [pending, setPending] = useState(false);
@@ -44,10 +44,12 @@ export async function createSiteHeaderServer() {
       };
       return <Context.Provider value={value}>{children}<main style={{padding:24}}>
         <h1>Header interaction fixture</h1><p>Deterministic test wallet. No real wallet requests.</p>
+        {selector}
         <button aria-pressed={reject} onClick={()=>setReject(!reject)}>Reject network switch</button>
         <button aria-pressed={failDisconnect} onClick={()=>setFailDisconnect(!failDisconnect)}>Fail disconnect</button>
         <button onClick={()=>setWallet(null)}>Use anonymous session</button>
         <p data-testid="requests">{requests.join(',')}</p>
+        <p data-testid="view-chain">{viewChainId}</p>
         <p data-testid="wallet-chain">{wallet?.chainId ?? 'disconnected'}</p>
         <p data-testid="disconnect-options">{disconnectOptions}</p>
         <a href="#outside">Outside control</a>
@@ -59,7 +61,7 @@ export async function createSiteHeaderServer() {
   `;
   const bundled = await build({
     stdin: {
-      contents: `import React from 'react'; import {createRoot} from 'react-dom/client'; import {SiteHeader} from './components/site-navigation'; import {Fixture} from 'fixture-state'; import './app/globals.css'; import './app/interface.css'; createRoot(document.getElementById('root')).render(<Fixture><SiteHeader/></Fixture>);`,
+      contents: `import React from 'react'; import {createRoot} from 'react-dom/client'; import {ExploreChainSelector} from './components/explore-chain-selector'; import {SiteHeader} from './components/site-navigation'; import {Fixture} from 'fixture-state'; import './app/globals.css'; import './app/interface.css'; createRoot(document.getElementById('root')).render(<Fixture selector={<ExploreChainSelector/>}><SiteHeader/></Fixture>);`,
       loader: "tsx", resolveDir: root,
     },
     bundle: true, format: "esm", platform: "browser", write: false,

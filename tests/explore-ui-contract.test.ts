@@ -27,9 +27,12 @@ describe("Explore UI contract", () => {
     expect(page).toContain("initialResponseChainId={viewChainId}");
     expect(page).toContain("initialModelFilter={modelFilter}");
     expect(page).toContain("requestCookies.get(VIEW_CHAIN_COOKIE_NAME)");
+    expect(page).toContain("resolveExploreChainId(");
     expect(page).toContain("initialExploreQuery(modelFilter, viewChainId)");
     expect(source).toContain("hydrated: viewChainReady");
     expect(source).toContain("viewChainId: resolvedViewChainId");
+    expect(source).toContain("resolveExploreChainId(hydratedViewChainId)");
+    expect(source).toContain("setViewChainId(viewChainId)");
     expect(source).toContain(
       "!viewChainReady && initialResponseChainId !== undefined",
     );
@@ -60,6 +63,10 @@ describe("Explore UI contract", () => {
     expect(source).toContain("inert={loadingOnly ? true : undefined}");
     expect(source).toContain('const Heading = embedded ? "h2" : "h1"');
     expect(source).toContain("<Heading data-explore-heading>Explore</Heading>");
+    expect(source).toContain("!embedded ? <ExploreChainSelector /> : null");
+    expect(source.indexOf("<ExploreChainSelector />")).toBeLessThan(
+      source.indexOf('id="tokens"'),
+    );
     expect(source).not.toContain("ExploreModeSwitch");
     expect(source).toContain("const eagerImage = !embedded");
     expect(source).toContain("onPointerEnter={() => router.prefetch(href)}");

@@ -28,6 +28,7 @@ describe("Robinhood view-chain scope gate", () => {
     const resolvedLayout = read("components/resolved-view-chain-layout.tsx");
     const transition = read("components/route-transition.tsx");
     const navigation = read("components/site-navigation.tsx");
+    const selector = read("components/explore-chain-selector.tsx");
     const tokenPage = read("app/token/[address]/page.tsx");
     const tokenSync = read("components/token-route-chain-sync.tsx");
     const styles = read("components/view-chain-unavailable.module.css");
@@ -40,8 +41,7 @@ describe("Robinhood view-chain scope gate", () => {
     expect(transition).not.toContain("<ViewChainPending />");
     expect(transition).not.toContain("<ViewChainUnavailable />");
     expect(transition).toContain("routeUsesChainBoundary");
-    expect(navigation).toContain('pathname.startsWith("/token/")');
-    expect(navigation).toContain('url.searchParams.set("chain"');
+    expect(navigation).not.toContain("HeaderChainToggle");
     expect(tokenPage).toContain("<TokenRouteChainSync");
     expect(tokenSync).toContain("synchronized.current = true");
     expect(transition).toContain(
@@ -54,9 +54,8 @@ describe("Robinhood view-chain scope gate", () => {
     expect(component).toContain("Ethereum remains live");
     expect(component).toContain("Your connected wallet stays connected");
     expect(component).not.toMatch(/useWallet|switchChain|switchNetwork|disconnect/);
-    expect(navigation).toContain(
-      "if (isRobinhoodUnavailableRoute(pathname)) return;",
-    );
+    expect(selector).toContain("setViewChainId(option.viewChainId)");
+    expect(selector).not.toMatch(/useWallet|switchChain|switchNetwork|disconnect/);
     expect(styles).toMatch(/\.action\s*\{[^}]*min-height:\s*44px;/s);
     expect(styles).toMatch(/\.action:focus-visible\s*\{/);
     expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
