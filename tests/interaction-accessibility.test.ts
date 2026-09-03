@@ -260,7 +260,7 @@ describe("interaction accessibility", () => {
 
     expect(source).toContain("const mobileNavItems = [...desktopNavItems, ...menuNavItems];");
     expect(source).toContain('{ href: "/profile", label: "Profile" },');
-    expect(source).toContain('{ href: "/migration", label: "Migrate" },');
+    expect(source).not.toContain('{ href: "/migration", label: "Migrate" },');
     expect(source).not.toContain("/hookathon");
     expect(source).toContain(
       '<nav className="mobile-nav" aria-label="Menu navigation">',
