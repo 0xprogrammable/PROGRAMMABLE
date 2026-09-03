@@ -48,9 +48,8 @@ Activation additionally requires the normal runtime dependencies:
 | `PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_PROVIDER` | Exact provider label; production requires dRPC |
 | `PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_URL` | Server-only primary Ethereum endpoint |
 | `PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT` | Commitment to the primary endpoint |
-| `PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_PROVIDER` | Exact provider label; production requires QuickNode |
-| `PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_URL` | Server-only independent secondary Ethereum endpoint |
-| `PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT` | Commitment to the secondary endpoint |
+| `PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL` | Server-only independent migration witness endpoint |
+| `PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT` | Commitment to the Alchemy migration witness endpoint |
 
 The root migration manifest must independently bind the exact release, token, runtime-code hash, migration wallet,
 72-hour timestamps, finalized pre-window eligibility block number and block hash. Sponsor configuration is accepted only while that

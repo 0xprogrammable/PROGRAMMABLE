@@ -23,7 +23,7 @@ belong only in the deployment secret manager and private release evidence.
 - [ ] Maximum top-up is positive and no greater than 2,000,000,000,000,000 wei.
 - [ ] Total budget is at least the maximum top-up, no greater than 1,000,000,000,000,000,000 wei, and below the
       wallet's funded balance after a deliberate safety margin.
-- [ ] Privy app secret, projection database URL/CA/role, and the committed independent dRPC/QuickNode pair are present
+- [ ] Privy app secret, projection database URL/CA/role, and the migration-only committed independent dRPC/Alchemy pair are present
       and remain server-only.
 
 ## Wallet policy

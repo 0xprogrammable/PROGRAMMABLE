@@ -33,7 +33,8 @@ import {
   MAIN_TOKEN_TOTAL_SUPPLY_RAW,
   parseMainTokenMigrationPermitSignature,
 } from "@/lib/main-token-migration";
-import { tradeActionRpcProviders } from "./action-rpc-quorum.server";
+import { mainTokenMigrationRpcProviders } from
+  "./main-token-migration-rpc-quorum.server";
 import {
   createPrivyWalletPrincipalAuthenticatorV1,
   WalletPrincipalAuthenticationErrorV1,
@@ -660,7 +661,7 @@ function assertProviderRetryWindow(
 }
 
 export function createMainTokenMigrationGaslessChainV1(
-  providers = tradeActionRpcProviders(1),
+  providers = mainTokenMigrationRpcProviders(),
 ) {
   if (providers.length !== 2) {
     throw new TypeError("Gasless migration RPC quorum is invalid");

@@ -17,6 +17,8 @@ import {
   tradeActionRpcProvider,
   tradeActionRpcProviders,
 } from "../lib/server/action-rpc-quorum.server";
+import { mainTokenMigrationRpcProviders } from
+  "../lib/server/main-token-migration-rpc-quorum.server";
 
 const ALCHEMY_MAINNET_A =
   "https://eth-mainnet.g.alchemy.com/v2/alchemy-key-one";
@@ -231,6 +233,41 @@ describe("single committed action RPC", () => {
 });
 
 describe("action-route RPC quorums", () => {
+  it("isolates migration from the shared QuickNode witness", () => {
+    const providers = mainTokenMigrationRpcProviders(
+      productionPairEnvironment({
+        PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_URL:
+          "not-a-valid-secondary",
+        PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT:
+          "not-a-commitment",
+        PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY_MAINNET_A,
+        PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT:
+          rpcProviderCommitment("endpoint", ALCHEMY_MAINNET_A),
+      }),
+    );
+
+    expectIndependent(providers);
+    expect(providers.map((provider) => provider.vendorGroup)).toEqual([
+      "drpc",
+      "alchemy",
+    ]);
+    expect(Object.keys(providers[1] ?? {})).not.toContain("endpoint");
+  });
+
+  it("fails migration closed without the exact Alchemy commitment", () => {
+    expectSafeFailure(
+      () =>
+        mainTokenMigrationRpcProviders(
+          productionPairEnvironment({
+            PROGRAMMABLE_ALCHEMY_MAINNET_RPC_URL: ALCHEMY_MAINNET_A,
+            PROGRAMMABLE_ALCHEMY_MAINNET_RPC_ENDPOINT_COMMITMENT:
+              `0x${"00".repeat(32)}`,
+          }),
+        ),
+      "alchemy-key-one",
+    );
+  });
+
   it("requires independent providers for trade preparation", () => {
     const providers = tradeActionRpcProviders(
       1,

@@ -39,7 +39,8 @@ import {
   WalletPrincipalAuthenticationErrorV1,
   type WalletPrincipalAuthenticatorV1,
 } from "./creator-article/wallet-principal.server";
-import { tradeActionRpcProviders } from "./action-rpc-quorum.server";
+import { mainTokenMigrationRpcProviders } from
+  "./main-token-migration-rpc-quorum.server";
 import { canonicalizeJson, parseStrictJson } from
   "./projection-target/canonical-json";
 import { canonicalSha256 } from "./projection-target/hashing";
@@ -1396,7 +1397,7 @@ export async function resolveMainTokenMigrationSponsorEligibilityV1(input: Reado
 }
 
 export function createMainTokenMigrationGasSponsorChainV1(
-  providers = tradeActionRpcProviders(1),
+  providers = mainTokenMigrationRpcProviders(),
 ): MainTokenMigrationGasSponsorChainV1 {
   if (providers.length !== 2) throw new TypeError("Gas sponsor RPC quorum is invalid");
   const clients: [PublicClient, PublicClient] = [
