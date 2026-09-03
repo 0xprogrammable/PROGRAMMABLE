@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 
 import {
-  ProfileSessionLoadingState,
-  ProfileView,
-} from "@/components/profile-view";
+  ProfileEntry,
+  ProfileEntryLoadingState,
+} from "@/components/profile-entry";
 
 export const metadata: Metadata = {
   title: "Profile · Programmable",
@@ -16,8 +16,8 @@ export const metadata: Metadata = {
 
 export default function ProfilePage() {
   return (
-    <Suspense fallback={<ProfileSessionLoadingState />}>
-      <ProfileView />
+    <Suspense fallback={<ProfileEntryLoadingState />}>
+      <ProfileEntry />
     </Suspense>
   );
 }
