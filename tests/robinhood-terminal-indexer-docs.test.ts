@@ -165,12 +165,14 @@ function sortJsonKeys(value: unknown): unknown {
 }
 
 describe("Robinhood terminal and indexer documentation", () => {
-  it("serves the canonical guide before the GitBook catch-all", () => {
+  it("keeps the canonical guide out of the GitBook catch-all", () => {
     const exactRewriteIndex = vercelConfig.rewrites.findIndex(
       ({ source }) => source === "/docs/developers/robinhood-terminal-indexer",
     );
     const gitBookCatchAllIndex = vercelConfig.rewrites.findIndex(
-      ({ source }) => source === "/docs/:match*",
+      ({ source }) =>
+        source ===
+        "/docs/:match((?!developers/robinhood-terminal-indexer$).*)",
     );
 
     expect(exactRewriteIndex).toBeGreaterThanOrEqual(0);
@@ -178,6 +180,11 @@ describe("Robinhood terminal and indexer documentation", () => {
     expect(vercelConfig.rewrites[exactRewriteIndex]).toEqual({
       source: "/docs/developers/robinhood-terminal-indexer",
       destination: "/developer-reference/robinhood-terminal-indexer",
+    });
+    expect(vercelConfig.rewrites[gitBookCatchAllIndex]).toEqual({
+      source:
+        "/docs/:match((?!developers/robinhood-terminal-indexer$).*)",
+      destination: "https://proxy.gitbook.site/sites/site_V93gQ/:match*",
     });
     expect(aliasSource).toContain(
       'from "@/app/docs/developers/robinhood-terminal-indexer/page"',
