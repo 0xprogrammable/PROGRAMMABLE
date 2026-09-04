@@ -163,6 +163,27 @@ jobs:
             --output "$RUNNER_TEMP/programmable-launch-v4-clean-room-evidence.json" \
             --recovery-output "$RUNNER_TEMP/programmable-launch-v4-clean-room-recovery.json"
 
+          # The same newly issued platform key must retain Ethereum V3 read access.
+          # Do not print the credential or the wallet's private launch history.
+          node --input-type=module <<'NODE'
+          let response;
+          try {
+            response = await fetch("https://api.programmable.market/v3/custom-launches", {
+              method: "GET",
+              headers: { Authorization: `Bearer ${process.env.PROGRAMMABLE_API_KEY}` },
+              redirect: "error",
+              signal: AbortSignal.timeout(30_000),
+            });
+            const valid = response.status === 200
+              && /^application\/json(?:;|$)/i.test(response.headers.get("content-type") ?? "");
+            await response.body?.cancel();
+            if (!valid) throw new Error("PLATFORM_KEY_ETHEREUM_READ_REJECTED");
+            process.stdout.write('{"platformKeyEthereumV3Read":true,"robinhoodV4WalletHandoff":true,"credentialRecorded":false}\n');
+          } catch {
+            throw new Error("PLATFORM_KEY_DUAL_CHAIN_CHECK_FAILED");
+          }
+          NODE
+
       - name: Reverify any canonical redacted recovery receipt
         id: recovery
         if: ${{ always() }}
