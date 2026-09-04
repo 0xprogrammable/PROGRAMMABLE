@@ -1395,7 +1395,7 @@ describe("Explore refresh state", () => {
     expect(getTokenCards([project])).toEqual([
       expect.objectContaining({
         id: project.id,
-        launchCategory: "Custom",
+        launchCategory: "Custom V4 Hook",
         marketStatus: "No market",
       }),
     ]);

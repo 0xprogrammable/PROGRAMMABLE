@@ -1412,7 +1412,7 @@ export function buildTokenDetailMetrics(
       label: "Category",
       value:
         token.launchStampProvenance?.kind === "custom-graph"
-          ? "Custom"
+          ? "Custom V4 Hook"
           : "Classic",
     },
     marketProvider
@@ -2660,7 +2660,7 @@ function CustomProjectDetailContent({
           <div className={styles.identityCopy}>
             <div className={styles.tokenSymbolRow}>
               {project.symbol ? <span className={styles.symbol}>${project.symbol}</span> : null}
-              <span className={styles.categoryBadge}>Custom</span>
+              <span className={styles.categoryBadge}>Custom V4 Hook</span>
             </div>
             <h1 className={styles.name}>{project.name}</h1>
             {project.links.length > 0 ? (
@@ -2722,10 +2722,10 @@ function CustomProjectDetailContent({
               <span>Market details</span>
               <h2 id="custom-market-heading">{customMarketStatus(project)}</h2>
             </div>
-            <span className={styles.categoryBadge}>Custom</span>
+            <span className={styles.categoryBadge}>Custom V4 Hook</span>
           </div>
           <dl className={styles.customFacts}>
-            <div><dt>Type</dt><dd>Custom</dd></div>
+            <div><dt>Type</dt><dd>Custom V4 Hook</dd></div>
             <div><dt>Launch model</dt><dd>{project.modelId}</dd></div>
             <div><dt>Chain</dt><dd>{getNetworkLabel(chainId)}</dd></div>
             <div><dt>Markets</dt><dd>{project.markets.length}</dd></div>

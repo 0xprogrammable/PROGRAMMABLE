@@ -7,17 +7,43 @@ vi.mock("next/headers", () => ({ cookies: vi.fn(), headers: vi.fn() }));
 import {
   INITIAL_EXPLORE_TIMEOUT_MS,
   INITIAL_EXPLORE_QUERY,
+  InitialExploreView,
   initialExploreModelFilter,
   initialExploreQuery,
   readInitialExploreWithinDeadline,
 } from "../app/explore/page";
+import { GET as readExploreResponse } from "@/app/api/explore/route";
+import { cookies, headers } from "next/headers";
 import { DEFAULT_EXPLORE_VIEW_SORT } from "../lib/explore-defaults";
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.clearAllMocks();
+  vi.unstubAllEnvs();
 });
 
 describe("Explore initial server read", () => {
+  it("retires only the website surface without reading the public Explore API", async () => {
+    vi.stubEnv("PROGRAMMABLE_WEBSITE_EXPLORE_INDEX_ENABLED", "false");
+    vi.mocked(headers).mockResolvedValue({
+      get: () => "programmable.market",
+    } as never);
+    vi.mocked(cookies).mockResolvedValue({
+      get: () => undefined,
+    } as never);
+
+    const element = await InitialExploreView({
+      searchParams: Promise.resolve({}),
+    });
+
+    expect(readExploreResponse).not.toHaveBeenCalled();
+    expect(element.props).toMatchObject({
+      indexRebuilding: true,
+      initialResponseChainId: 1,
+      initialModelFilter: "all",
+    });
+  });
+
   it("covers the API provider budget without allowing an unbounded render", () => {
     expect(INITIAL_EXPLORE_TIMEOUT_MS).toBeGreaterThan(8_000);
     expect(INITIAL_EXPLORE_TIMEOUT_MS).toBeLessThanOrEqual(9_000);

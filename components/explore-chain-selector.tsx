@@ -1,6 +1,5 @@
 "use client";
 
-import { Check, ChevronDown } from "lucide-react";
 import {
   useEffect,
   useId,
@@ -22,7 +21,7 @@ import styles from "@/components/explore-chain-selector.module.css";
 type ExploreChainOption = Readonly<{
   id: number;
   label: string;
-  mark: "ethereum" | "robinhood" | "base";
+  mark: "ethereum" | "robinhood";
   viewChainId?: ViewChainId;
   available: boolean;
 }>;
@@ -40,12 +39,6 @@ const EXPLORE_CHAIN_OPTIONS = [
     label: "Robinhood",
     mark: "robinhood",
     viewChainId: 4663,
-    available: false,
-  },
-  {
-    id: 8453,
-    label: "Base",
-    mark: "base",
     available: false,
   },
 ] as const satisfies readonly ExploreChainOption[];
@@ -73,21 +66,18 @@ function ExploreChainMark({ mark }: Readonly<{ mark: ExploreChainOption["mark"] 
     );
   }
 
-  return (
-    <span
-      className={mark === "robinhood" ? styles.robinhoodMark : styles.baseMark}
-      aria-hidden="true"
-    />
-  );
+  return <span className={styles.robinhoodMark} aria-hidden="true" />;
 }
 
-export function ExploreChainSelector() {
+export function ExploreChainSelector({
+  probeAvailability = true,
+}: Readonly<{ probeAvailability?: boolean }> = {}) {
   const { hydrated, viewChainId, setViewChainId } = useViewChain();
   const [open, setOpen] = useState(false);
   const [robinhoodAvailable, setRobinhoodAvailable] = useState(false);
   const exploreChainOptions = EXPLORE_CHAIN_OPTIONS.map((option) =>
     option.id === 4663
-      ? { ...option, available: robinhoodAvailable }
+      ? { ...option, available: probeAvailability && robinhoodAvailable }
       : option
   ) satisfies readonly ExploreChainOption[];
   const selectedViewChainId = resolveExploreChainId(viewChainId);
@@ -103,8 +93,12 @@ export function ExploreChainSelector() {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const selected = exploreChainOptions[selectedIndex]!;
+  const alternateOptions = exploreChainOptions.filter(
+    (option) => option.id !== selected.id,
+  );
 
   useEffect(() => {
+    if (!probeAvailability) return;
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 5_000);
     void fetch("/api/explore?chain=4663&limit=1&page=1&q=&sort=newest", {
@@ -119,7 +113,7 @@ export function ExploreChainSelector() {
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, []);
+  }, [probeAvailability]);
 
   useEffect(() => {
     if (!open) return;
@@ -139,7 +133,7 @@ export function ExploreChainSelector() {
     if (open) optionRefs.current[activeIndex]?.focus();
   }, [activeIndex, open]);
 
-  function openListbox(index = selectedIndex) {
+  function openListbox(index = 0) {
     setActiveIndex(index);
     setOpen(true);
   }
@@ -163,25 +157,24 @@ export function ExploreChainSelector() {
   ) {
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActiveIndex((index + 1) % exploreChainOptions.length);
+      setActiveIndex((index + 1) % alternateOptions.length);
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setActiveIndex(
-        (index - 1 + exploreChainOptions.length) %
-          exploreChainOptions.length,
+        (index - 1 + alternateOptions.length) % alternateOptions.length,
       );
     } else if (event.key === "Home") {
       event.preventDefault();
       setActiveIndex(0);
     } else if (event.key === "End") {
       event.preventDefault();
-      setActiveIndex(exploreChainOptions.length - 1);
+      setActiveIndex(alternateOptions.length - 1);
     } else if (event.key === "Escape") {
       event.preventDefault();
       closeListbox();
     } else if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      const option = exploreChainOptions[index];
+      const option = alternateOptions[index];
       if (option) selectChain(option);
     }
   }
@@ -217,10 +210,10 @@ export function ExploreChainSelector() {
         onKeyDown={(event) => {
           if (event.key === "ArrowDown") {
             event.preventDefault();
-            openListbox(selectedIndex);
+            openListbox();
           } else if (event.key === "ArrowUp") {
             event.preventDefault();
-            openListbox(exploreChainOptions.length - 1);
+            openListbox(alternateOptions.length - 1);
           } else if (event.key === "Escape" && open) {
             event.preventDefault();
             closeListbox();
@@ -228,8 +221,6 @@ export function ExploreChainSelector() {
         }}
       >
         <ExploreChainMark mark={selected.mark} />
-        <span>{selected.label}</span>
-        <ChevronDown className={styles.chevron} aria-hidden="true" size={15} />
       </button>
 
       {open ? (
@@ -239,41 +230,31 @@ export function ExploreChainSelector() {
           role="listbox"
           aria-label="Explore chains"
         >
-          {exploreChainOptions.map((option, index) => {
-            const current = option.id === selectedViewChainId;
-            return (
+          {alternateOptions.map((option, index) => (
               <button
                 key={option.id}
                 ref={(element) => {
                   optionRefs.current[index] = element;
                 }}
-                className={`${styles.option} ${
-                  current ? styles.optionCurrent : ""
-                }`}
+                className={styles.option}
                 type="button"
                 role="option"
-                aria-selected={current}
+                aria-selected={false}
                 aria-disabled={!option.available || undefined}
+                aria-label={option.available
+                  ? `Switch Explore to ${option.label}`
+                  : `${option.label} coming soon`}
+                title={option.available
+                  ? option.label
+                  : `${option.label} · Coming soon`}
                 data-active={activeIndex === index ? "true" : "false"}
                 tabIndex={activeIndex === index ? 0 : -1}
                 onClick={() => selectChain(option)}
                 onKeyDown={(event) => handleOptionKeyDown(event, index)}
               >
                 <ExploreChainMark mark={option.mark} />
-                <span className={styles.optionCopy}>
-                  <span>{option.label}</span>
-                  {!option.available ? (
-                    <span className={styles.optionStatus}>Coming soon</span>
-                  ) : null}
-                </span>
-                {current ? (
-                  <Check className={styles.check} aria-hidden="true" size={16} />
-                ) : (
-                  <span className={styles.checkPlaceholder} aria-hidden="true" />
-                )}
               </button>
-            );
-          })}
+          ))}
         </div>
       ) : null}
     </div>

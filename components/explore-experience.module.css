@@ -1106,6 +1106,10 @@
   gap: 10px;
 }
 
+.chainControl {
+  flex: none;
+}
+
 .runnersIntro :global(.token-search),
 .runnersIntro :global(.token-filter summary),
 .runnersIntro :global(.token-pagination) {
@@ -1249,7 +1253,7 @@
 }
 
 .runnerBody {
-  min-height: 118px;
+  min-height: 82px;
   padding: 18px 18px 14px;
 }
 
@@ -1478,9 +1482,9 @@
     display: grid;
     gap: 8px;
     grid-template-areas:
-      "search search"
-      "pages sort";
-    grid-template-columns: minmax(0, 1fr) auto;
+      "search search search"
+      "pages chain sort";
+    grid-template-columns: minmax(0, 1fr) auto auto;
   }
 
   .runnersIntro :global(.token-search) {
@@ -1491,6 +1495,11 @@
 
   .runnersIntro :global(.token-filter) {
     grid-area: sort;
+    justify-self: end;
+  }
+
+  .chainControl {
+    grid-area: chain;
     justify-self: end;
   }
 
@@ -1653,7 +1662,7 @@
   }
 
   .runnersIntro :global(.token-toolbar) {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
   }
 
   .runnersIntro :global(.token-filter summary) {

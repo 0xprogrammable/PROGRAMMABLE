@@ -23,6 +23,10 @@ type WalletProviderContract = {
     ready: boolean,
     authenticated: boolean,
   ) => "wait" | "login" | "manage";
+  getWalletOpenAction: (
+    sessionAction: "wait" | "login" | "manage",
+    hasWallet: boolean,
+  ) => "wait" | "login" | "link" | "manage";
   isWalletProviderSettled: (
     privyReady: boolean,
     walletsReady: boolean,
@@ -612,6 +616,14 @@ describe("wallet recovery state", () => {
     expect(subject.getWalletSessionAction(false, false)).toBe("wait");
     expect(subject.getWalletSessionAction(true, false)).toBe("login");
     expect(subject.getWalletSessionAction(true, true)).toBe("manage");
+  });
+
+  it("opens Privy directly when an authenticated session still needs a wallet", () => {
+    expect(subject.getWalletOpenAction).toBeTypeOf("function");
+    expect(subject.getWalletOpenAction("wait", false)).toBe("wait");
+    expect(subject.getWalletOpenAction("login", false)).toBe("login");
+    expect(subject.getWalletOpenAction("manage", false)).toBe("link");
+    expect(subject.getWalletOpenAction("manage", true)).toBe("manage");
   });
 
   it("does not block login while the unauthenticated wallet list is still loading", () => {

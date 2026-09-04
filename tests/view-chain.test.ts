@@ -133,19 +133,25 @@ describe("view chain", () => {
 
     expect(navigation).not.toContain("HeaderChainToggle");
     expect(navigation).not.toContain("switchNetwork");
-    expect(explore).toContain("<ExploreChainSelector />");
+    expect(explore).toContain("<ExploreChainSelector");
+    expect(explore).toContain("probeAvailability={!indexRebuilding}");
     expect(selector).toContain('aria-haspopup="listbox"');
     expect(selector).toContain('role="listbox"');
     expect(selector).toContain('role="option"');
     expect(selector).toContain('label: "Ethereum"');
     expect(selector).toContain('label: "Robinhood"');
-    expect(selector).toContain('label: "Base"');
-    expect(selector.match(/available: false/gu)).toHaveLength(2);
+    expect(selector).not.toContain('label: "Base"');
+    expect(selector.match(/available: false/gu)).toHaveLength(1);
+    expect(selector).toContain("alternateOptions.map");
+    expect(selector).toContain("if (!probeAvailability) return;");
+    expect(selector).not.toContain("<span>{selected.label}</span>");
     expect(selector).toContain("setViewChainId(option.viewChainId)");
     expect(selector).not.toContain("useWallet");
     expect(selector).not.toContain("switchNetwork");
     expect(styles).toContain("/brand/networks/robinhood-feather-white.svg");
-    expect(styles).toMatch(/\.trigger\s*\{[^}]*min-height:\s*44px;/s);
+    expect(styles).toMatch(
+      /\.trigger\s*\{[^}]*min-height:\s*44px;[^}]*width:\s*44px;/s,
+    );
     expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
   });
 });

@@ -29,6 +29,8 @@ describe("Explore UI contract", () => {
     expect(page).toContain("requestCookies.get(VIEW_CHAIN_COOKIE_NAME)");
     expect(page).toContain("resolveExploreChainId(");
     expect(page).toContain("initialExploreQuery(modelFilter, viewChainId)");
+    expect(page).toContain("if (!websiteExploreIndexEnabledV1())");
+    expect(page).toContain("indexRebuilding");
     expect(source).toContain("hydrated: viewChainReady");
     expect(source).toContain("viewChainId: resolvedViewChainId");
     expect(source).toContain("resolveExploreChainId(hydratedViewChainId)");
@@ -63,10 +65,16 @@ describe("Explore UI contract", () => {
     expect(source).toContain("inert={loadingOnly ? true : undefined}");
     expect(source).toContain('const Heading = embedded ? "h2" : "h1"');
     expect(source).toContain("<Heading data-explore-heading>Explore</Heading>");
-    expect(source).toContain("!embedded ? <ExploreChainSelector /> : null");
-    expect(source.indexOf("<ExploreChainSelector />")).toBeLessThan(
-      source.indexOf('id="tokens"'),
+    expect(source).toContain("<ExploreChainSelector");
+    expect(source).toContain("probeAvailability={!indexRebuilding}");
+    expect(source.indexOf("<ExploreChainSelector")).toBeGreaterThan(
+      source.indexOf('className="token-search liquid-glass-control"'),
     );
+    expect(source.indexOf("<ExploreChainSelector")).toBeLessThan(
+      source.indexOf("<details"),
+    );
+    expect(source).toContain("indexRebuilding ||\n      preview ||");
+    expect(source).toContain("const displayState: ExploreState = indexRebuilding");
     expect(source).not.toContain("ExploreModeSwitch");
     expect(source).toContain("const eagerImage = !embedded");
     expect(source).toContain("onPointerEnter={() => router.prefetch(href)}");
@@ -158,15 +166,15 @@ describe("Explore UI contract", () => {
     );
 
     expect(source).toContain('id="explore-model-label"');
-    expect(source).toContain('id="explore-discovery-label"');
-    expect(source).toContain('id="explore-valuation-label"');
+    expect(source).not.toContain('id="explore-discovery-label"');
+    expect(source).not.toContain('id="explore-valuation-label"');
     expect(source).toContain('id="explore-age-label"');
     expect(source).toContain('id="explore-socials-label"');
     expect(source).toContain('{ id: "classic", label: "Classic" }');
-    expect(source).toContain('{ id: "custom-hook", label: "Custom" }');
-    expect(source).toContain('>Trending</span>');
+    expect(source).toContain(
+      '{ id: "custom-hook", label: "Custom V4 Hook" }',
+    );
     expect(source).toContain('sort,\n      page: String(currentPage)');
-    expect(source).toContain('aria-label={viewChainId === 1');
     expect(source).toContain(
       'valuationSort !== DEFAULT_EXPLORE_VALUATION_SORT',
     );
@@ -175,24 +183,17 @@ describe("Explore UI contract", () => {
     expect(source).toContain("<span>Filters</span>");
     expect(source).toContain("activeFilterCount > 0");
     expect(source.indexOf('id="explore-model-label"')).toBeLessThan(
-      source.indexOf('id="explore-valuation-label"'),
-    );
-    expect(source.indexOf('id="explore-valuation-label"')).toBeLessThan(
       source.indexOf('id="explore-age-label"'),
     );
     expect(source.indexOf('id="explore-age-label"')).toBeLessThan(
       source.indexOf('id="explore-socials-label"'),
     );
-    expect(source).toContain("valuationSortOptions.map((option) => (");
+    expect(source).not.toContain("valuationSortOptions.map((option) => (");
     expect(source).toContain("ageSortOptions.map((option) => (");
     expect(source).toContain("resolveExploreSortSelectionsForChain(");
     expect(source).toContain(
-      "aria-pressed={valuationSortForChain === option.id}",
-    );
-    expect(source).toContain(
       "aria-pressed={ageSortForChain === option.id}",
     );
-    expect(source).toMatch(/disabled=\{viewChainId === 4663\}/u);
     expect(source).toMatch(
       /disabled=\{viewChainId === 4663 &&\s+option\.id === "oldest"\}/u,
     );
@@ -203,7 +204,6 @@ describe("Explore UI contract", () => {
     expect(source).toContain(
       "if (viewChainId === 1) {\n                                setDiscoverySort(\"none\");",
     );
-    expect(source).toContain("setValuationSort((current) =>");
     expect(source).toContain("setAgeSort((current) =>");
     expect(source).toContain('search.set(\n        "model",');
     expect(source).toContain(
@@ -262,7 +262,7 @@ describe("Explore UI contract", () => {
     );
     expect(styles).toMatch(/\.runnerMeta\s*\{[^}]*gap:\s*4px;/s);
     expect(styles).toMatch(
-      /@media \(max-width: 700px\)[\s\S]*?grid-template-areas:[\s\S]*?"search search"[\s\S]*?"pages sort";/s,
+      /@media \(max-width: 700px\)[\s\S]*?grid-template-areas:[\s\S]*?"search search search"[\s\S]*?"pages chain sort";/s,
     );
     expect(styles).toMatch(
       /@media \(max-width: 700px\)[\s\S]*?\.runnerGrid\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/s,
@@ -303,12 +303,8 @@ describe("Explore UI contract", () => {
       /\.runnerImagePreserved\s*\{[^}]*object-fit:\s*contain;[^}]*object-position:\s*center;/s,
     );
     expect(source).not.toContain("<small>CA</small>");
-    expect(source).toContain("title={token.valuationProvider");
-    expect(source).toContain(
-      "`Fully diluted valuation from ${token.valuationProvider}`",
-    );
-    expect(source).toContain("FDV{token.valuationProvider");
-    expect(source).toContain("` · ${token.valuationProvider}`");
+    expect(source).not.toContain("<AnimatedMarketCap");
+    expect(source).not.toContain("FDV{token.valuationProvider");
     expect(source).toContain("formatExploreContractAddress(token.tokenAddress)");
     expect(source).toContain(
       '`/token/${token.tokenAddress}?chain=${viewChainId}`',
@@ -318,9 +314,6 @@ describe("Explore UI contract", () => {
     );
     expect(styles).toMatch(
       /@media \(max-width: 700px\)[\s\S]*?\.runnerHeading > span\s*\{[^}]*font-size:\s*12px;[\s\S]*?\.runnerData small\s*\{[^}]*font-size:\s*12px;[\s\S]*?\.runnerCategory,[\s\S]*?font-size:\s*12px;[\s\S]*?\.runnerContract code\s*\{[^}]*font-size:\s*12px;/s,
-    );
-    expect(source).toMatch(
-      /<small[\s\S]*?title=\{token\.valuationProvider[\s\S]*?FDV\{token\.valuationProvider[\s\S]*?<\/small>[\s\S]*?<AnimatedMarketCap[\s\S]*?replayKey=\{token\.id\}[\s\S]*?token\.marketStatus \?\? "Unavailable"/,
     );
     expect(source).not.toContain(
       "exploreUnavailableFdvLabel(token.marketStatus)",
@@ -375,7 +368,7 @@ describe("Explore UI contract", () => {
     );
     expect(source).toContain('className="sr-only"');
     expect(styles).not.toContain(".resultLabel");
-    expect(source).toContain('return "Explore unavailable"');
+    expect(source).toContain('return "Launch index rebuilding"');
     expect(source).not.toContain("Market data is temporarily unavailable");
     expect(source).not.toContain("Loading tokens");
     expect(source).not.toContain("Updating tokens");

@@ -22,10 +22,7 @@ import {
   useSyncExternalStore,
 } from "react";
 
-import {
-  AnimatedMarketCap,
-  type MarketCapMetric,
-} from "@/components/animated-market-cap";
+import type { MarketCapMetric } from "@/components/animated-market-cap";
 import { XBrandIcon } from "@/components/brand-icons";
 import { ExploreChainSelector } from "@/components/explore-chain-selector";
 import { EXPLORE_PREVIEW_TOKENS } from "@/components/explore-preview-data";
@@ -100,7 +97,7 @@ type TokenCard = {
   marketStatus?: ExploreMarketStatus;
   usesFallbackImage: boolean;
   tokenAddress?: `0x${string}`;
-  launchCategory: "Classic" | "Custom";
+  launchCategory: "Classic" | "Custom V4 Hook";
   partnerAttribution?: LaunchPartnerAttributionV1;
 };
 
@@ -795,13 +792,6 @@ const fallbackTokenImages = [
   "/brand/programmable-token-card-fallback-night-garden-05.webp",
   "/brand/programmable-token-card-fallback-night-garden-06.webp",
 ] as const;
-const valuationSortOptions: {
-  id: Exclude<ExploreValuationSort, "none">;
-  label: string;
-}[] = [
-  { id: "highest", label: "Highest" },
-  { id: "lowest", label: "Lowest" },
-];
 const ageSortOptions: {
   id: Exclude<ExploreAgeSort, "none">;
   label: string;
@@ -821,7 +811,7 @@ const modelFilterOptions: {
   label: string;
 }[] = [
   { id: "classic", label: "Classic" },
-  { id: "custom-hook", label: "Custom" },
+  { id: "custom-hook", label: "Custom V4 Hook" },
 ];
 
 export function exploreActiveSelectionState({
@@ -847,7 +837,7 @@ export function exploreActiveSelectionState({
     modelFilter === "classic"
       ? "Classic"
       : modelFilter === "custom-hook"
-        ? "Custom"
+        ? "Custom V4 Hook"
         : null,
     discoverySort === "trending" ? "Trending" : null,
     valuationSort !== "none" &&
@@ -3313,7 +3303,7 @@ export function getTokenCards(
       launchCategory:
         token.launchCategoryProvenance.category === "classic"
           ? "Classic"
-          : "Custom",
+          : "Custom V4 Hook",
       ...(token.partnerAttribution
         ? { partnerAttribution: token.partnerAttribution }
         : {}),
@@ -3410,7 +3400,7 @@ function ExploreGridSkeleton({ count }: Readonly<{ count: number }>) {
 
 function resultRangeLabel(payload: ExplorePayload | null) {
   if (!payload) return "Loading launch index";
-  if (payload.status === "not-deployed") return "Explore unavailable";
+  if (payload.status === "not-deployed") return "Launch index rebuilding";
   if (payload.total === 0) return "0 launches";
 
   const start = (payload.page - 1) * payload.pageSize + 1;
@@ -3424,12 +3414,14 @@ export function ExploreView({
   initialResponse,
   initialResponseChainId,
   initialModelFilter = "all",
+  indexRebuilding = false,
   loadingOnly = false,
   embedded = false,
 }: Readonly<{
   initialResponse?: ExploreInitialResponse;
   initialResponseChainId?: ViewChainId;
   initialModelFilter?: ExploreModelFilter;
+  indexRebuilding?: boolean;
   loadingOnly?: boolean;
   embedded?: boolean;
 }> = {}) {
@@ -3640,6 +3632,7 @@ export function ExploreView({
 
   useEffect(() => {
     if (
+      indexRebuilding ||
       preview ||
       loadingOnly ||
       isInterfacePreviewHost(window.location.hostname)
@@ -3682,10 +3675,11 @@ export function ExploreView({
       window.removeEventListener("online", syncScheduler);
       window.removeEventListener("offline", syncScheduler);
     };
-  }, [activeRequestContentKey, loadingOnly, pageSize, preview]);
+  }, [activeRequestContentKey, indexRebuilding, loadingOnly, pageSize, preview]);
 
   useEffect(() => {
     if (
+      indexRebuilding ||
       preview ||
       loadingOnly ||
       (typeof window !== "undefined" &&
@@ -3860,6 +3854,7 @@ export function ExploreView({
     activeInitialResponse,
     initialModelFilter,
     initialState,
+    indexRebuilding,
     loadingOnly,
     preview,
     revalidationKey,
@@ -3916,14 +3911,28 @@ export function ExploreView({
       state.contentKey.startsWith(`${chainContentKey}\u0000`)
       ? state
       : { phase: "loading" };
-  const displayState: ExploreState = preview
+  const displayState: ExploreState = indexRebuilding
     ? {
+        phase: "ready",
+        payload: {
+          status: "not-deployed",
+          tokens: [],
+          page: 1,
+          pageSize,
+          total: 0,
+          totalPages: 0,
+        },
+        requestKey,
+        contentKey,
+      }
+    : preview
+      ? {
         phase: "ready",
         payload: previewPayload,
         requestKey,
         contentKey,
       }
-    : activeChainState;
+      : activeChainState;
 
   const payload = displayState.phase === "ready" ? displayState.payload : null;
   const cards = useMemo(
@@ -3952,7 +3961,7 @@ export function ExploreView({
   const resultLabel =
     displayState.phase === "error" ? "" : resultRangeLabel(payload);
   const busy =
-    !preview &&
+    !preview && !indexRebuilding &&
     (displayState.phase === "loading" ||
       displayState.requestKey !== requestKey);
   const {
@@ -4027,12 +4036,12 @@ export function ExploreView({
             <h2>
               {viewChainId === 4663
                 ? "Robinhood Explore is not active yet"
-                : "Explore is getting ready"}
+                : "Launch indexing is being rebuilt"}
             </h2>
             <p>
               {viewChainId === 4663
                 ? "The Robinhood Explore and indexing lane is not available yet."
-                : "The launch index is not available in this environment yet."}
+                : "Programmable launches will return here after the new index is ready."}
             </p>
           </div>
         </div>
@@ -4156,27 +4165,6 @@ export function ExploreView({
                   <h3 title={token.name}>{token.name}</h3>
                   {token.symbol ? <span>${token.symbol}</span> : null}
                 </header>
-                <div className={styles.runnerData}>
-                  <span>
-                    <small
-                      title={token.valuationProvider
-                        ? `Fully diluted valuation from ${token.valuationProvider}`
-                        : "Fully diluted valuation"}
-                    >
-                      FDV{token.valuationProvider
-                        ? ` · ${token.valuationProvider}`
-                        : ""}
-                    </small>
-                    {token.valuation ? (
-                      <AnimatedMarketCap
-                        metric={token.valuation}
-                        replayKey={token.id}
-                      />
-                    ) : (
-                      <strong>{token.marketStatus ?? "Unavailable"}</strong>
-                    )}
-                  </span>
-                </div>
               </div>
             </>
           );
@@ -4281,7 +4269,6 @@ export function ExploreView({
         <header className={styles.pageHeading}>
           <div className={styles.titleRow}>
             <Heading data-explore-heading>Explore</Heading>
-            {!embedded ? <ExploreChainSelector /> : null}
           </div>
         </header>
 
@@ -4291,7 +4278,7 @@ export function ExploreView({
           aria-busy={busy}
         >
           <div className={styles.runnersIntro}>
-            {hasPublicTokens ? (
+            {hasPublicTokens || !embedded ? (
               <div className="token-section-heading">
                 <ResultsHeading className="sr-only">Launches</ResultsHeading>
                 <div
@@ -4331,6 +4318,14 @@ export function ExploreView({
                       </button>
                     ) : null}
                   </div>
+
+                  {!embedded ? (
+                    <div className={styles.chainControl}>
+                      <ExploreChainSelector
+                        probeAvailability={!indexRebuilding}
+                      />
+                    </div>
+                  ) : null}
 
                   <details
                     className="token-filter"
@@ -4397,87 +4392,6 @@ export function ExploreView({
                           >
                             <span>{option.label}</span>
                             {modelFilter === option.id ? (
-                              <Check aria-hidden="true" size={15} />
-                            ) : null}
-                          </button>
-                        ))}
-                      </div>
-
-                      <div
-                        className={styles.filterGroup}
-                        role="group"
-                        aria-labelledby="explore-discovery-label"
-                      >
-                        <p
-                          className={styles.filterLabel}
-                          id="explore-discovery-label"
-                        >
-                          Discovery
-                        </p>
-                        <button
-                          className={
-                            discoverySortForChain === "trending"
-                              ? "active"
-                              : undefined
-                          }
-                          type="button"
-                          aria-label={viewChainId === 1
-                            ? "Rank launches by GMGN Trending"
-                            : "Trending is available on Ethereum only"}
-                          aria-pressed={discoverySortForChain === "trending"}
-                          disabled={viewChainId !== 1}
-                          onClick={() => {
-                            setDiscoverySort((current) =>
-                              current === "trending" ? "none" : "trending"
-                            );
-                            setValuationSort(DEFAULT_EXPLORE_VALUATION_SORT);
-                            setAgeSort("none");
-                            setCurrentPage(1);
-                          }}
-                        >
-                          <span>Trending</span>
-                          {discoverySortForChain === "trending" ? (
-                            <Check aria-hidden="true" size={15} />
-                          ) : null}
-                        </button>
-                      </div>
-
-                      <div
-                        className={styles.filterGroup}
-                        role="group"
-                        aria-labelledby="explore-valuation-label"
-                      >
-                        <p
-                          className={styles.filterLabel}
-                          id="explore-valuation-label"
-                          title="GMGN market cap with FDV fallback for unmatched launches"
-                        >
-                          Market cap
-                        </p>
-                        {valuationSortOptions.map((option) => (
-                          <button
-                            key={option.id}
-                            className={
-                              valuationSortForChain === option.id
-                                ? "active"
-                                : undefined
-                            }
-                            type="button"
-                            aria-label={viewChainId === 4663
-                              ? `${option.label} market cap is available on Ethereum only`
-                              : `${option.label} market cap`}
-                            aria-pressed={valuationSortForChain === option.id}
-                            disabled={viewChainId === 4663}
-                            onClick={() => {
-                              setValuationSort((current) =>
-                                current === option.id ? "none" : option.id,
-                              );
-                              setDiscoverySort("none");
-                              setCurrentPage(1);
-                            }}
-                          >
-                            <span>{option.label}</span>
-                            {valuationSortForChain === option.id ? (
                               <Check aria-hidden="true" size={15} />
                             ) : null}
                           </button>

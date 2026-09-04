@@ -136,7 +136,7 @@ export function LaunchModelPicker({
         <span
           className={`launch-model-card-heading ${launchExperience.modelHeading}`}
         >
-          <strong id="launch-model-custom-title">Custom</strong>
+          <strong id="launch-model-custom-title">Custom V4 Hook</strong>
           <small data-status="pending">Preflight required</small>
         </span>
         <span
@@ -149,7 +149,7 @@ export function LaunchModelPicker({
         <span
           className={`launch-model-action ${launchExperience.modelAction}`}
         >
-          Open Custom launch
+          Open Custom V4 Hook
           <ArrowRight aria-hidden="true" size={16} />
         </span>
       </span>
@@ -176,7 +176,7 @@ export function LaunchModelPicker({
           disabled={!classicV3LaunchAvailable || preparingModel !== null}
           aria-busy={preparingModel === "classic-v3"}
           aria-labelledby="launch-model-classic-title"
-          aria-describedby="launch-model-classic-description"
+          aria-describedby="launch-model-classic-description launch-model-classic-status"
           onPointerEnter={
             classicV3LaunchAvailable ? preloadAvailableForm : undefined
           }
@@ -215,9 +215,12 @@ export function LaunchModelPicker({
               className={`launch-model-card-heading ${launchExperience.modelHeading}`}
             >
               <strong id="launch-model-classic-title">Classic</strong>
-              {!classicV3LaunchAvailable ? (
-                <small data-status="pending">Unavailable</small>
-              ) : null}
+              <small
+                id="launch-model-classic-status"
+                data-status={classicV3LaunchAvailable ? "ready" : "pending"}
+              >
+                {classicV3LaunchAvailable ? "Ethereum only" : "Unavailable"}
+              </small>
             </span>
             <span
               className={`launch-model-description ${launchExperience.modelDescription}`}
