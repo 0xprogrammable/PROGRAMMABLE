@@ -22,7 +22,7 @@ const resourceLinks = [
     external: true,
   },
   {
-    href: "https://dexscreener.com/ethereum/0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0",
+    href: "https://dexscreener.com/robinhood/0x3df16f271060e4941c0386047def159f42e629dc0455db623c5b363eeacbcc1d",
     label: "DEX Screener",
     external: true,
   },

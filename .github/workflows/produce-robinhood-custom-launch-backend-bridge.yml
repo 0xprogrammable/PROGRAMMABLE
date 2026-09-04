@@ -1,0 +1,585 @@
+name: Produce Robinhood custom-launch backend bridge
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_production_commit:
+        description: Exact current protected production commit
+        required: true
+        type: string
+      phase_a_import_commit:
+        description: Exact protected production commit that imported Phase A
+        required: true
+        type: string
+      confirmation:
+        description: Must equal PRODUCE ROBINHOOD CUSTOM-LAUNCH BACKEND BRIDGE
+        required: true
+        type: string
+  push:
+    branches:
+      - production
+    paths:
+      - release/robinhood-chain-4663/programmable-postdeployment-capture.json
+      - release/robinhood-chain-4663/programmable-postdeployment-capture.attestation.json
+      - release/robinhood-chain-4663/programmable-stage-bundle.json
+      - release/robinhood-chain-4663/programmable-stage-bundle.attestation.json
+      - release/robinhood-chain-4663/production-verify-proof.json
+      - release/robinhood-chain-4663/production-verify-proof.attestation.json
+      - release/robinhood-chain-4663/production-verify-coordinates.json
+
+permissions:
+  contents: read
+
+concurrency:
+  group: robinhood-custom-launch-backend-bridge
+  cancel-in-progress: false
+
+jobs:
+  produce:
+    name: Produce exact backend bridge
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: production
+    permissions:
+      contents: read
+
+    steps:
+      - name: Reject unauthorized producer context
+        env:
+          ACTOR: ${{ github.actor }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: |
+          set -euo pipefail
+          test "$REPOSITORY_ID" = "1314365508"
+          case "$GITHUB_EVENT_NAME" in
+            push|workflow_dispatch) ;;
+            *) exit 1 ;;
+          esac
+          test "$GITHUB_REF" = "refs/heads/production"
+          test "$GITHUB_REF_PROTECTED" = "true"
+          test "$ACTOR" = "$TRIGGERING_ACTOR"
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$RUNNER_ENVIRONMENT" = "github-hosted"
+
+      - name: Check out exact protected production commit
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+          lfs: false
+          submodules: false
+
+      - name: Bind detached checkout to protected origin production
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$RUNNER_ENVIRONMENT" = "github-hosted"
+          askpass="$RUNNER_TEMP/programmable-backend-bridge-git-askpass"
+          trap 'rm -f -- "$askpass"' EXIT
+          cat > "$askpass" <<'EOF'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' 'x-access-token' ;;
+            *Password*) printf '%s\n' "$GH_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          EOF
+          chmod 700 "$askpass"
+          GIT_ASKPASS="$askpass" GIT_TERMINAL_PROMPT=0 git fetch --no-tags --prune origin \
+            +refs/heads/production:refs/remotes/origin/production
+          rm -f -- "$askpass"
+          test "$(git rev-parse HEAD^{commit})" = "$GITHUB_SHA"
+          test "$(git rev-parse refs/remotes/origin/production^{commit})" = "$GITHUB_SHA"
+          test "$GITHUB_REF" = "refs/heads/production"
+          test "$GITHUB_REF_PROTECTED" = "true"
+          test "$GITHUB_WORKFLOW_SHA" = "$GITHUB_SHA"
+          test "$GITHUB_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/produce-robinhood-custom-launch-backend-bridge.yml@$GITHUB_REF"
+          test -z "$(git symbolic-ref -q HEAD || true)"
+          test "$(git remote get-url origin)" = "https://github.com/$GITHUB_REPOSITORY"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          local_tree="$(git rev-parse HEAD^{tree})"
+          api_commit="$(gh api \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/$GITHUB_REPOSITORY/git/ref/heads/production" \
+            --jq '.object.sha')"
+          api_tree="$(gh api \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/$GITHUB_REPOSITORY/git/commits/$api_commit" \
+            --jq '.tree.sha')"
+          test "$api_commit" = "$GITHUB_SHA"
+          test "$api_tree" = "$local_tree"
+
+      - name: Set up exact Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24.14.0
+
+      - name: Install exact dependency closure without credentials
+        run: |
+          set -euo pipefail
+          npm install --global npm@11.16.0 --ignore-scripts --no-audit --no-fund
+          test "$(node --version)" = "v24.14.0"
+          test "$(npm --version)" = "11.16.0"
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+            if (pkg.packageManager !== "npm@11.16.0") throw new Error("toolchain drift");
+          '
+          npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Validate exact Phase A import and portable coordinates
+        id: validate
+        env:
+          EXPECTED_PRODUCTION_COMMIT_INPUT: ${{ inputs.expected_production_commit }}
+          PHASE_A_IMPORT_COMMIT_INPUT: ${{ inputs.phase_a_import_commit }}
+          PRODUCTION_CONFIRMATION_INPUT: ${{ inputs.confirmation }}
+          PUSH_AFTER: ${{ github.event.after }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_CREATED: ${{ github.event.created }}
+          PUSH_DELETED: ${{ github.event.deleted }}
+          PUSH_FORCED: ${{ github.event.forced }}
+        run: |
+          set -euo pipefail
+          phase_a_paths=(
+            "release/robinhood-chain-4663/programmable-postdeployment-capture.json"
+            "release/robinhood-chain-4663/programmable-postdeployment-capture.attestation.json"
+            "release/robinhood-chain-4663/programmable-stage-bundle.json"
+            "release/robinhood-chain-4663/programmable-stage-bundle.attestation.json"
+            "release/robinhood-chain-4663/production-verify-proof.json"
+            "release/robinhood-chain-4663/production-verify-proof.attestation.json"
+            "release/robinhood-chain-4663/production-verify-coordinates.json"
+          )
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            EXPECTED_PRODUCTION_COMMIT="$GITHUB_SHA"
+            PHASE_A_IMPORT_COMMIT="$PUSH_AFTER"
+            [[ "$PUSH_BEFORE" =~ ^[0-9a-f]{40}$ ]]
+            [[ "$PUSH_AFTER" =~ ^[0-9a-f]{40}$ ]]
+            test "$PUSH_BEFORE" != "0000000000000000000000000000000000000000"
+            test "$PUSH_AFTER" != "0000000000000000000000000000000000000000"
+            test "$PUSH_AFTER" = "$GITHUB_SHA"
+            test "$PUSH_CREATED" = "false"
+            test "$PUSH_DELETED" = "false"
+            test "$PUSH_FORCED" = "false"
+          else
+            test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+            test "$PRODUCTION_CONFIRMATION_INPUT" = "PRODUCE ROBINHOOD CUSTOM-LAUNCH BACKEND BRIDGE"
+            EXPECTED_PRODUCTION_COMMIT="$EXPECTED_PRODUCTION_COMMIT_INPUT"
+            PHASE_A_IMPORT_COMMIT="$PHASE_A_IMPORT_COMMIT_INPUT"
+          fi
+          [[ "$EXPECTED_PRODUCTION_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$PHASE_A_IMPORT_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          test "$EXPECTED_PRODUCTION_COMMIT" = "$GITHUB_SHA"
+          git cat-file -e "${PHASE_A_IMPORT_COMMIT}^{commit}"
+          git merge-base --is-ancestor "$PHASE_A_IMPORT_COMMIT" "$GITHUB_SHA"
+          first_parent_match="$(git rev-list --first-parent "$GITHUB_SHA" |
+            grep -Fx -- "$PHASE_A_IMPORT_COMMIT")"
+          test "$first_parent_match" = "$PHASE_A_IMPORT_COMMIT"
+          read -r -a import_line <<< "$(git rev-list --parents -n 1 "$PHASE_A_IMPORT_COMMIT")"
+          test "${#import_line[@]}" = "2"
+          test "${import_line[0]}" = "$PHASE_A_IMPORT_COMMIT"
+          PHASE_A_PARENT_COMMIT="${import_line[1]}"
+          [[ "$PHASE_A_PARENT_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            test "$PUSH_BEFORE" = "$PHASE_A_PARENT_COMMIT"
+            test "$(git rev-parse "${GITHUB_SHA}^1")" = "$PHASE_A_PARENT_COMMIT"
+          fi
+          mapfile -t expected_diff < <(
+            printf 'M\t%s\n' "${phase_a_paths[@]}" | LC_ALL=C sort
+          )
+          actual_diff_text="$(git diff --name-status --no-renames \
+            "$PHASE_A_PARENT_COMMIT" "$PHASE_A_IMPORT_COMMIT" | LC_ALL=C sort)"
+          mapfile -t actual_diff <<< "$actual_diff_text"
+          test "${#actual_diff[@]}" = "${#expected_diff[@]}"
+          for index in "${!expected_diff[@]}"; do
+            test "${actual_diff[$index]}" = "${expected_diff[$index]}"
+          done
+          for relative in "${phase_a_paths[@]}"; do
+            parent_entry="$(git ls-tree "$PHASE_A_PARENT_COMMIT" -- "$relative")"
+            import_entry="$(git ls-tree "$PHASE_A_IMPORT_COMMIT" -- "$relative")"
+            current_entry="$(git ls-tree "$GITHUB_SHA" -- "$relative")"
+            [[ "$parent_entry" == "100644 blob "*$'\t'"$relative" ]]
+            [[ "$import_entry" == "100644 blob "*$'\t'"$relative" ]]
+            [[ "$current_entry" == "100644 blob "*$'\t'"$relative" ]]
+            parent_blob="$(git rev-parse "${PHASE_A_PARENT_COMMIT}:${relative}")"
+            import_blob="$(git rev-parse "${PHASE_A_IMPORT_COMMIT}:${relative}")"
+            current_blob="$(git rev-parse "${GITHUB_SHA}:${relative}")"
+            test "$parent_blob" != "$import_blob"
+            test "$import_blob" = "$current_blob"
+            test -f "$GITHUB_WORKSPACE/$relative"
+            test ! -L "$GITHUB_WORKSPACE/$relative"
+            test -s "$GITHUB_WORKSPACE/$relative"
+            test "$(stat -c '%a' "$GITHUB_WORKSPACE/$relative")" = "644"
+            file_size="$(stat -c '%s' "$GITHUB_WORKSPACE/$relative")"
+            test "$file_size" -ge 1
+            test "$file_size" -le 268435456
+            test "$(git hash-object "$GITHUB_WORKSPACE/$relative")" = "$current_blob"
+          done
+          PHASE_A_ROOT="$GITHUB_WORKSPACE/release/robinhood-chain-4663"
+          test -d "$PHASE_A_ROOT"
+          test ! -L "$PHASE_A_ROOT"
+          test "$(find "$PHASE_A_ROOT" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" = "7"
+          coordinate_values="$(node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            import { parseStrictJson } from "./packages/launch/src/canonical-json.mjs";
+            const coordinates = parseStrictJson(readFileSync(process.argv[1], "utf8"), {
+              maximumBytes: 16384,
+              maximumDepth: 4,
+            });
+            const expectedKeys = ["artifactDigest", "artifactId", "runAttempt", "runId"];
+            if (coordinates === null || Array.isArray(coordinates)
+              || Object.keys(coordinates).sort().join("\n") !== expectedKeys.join("\n")) {
+              throw new Error("production Verify coordinates must contain exactly four fields");
+            }
+            for (const key of ["runId", "runAttempt", "artifactId"]) {
+              if (typeof coordinates[key] !== "string"
+                || !/^[1-9][0-9]*$/u.test(coordinates[key])) {
+                throw new Error("production Verify coordinate is not a positive decimal string");
+              }
+            }
+            if (typeof coordinates.artifactDigest !== "string"
+              || !/^sha256:[0-9a-f]{64}$/u.test(coordinates.artifactDigest)) {
+              throw new Error("production Verify artifact digest is invalid");
+            }
+            process.stdout.write([
+              coordinates.runId,
+              coordinates.runAttempt,
+              coordinates.artifactId,
+              coordinates.artifactDigest,
+            ].join("\n"));
+          ' "$PHASE_A_ROOT/production-verify-coordinates.json")"
+          mapfile -t coordinate_array <<< "$coordinate_values"
+          test "${#coordinate_array[@]}" = "4"
+          VERIFY_RUN_ID="${coordinate_array[0]}"
+          VERIFY_RUN_ATTEMPT="${coordinate_array[1]}"
+          VERIFY_ARTIFACT_ID="${coordinate_array[2]}"
+          VERIFY_ARTIFACT_DIGEST="${coordinate_array[3]}"
+          source_values="$(node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            import { parseStrictJson } from "./packages/launch/src/canonical-json.mjs";
+            const root = process.argv[1];
+            const capture = parseStrictJson(
+              readFileSync(`${root}/programmable-postdeployment-capture.json`, "utf8"),
+              { maximumBytes: 134217728, maximumDepth: 128 },
+            );
+            const stage = parseStrictJson(
+              readFileSync(`${root}/programmable-stage-bundle.json`, "utf8"),
+              { maximumBytes: 16777216, maximumDepth: 128 },
+            );
+            if (stage.state !== "closed-awaiting-backend-readiness"
+              || stage.releaseReady !== false
+              || stage.publicAuthorization !== false
+              || stage.publicWrites !== false) {
+              throw new Error("Phase A stage is not closed and non-public");
+            }
+            const source = capture?.capture?.sourceOrigin;
+            if (source?.repository !== "programmablehq/PROGRAMMABLE"
+              || source?.repositoryId !== "1314365508"
+              || source?.protectedRef !== "refs/heads/production"
+              || !/^[0-9a-f]{40}$/u.test(source?.revision ?? "")
+              || !/^[0-9a-f]{40}$/u.test(source?.tree ?? "")
+              || stage?.captureAuthorization?.sourceRevision !== source.revision
+              || stage?.captureAuthorization?.sourceTree !== source.tree) {
+              throw new Error("Phase A source identity differs across tracked evidence");
+            }
+            process.stdout.write(`${source.revision}\n${source.tree}`);
+          ' "$PHASE_A_ROOT")"
+          mapfile -t source_array <<< "$source_values"
+          test "${#source_array[@]}" = "2"
+          PHASE_A_SOURCE_COMMIT="${source_array[0]}"
+          PHASE_A_SOURCE_TREE="${source_array[1]}"
+          test "$PHASE_A_SOURCE_COMMIT" = "$PHASE_A_PARENT_COMMIT"
+          test "$(git rev-parse "${PHASE_A_SOURCE_COMMIT}^{tree}")" = "$PHASE_A_SOURCE_TREE"
+          production_tree="$(git rev-parse HEAD^{tree})"
+          test "$PHASE_A_SOURCE_COMMIT" != "$GITHUB_SHA"
+          test "$PHASE_A_SOURCE_TREE" != "$production_tree"
+          {
+            echo "phase_a_root=$PHASE_A_ROOT"
+            echo "phase_a_import_commit=$PHASE_A_IMPORT_COMMIT"
+            echo "phase_a_source_commit=$PHASE_A_SOURCE_COMMIT"
+            echo "phase_a_source_tree=$PHASE_A_SOURCE_TREE"
+            echo "production_tree=$production_tree"
+            echo "verify_run_id=$VERIFY_RUN_ID"
+            echo "verify_run_attempt=$VERIFY_RUN_ATTEMPT"
+            echo "verify_artifact_id=$VERIFY_ARTIFACT_ID"
+            echo "verify_artifact_digest=$VERIFY_ARTIFACT_DIGEST"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Rebind protected production immediately before generation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRODUCTION_TREE: ${{ steps.validate.outputs.production_tree }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/production"
+          test "$GITHUB_REF_PROTECTED" = "true"
+          test "$GITHUB_WORKFLOW_SHA" = "$GITHUB_SHA"
+          test "$GITHUB_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/produce-robinhood-custom-launch-backend-bridge.yml@$GITHUB_REF"
+          test "$(git rev-parse HEAD^{commit})" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD^{tree})" = "$PRODUCTION_TREE"
+          test "$(git rev-parse refs/remotes/origin/production^{commit})" = "$GITHUB_SHA"
+          test -z "$(git symbolic-ref -q HEAD || true)"
+          test "$(git remote get-url origin)" = "https://github.com/$GITHUB_REPOSITORY"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          api_commit="$(gh api \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/$GITHUB_REPOSITORY/git/ref/heads/production" \
+            --jq '.object.sha')"
+          api_tree="$(gh api \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/$GITHUB_REPOSITORY/git/commits/$api_commit" \
+            --jq '.tree.sha')"
+          test "$api_commit" = "$GITHUB_SHA"
+          test "$api_tree" = "$PRODUCTION_TREE"
+
+      - name: Generate and verify exact backend bridge
+        id: generate
+        env:
+          PHASE_A_ROOT: ${{ steps.validate.outputs.phase_a_root }}
+          VERIFY_ARTIFACT_DIGEST: ${{ steps.validate.outputs.verify_artifact_digest }}
+          VERIFY_ARTIFACT_ID: ${{ steps.validate.outputs.verify_artifact_id }}
+          VERIFY_RUN_ATTEMPT: ${{ steps.validate.outputs.verify_run_attempt }}
+          VERIFY_RUN_ID: ${{ steps.validate.outputs.verify_run_id }}
+        run: |
+          set -euo pipefail
+          umask 077
+          OUTPUT_ROOT="$(mktemp -d "$RUNNER_TEMP/robinhood-backend-bridge.XXXXXX")"
+          test ! -L "$OUTPUT_ROOT"
+          test "$(realpath "$OUTPUT_ROOT")" = "$OUTPUT_ROOT"
+          test "$(stat -c '%a' "$OUTPUT_ROOT")" = "700"
+          test -z "$(find "$OUTPUT_ROOT" -mindepth 1 -print -quit)"
+          case "$OUTPUT_ROOT/" in
+            "$GITHUB_WORKSPACE/"*)
+              echo "backend bridge output root overlaps the checkout" >&2
+              exit 1
+              ;;
+          esac
+          RESULT_PATH="$RUNNER_TEMP/robinhood-backend-bridge-result.json"
+          test ! -e "$RESULT_PATH"
+          npm_config_loglevel=silent \
+            npm run contracts:robinhood:postdeploy:stage-backend-assets -- \
+              --stage "$PHASE_A_ROOT/programmable-stage-bundle.json" \
+              --capture "$PHASE_A_ROOT/programmable-postdeployment-capture.json" \
+              --capture-attestation-bundle "$PHASE_A_ROOT/programmable-postdeployment-capture.attestation.json" \
+              --stage-attestation-bundle "$PHASE_A_ROOT/programmable-stage-bundle.attestation.json" \
+              --source-verify-proof "$PHASE_A_ROOT/production-verify-proof.json" \
+              --source-verify-attestation-bundle "$PHASE_A_ROOT/production-verify-proof.attestation.json" \
+              --source-verify-run-id "$VERIFY_RUN_ID" \
+              --source-verify-run-attempt "$VERIFY_RUN_ATTEMPT" \
+              --source-verify-artifact-id "$VERIFY_ARTIFACT_ID" \
+              --source-verify-artifact-digest "$VERIFY_ARTIFACT_DIGEST" \
+              --backend-service-root "$OUTPUT_ROOT" \
+              > "$RESULT_PATH"
+          test -s "$RESULT_PATH"
+          export OUTPUT_ROOT RESULT_PATH
+          node --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
+          import {
+            lstatSync,
+            readFileSync,
+            readdirSync,
+            realpathSync,
+          } from "node:fs";
+          import path from "node:path";
+          import { parseStrictJson } from "./packages/launch/src/canonical-json.mjs";
+
+          const expected = [
+            "release/robinhood-v4-chain-deployment.v1.json",
+            "release/robinhood-v4-prepared-root-source-manifest.v1.json",
+            "release/assets/robinhood-v4/ProgrammableLaunchStampRouterV1.standard-input.json",
+            "release/assets/robinhood-v4/ProgrammableCreate2GraphDeployerV1.standard-input.json",
+            "release/robinhood-v4-phase-a-production-capture.v3.json",
+            "release/robinhood-v4-phase-a-production-capture.v3.attestation.json",
+            "release/robinhood-v4-phase-a-stage-bundle.v1.json",
+            "release/robinhood-v4-phase-a-stage-bundle.v1.attestation.json",
+          ];
+          const root = process.env.OUTPUT_ROOT;
+          const result = parseStrictJson(
+            readFileSync(process.env.RESULT_PATH, "utf8"),
+            { maximumBytes: 1048576, maximumDepth: 16 },
+          );
+          const resultKeys = [
+            "assets",
+            "backendReleaseAssetsDigest",
+            "backendServiceRoot",
+            "command",
+            "releaseReady",
+            "stagePath",
+            "wroteLiveArtifacts",
+          ];
+          if (result === null || Array.isArray(result)
+            || Object.keys(result).sort().join("\n") !== resultKeys.sort().join("\n")
+            || result.command !== "stage-backend-assets"
+            || result.backendServiceRoot !== realpathSync(root)
+            || !/^sha256:[0-9a-f]{64}$/u.test(result.backendReleaseAssetsDigest)
+            || result.releaseReady !== false
+            || result.wroteLiveArtifacts !== false
+            || !Array.isArray(result.assets)
+            || result.assets.length !== expected.length) {
+            throw new Error("backend bridge generator result contract differs");
+          }
+          const discovered = [];
+          const walk = (directory, prefix = "") => {
+            for (const entry of readdirSync(directory, { withFileTypes: true })) {
+              const relative = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
+              const absolute = path.join(directory, entry.name);
+              const metadata = lstatSync(absolute);
+              if (metadata.isSymbolicLink()) {
+                throw new Error("backend bridge output contains a symbolic link");
+              }
+              if (metadata.isDirectory()) {
+                walk(absolute, relative);
+              } else if (metadata.isFile()) {
+                discovered.push(relative);
+              } else {
+                throw new Error("backend bridge output contains a non-regular entry");
+              }
+            }
+          };
+          walk(root);
+          if (discovered.sort().join("\n") !== [...expected].sort().join("\n")) {
+            throw new Error("backend bridge output paths differ");
+          }
+          for (const [index, relative] of expected.entries()) {
+            const asset = result.assets[index];
+            const expectedOutput = path.join(root, ...relative.split("/"));
+            const metadata = lstatSync(expectedOutput);
+            const bytes = readFileSync(expectedOutput);
+            const digest = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+            if (asset === null || Array.isArray(asset)
+              || Object.keys(asset).sort().join("\n") !== ["output", "path", "sha256"].join("\n")
+              || asset.path !== relative
+              || asset.output !== expectedOutput
+              || asset.sha256 !== digest
+              || metadata.isSymbolicLink()
+              || !metadata.isFile()
+              || metadata.size < 1
+              || (metadata.mode & 0o777) !== 0o644) {
+              throw new Error(`backend bridge output ${relative} differs`);
+            }
+          }
+          NODE
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          {
+            echo "output_root=$OUTPUT_ROOT"
+            echo "result_path=$RESULT_PATH"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Rebind protected production after generation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRODUCTION_TREE: ${{ steps.validate.outputs.production_tree }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/production"
+          test "$GITHUB_REF_PROTECTED" = "true"
+          test "$GITHUB_WORKFLOW_SHA" = "$GITHUB_SHA"
+          test "$GITHUB_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/produce-robinhood-custom-launch-backend-bridge.yml@$GITHUB_REF"
+          test "$(git rev-parse HEAD^{commit})" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD^{tree})" = "$PRODUCTION_TREE"
+          test "$(git rev-parse refs/remotes/origin/production^{commit})" = "$GITHUB_SHA"
+          test -z "$(git symbolic-ref -q HEAD || true)"
+          test "$(git remote get-url origin)" = "https://github.com/$GITHUB_REPOSITORY"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          api_commit="$(gh api \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/$GITHUB_REPOSITORY/git/ref/heads/production" \
+            --jq '.object.sha')"
+          api_tree="$(gh api \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/$GITHUB_REPOSITORY/git/commits/$api_commit" \
+            --jq '.tree.sha')"
+          test "$api_commit" = "$GITHUB_SHA"
+          test "$api_tree" = "$PRODUCTION_TREE"
+
+      - name: Upload exact public-safe backend bridge
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: robinhood-custom-launch-backend-bridge-${{ github.sha }}-${{ steps.validate.outputs.phase_a_import_commit }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.generate.outputs.output_root }}
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false
+
+      - name: Record authenticated backend bridge coordinates
+        env:
+          ARTIFACT_DIGEST_RAW: ${{ steps.upload.outputs.artifact-digest }}
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          PHASE_A_IMPORT_COMMIT: ${{ steps.validate.outputs.phase_a_import_commit }}
+          PHASE_A_SOURCE_COMMIT: ${{ steps.validate.outputs.phase_a_source_commit }}
+          PHASE_A_SOURCE_TREE: ${{ steps.validate.outputs.phase_a_source_tree }}
+          PRODUCTION_TREE: ${{ steps.validate.outputs.production_tree }}
+          RESULT_PATH: ${{ steps.generate.outputs.result_path }}
+        run: |
+          set -euo pipefail
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$ARTIFACT_DIGEST_RAW" =~ ^[0-9a-f]{64}$ ]]
+          ARTIFACT_DIGEST="sha256:$ARTIFACT_DIGEST_RAW"
+          [[ "$ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          {
+            echo "## Robinhood custom-launch backend bridge"
+            echo
+            printf '%s\n' "- Protected producer commit: $GITHUB_SHA"
+            printf '%s\n' "- Protected producer tree: $PRODUCTION_TREE"
+            printf '%s\n' "- Workflow source commit: $GITHUB_WORKFLOW_SHA"
+            printf '%s\n' "- Phase A import commit: $PHASE_A_IMPORT_COMMIT"
+            printf '%s\n' "- Phase A capture source commit: $PHASE_A_SOURCE_COMMIT"
+            printf '%s\n' "- Phase A capture source tree: $PHASE_A_SOURCE_TREE"
+            printf '%s\n' "- Producer run: $GITHUB_RUN_ID attempt $GITHUB_RUN_ATTEMPT"
+            printf '%s\n' "- Artifact ID: $ARTIFACT_ID"
+            printf '%s\n' "- Artifact digest: $ARTIFACT_DIGEST"
+            printf '%s\n' "- Acceptance: require this entire workflow run to complete successfully; artifact existence alone is insufficient"
+            echo
+            echo "### Exact files"
+            node --input-type=module -e '
+              import { readFileSync } from "node:fs";
+              import { parseStrictJson } from "./packages/launch/src/canonical-json.mjs";
+              const result = parseStrictJson(readFileSync(process.env.RESULT_PATH, "utf8"));
+              for (const asset of result.assets) {
+                process.stdout.write(`- ${asset.path}: ${asset.sha256}\n`);
+              }
+            '
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Rebind protected production after artifact upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRODUCTION_TREE: ${{ steps.validate.outputs.production_tree }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/production"
+          test "$GITHUB_REF_PROTECTED" = "true"
+          test "$GITHUB_WORKFLOW_SHA" = "$GITHUB_SHA"
+          test "$GITHUB_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/produce-robinhood-custom-launch-backend-bridge.yml@$GITHUB_REF"
+          test "$(git rev-parse HEAD^{commit})" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD^{tree})" = "$PRODUCTION_TREE"
+          test "$(git rev-parse refs/remotes/origin/production^{commit})" = "$GITHUB_SHA"
+          test -z "$(git symbolic-ref -q HEAD || true)"
+          test "$(git remote get-url origin)" = "https://github.com/$GITHUB_REPOSITORY"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          api_commit="$(gh api \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/$GITHUB_REPOSITORY/git/ref/heads/production" \
+            --jq '.object.sha')"
+          api_tree="$(gh api \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/$GITHUB_REPOSITORY/git/commits/$api_commit" \
+            --jq '.tree.sha')"
+          test "$api_commit" = "$GITHUB_SHA"
+          test "$api_tree" = "$PRODUCTION_TREE"

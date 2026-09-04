@@ -229,7 +229,9 @@ jobs:
 
       - name: Audit production dependencies
         if: needs.scope.outputs.interface == 'true' && needs.scope.outputs.dependencies == 'true'
-        run: npm run audit:prod
+        run: |
+          node --test scripts/ci/run-production-dependency-audit.test.mjs
+          npm run audit:prod
 
       - name: Verify affected interface
         if: needs.scope.outputs.interface == 'true'
