@@ -65,25 +65,25 @@
       "name": "openapi",
       "path": "public/openapi/custom-launch-v4.json",
       "url": "https://programmable.market/openapi/custom-launch-v4.json",
-      "sha256": "sha256:581eb94ad6b8500646ec8b60aa56023c1badee44daf8814ffcd821a85e1ed1ef"
+      "sha256": "sha256:6dccb474a7d0b2c664157369b46a223d66a4d72d2e211064d15896f5abfc99db"
     },
     {
       "name": "packConfig",
       "path": "public/schemas/custom-launch/v4/pack-config.json",
       "url": "https://programmable.market/schemas/custom-launch/v4/pack-config.json",
-    "sha256": "sha256:64a6aea9c45fc55c6acf63588ffadc668ca8465f84e1cb6dfd5577919d73ff7c"
+    "sha256": "sha256:0295020845d3d9328cf6be3da81e39da29ce929cd3e8672d9ac4f2d96f886a90"
     },
     {
       "name": "createRequest",
       "path": "public/schemas/custom-launch/v4/custom-launch-create-request.json",
       "url": "https://programmable.market/schemas/custom-launch/v4/custom-launch-create-request.json",
-    "sha256": "sha256:904e6a459f84885413faea02fd7bc609e2967dfc772dd52ed4a66b9f2bbe31bb"
+    "sha256": "sha256:5924dbcb0c5b599a9b62a9e36f02c1e08ae53beff2e2bffd9acce17ef4b30289"
     },
     {
       "name": "resource",
       "path": "public/schemas/custom-launch/v4/custom-launch.json",
       "url": "https://programmable.market/schemas/custom-launch/v4/custom-launch.json",
-      "sha256": "sha256:1fec0ec89eb22f2b6dc8f5721e65c1a69f1a4171f1b0a5a8fd237b73e149d681"
+      "sha256": "sha256:8b33b8ef06f955c72c1a9fd9e2c74961b6ffe2b1f624a77eb5f25696f269654e"
     },
     {
       "name": "sourceVerificationStatus",
@@ -95,7 +95,7 @@
       "name": "capabilities",
       "path": "public/schemas/custom-launch/v4/capabilities.json",
       "url": "https://programmable.market/schemas/custom-launch/v4/capabilities.json",
-    "sha256": "sha256:441ae5f45536ff52dce618fdd55cc1f7235ff1535935070087d9328f1ae85434"
+    "sha256": "sha256:e1502c54f9499f2ef19234ea92ab19b6011a5076001ba97f4e53b468ce7c979d"
     },
     {
       "name": "preflight",
@@ -107,13 +107,13 @@
       "name": "onchainEvidence",
       "path": "public/schemas/custom-launch/v4/onchain-evidence.json",
       "url": "https://programmable.market/schemas/custom-launch/v4/onchain-evidence.json",
-    "sha256": "sha256:0c9521ba8c858d197562668a578468f578636eaccd4b4309d5120fce28e6e201"
+    "sha256": "sha256:09fa9dca75c941b2c93d3249e6249813c0b56b8ea4e5adfd08d8c7fc1150ebdd"
     },
     {
       "name": "exactWalletTransaction",
       "path": "public/schemas/custom-launch/v4/exact-wallet-transaction.json",
       "url": "https://programmable.market/schemas/custom-launch/v4/exact-wallet-transaction.json",
-    "sha256": "sha256:ca94fc74a2670d72ce222198730fd2380abb69924fa91e76a84853ae6f77965c"
+    "sha256": "sha256:b2e09eb929f451311c81f84a5450e34646a8d55137d8b876c171264dc4131f4d"
     }
   ],
   "evidence": {
