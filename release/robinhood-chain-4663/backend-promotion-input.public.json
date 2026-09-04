@@ -1,20 +1,20 @@
 {
   "schemaVersion": "programmable.robinhood-custom-launch.backend-promotion-public-input.v2",
-  "captureId": "3100376f3aa3317906453b14afcf610481d1c5dd8c2047ab486533c23af492dd",
-  "observedAt": "2026-09-04T19:51:34Z",
+  "captureId": "334cc921d6f81a6e7c04960eb9a81026ae22e3299b2a09d1d2ff26f217fc9743",
+  "observedAt": "2026-09-04T22:29:16Z",
   "backendSource": {
     "repository": "programmablehq/programmable-open-hook-v2-internal",
-    "sourceCommit": "7a475e1232e76d791d0297a5185381b70b9bdeab",
-    "sourceTree": "77bfa205f3fa1270a5960e028f987fdaf0d606bd"
+    "sourceCommit": "f901edce03214877d74eeae7d5a6ea2b3bb5ece1",
+    "sourceTree": "138de0330ca8766758e43a59b5b63f34cbfe8242"
   },
-  "backendPromotionInputDigest": "sha256:3100376f3aa3317906453b14afcf610481d1c5dd8c2047ab486533c23af492dd",
+  "backendPromotionInputDigest": "sha256:334cc921d6f81a6e7c04960eb9a81026ae22e3299b2a09d1d2ff26f217fc9743",
   "readbackReceipts": {
     "readiness": {
       "kind": "readiness",
       "httpStatus": 200,
       "contentType": "application/json",
       "requestSha256": "sha256:f705bbf5f96097da2f746d2e0efffe785d92561997832fa246b0a48b94d9ffe2",
-      "normalizedResponseSha256": "sha256:07d4c253c12fdd5094fa86fe19a599a1d283a483eae227012f7763ff2e3c5632"
+      "normalizedResponseSha256": "sha256:54d43683a892d5da6b74ea21a0db2c899487cb871a3cbbcc842e39fdcb5164e1"
     },
     "fly": [
       {
@@ -22,7 +22,7 @@
         "httpStatus": 200,
         "contentType": "application/json",
         "requestSha256": "sha256:f22b636e5ee25adff775b0b92d9ec7b842287c53bcbbf5225e4baaac5aea1fc0",
-        "normalizedResponseSha256": "sha256:a590c09b12e47767a513bd2e849ee2092f0371100ebb4f9d389343c27c6997bf"
+        "normalizedResponseSha256": "sha256:c8bd5c8bf62a050107b58f1bbd15c8c79493e415cdef932e20dca1d5340203f4"
       },
       {
         "kind": "app",
@@ -43,31 +43,31 @@
         "httpStatus": 200,
         "contentType": "application/json",
         "requestSha256": "sha256:219a16d8052b41c660c2c80ffba5105b18626302ffda146e6cb5a77b4152671d",
-        "normalizedResponseSha256": "sha256:2d0faebc95a69510588bbf24dcf5742bc6589e823bc84e895c898dfaa935cf10"
+        "normalizedResponseSha256": "sha256:cd73a04149692480af1ead7ad86bd8b1ee89aecc55c9a74a4e339c95788a4c75"
       },
       {
         "kind": "metadata:1",
         "httpStatus": 200,
         "contentType": "application/json",
         "requestSha256": "sha256:14eb044aac1ae963dad30c5e83770e78b9ea5ffb3cdba177ef36f198797cfaae",
-        "normalizedResponseSha256": "sha256:325a834cd801096d5fedcfc4848f687d6387ecf52c500fc42d48514144a227af"
+        "normalizedResponseSha256": "sha256:91d1b712227958e2013a216b2a25e69f90a403468cc7192c447d16dc044ad2a3"
       },
       {
         "kind": "machine:2",
         "httpStatus": 200,
         "contentType": "application/json",
         "requestSha256": "sha256:db7d347cb98cd57d1c4b7f3ff91993d5a6c02f5629d1de3a5200351af0f10cf6",
-        "normalizedResponseSha256": "sha256:eec1a5c2f5dd1d1f465a052ce869d8061257c6d75be90ddbf8d246f65df667b2"
+        "normalizedResponseSha256": "sha256:ee28230bff7c8b5f33eea4d18be7ed1d42add4563107d4bd37c699c0eb68c8ce"
       },
       {
         "kind": "metadata:2",
         "httpStatus": 200,
         "contentType": "application/json",
         "requestSha256": "sha256:35fd3195579c98d04fbc9050d8f24072607b65fa63984179d20cccdaf79bdcf0",
-        "normalizedResponseSha256": "sha256:cd38864eeed07b30c461939db5cd967b6aed0f85299a79ea0290716efca00452"
+        "normalizedResponseSha256": "sha256:bec633ab4ab15913befa4998d0c6841062acca73a12bde3d82ce68da8dc91533"
       }
     ],
-    "digest": "sha256:155c1388eb1c142d173f9473b793e2820e6a140d7065b3227b6b0928df249457"
+    "digest": "sha256:db01d545ee291483cc7ffbc48a85d16829a75a5333f074eac595bb7b5d14527d"
   },
   "runtimeReadiness": {
     "schemaVersion": "programmable.custom-launch-api-runtime-readiness-receipt.v4",
@@ -76,8 +76,8 @@
       "schemaVersion": "programmable.custom-launch-api-release-identity.v4",
       "status": "ready",
       "service": "custom-launch-api-v1",
-      "sourceCommit": "7a475e1232e76d791d0297a5185381b70b9bdeab",
-      "sourceTree": "77bfa205f3fa1270a5960e028f987fdaf0d606bd",
+      "sourceCommit": "f901edce03214877d74eeae7d5a6ea2b3bb5ece1",
+      "sourceTree": "138de0330ca8766758e43a59b5b63f34cbfe8242",
       "chainId": "4663",
       "chainDeploymentId": "robinhood-mainnet-custom-launch-v1",
       "chainDeploymentDescriptorDigest": "0x4bde6e26b6630aa684b4ac2a987d6322755896b249a189843bd3a58fe313694c",
@@ -180,18 +180,18 @@
         "sourceVerificationWorkerLifecycle": true
       }
     },
-    "releaseIdentityDigest": "sha256:06cdbd35c7ed2eefcdcad54b7b4bfeaa7f4f89b254ede6ad72132b4b146b9c96",
-    "observedAt": "2026-09-04T19:51:34Z",
-    "authorizationDigest": "sha256:7bb36a963040f152d96173212088f1a6f77eea8bf0cb78d92e6e8aca309fb86c"
+    "releaseIdentityDigest": "sha256:4f9e188360009da98720fcac90750b247cff56e98df11be69ee7bbf19f82cfba",
+    "observedAt": "2026-09-04T22:29:16Z",
+    "authorizationDigest": "sha256:50167584399ac5723134fd97e0dd436e54bf9cae1c51c5b9e7a893546d884835"
   },
   "flyControlPlane": {
     "schemaVersion": "programmable.custom-launch-api-fly-control-plane-receipt.v2",
     "app": "programmable-custom-launch-api",
     "appStatus": "deployed",
-    "releaseIdDigest": "sha256:d74c3e348ae821f3db697fc950b7eea28cf02cce17fa0e2a196c4f1865f01476",
-    "releaseVersionDigest": "sha256:f45ece8b4fe6e46a05f243e4f974859375fc6d7d407e52e459f552730fb98e0b",
-    "imageTag": "main-7a475e1232e7",
-    "imageIdentityDigest": "sha256:0976f6c779479c2de0c8aa796215b61828e66bf1e2b6eef38585b6e6154b18ce",
+    "releaseIdDigest": "sha256:9c5e4a70a2b2cada79a88063f6b876d3830c7cf08849ab2562df74cd2afc8a0c",
+    "releaseVersionDigest": "sha256:0bc8312768a16d4875a4f29ae8b7fe06d8b40d283a4ef5756681f7ba93d3ecad",
+    "imageTag": "main-f901edce0321",
+    "imageIdentityDigest": "sha256:84379e0a0e16071143acd8412e2e4cad73c3a9c6e324b6c15150fb95e28c0033",
     "machines": [
       {
         "slot": "1",
@@ -206,10 +206,10 @@
         "region": "fra"
       }
     ],
-    "safeReadbacksDigest": "sha256:511f108d186ee163d4b1a548605d20affd49c7e9f2c7883c238a5bee37450a32",
-    "releaseIdentityDigest": "sha256:8512c3aa3cd67e20d7df33560e05af244836262468473f4b1e72b8083d324679",
-    "observedAt": "2026-09-04T19:51:34Z",
-    "authorizationDigest": "sha256:14f09de1349d454eae75c8c9facac60a4e6217bb27b0ce788a022a53da8407db"
+    "safeReadbacksDigest": "sha256:da3c7be4499a9055c335f5c11bd40ff686c247ae0f021ce12de79edfcf6b14d5",
+    "releaseIdentityDigest": "sha256:7e0462139ff86f5bf18f969b90b48ed9eef7dbd2ced0abb2e95b299207b56a10",
+    "observedAt": "2026-09-04T22:29:16Z",
+    "authorizationDigest": "sha256:d1144b49c451b8bd0630973d2a45642f356c70770a8b4f92e1d5a535f5f733c8"
   },
-  "publicInputDigest": "sha256:3ba0784d3f90348f812745762291d7343343035bb43e331eabbb5a0e2a3a44b2"
+  "publicInputDigest": "sha256:43e646981adca0fbc74958cfa9ab912dc6ec3383dd09af00efc315faf03d6669"
 }
