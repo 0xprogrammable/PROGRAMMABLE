@@ -100,6 +100,7 @@ import {
   SIGSTORE_BUNDLE_V03_MEDIA_TYPE,
 } from "../robinhood-backend-promotion-v1.mjs";
 import {
+  canonicalRobinhoodBackendVerifierInstant,
   canonicalRobinhoodVerifierInstant,
   runRobinhoodPostdeploymentCli,
 } from "../finalize-robinhood-custom-launch-deployment.mjs";
@@ -610,6 +611,19 @@ test("canonical verifier timestamps remain valid through Phase A stage assembly"
   } finally {
     await rm(fixture.root, { recursive: true, force: true });
   }
+});
+
+test("canonical backend verifier timestamps match the seconds-only authorization schema", () => {
+  assert.equal(
+    canonicalRobinhoodBackendVerifierInstant(
+      () => new Date("2026-08-29T18:00:00.987Z"),
+    ),
+    "2026-08-29T18:00:00Z",
+  );
+  assert.throws(
+    () => canonicalRobinhoodBackendVerifierInstant(() => new Date(Number.NaN)),
+    /backend verifier clock is invalid/u,
+  );
 });
 
 test("production capture builder binds the exact protected Git source closure", async () => {
