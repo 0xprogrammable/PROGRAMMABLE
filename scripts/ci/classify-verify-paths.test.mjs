@@ -223,6 +223,7 @@ test("partitions every artifact-dependent suite without multi-filter side effect
   const robinhoodCommand = packageJson.scripts["contracts:robinhood:owner-envelope:test"];
 
   assert.deepEqual(contractCommand.split(" && "), [
+    "npm run release:custom-launch:v4:backend-bridge:test",
     ...CONTRACT_RELEASE_TEST_PATHS.map((path) => `vitest run ${path}`),
     "npm run contracts:classic-v4:release:test",
     "npm run contracts:classic-v4:launcher-upgrade:test",
