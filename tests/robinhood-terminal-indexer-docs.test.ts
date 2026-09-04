@@ -20,6 +20,31 @@ const pageSource = readFileSync(
   ),
   "utf8",
 );
+const aliasSource = readFileSync(
+  resolve(
+    process.cwd(),
+    "app/developer-reference/robinhood-terminal-indexer/page.tsx",
+  ),
+  "utf8",
+);
+const gitBookSource = readFileSync(
+  resolve(
+    process.cwd(),
+    "docs/public/developers/robinhood-terminal-indexer.md",
+  ),
+  "utf8",
+);
+const gitBookSummary = readFileSync(
+  resolve(process.cwd(), "docs/public/SUMMARY.md"),
+  "utf8",
+);
+const sitemapSource = readFileSync(
+  resolve(process.cwd(), "app/sitemap.ts"),
+  "utf8",
+);
+const vercelConfig = JSON.parse(
+  readFileSync(resolve(process.cwd(), "vercel.json"), "utf8"),
+) as { rewrites: Array<{ source: string; destination: string }> };
 
 type TerminalFixture = {
   integrationBoundary: {
@@ -30,6 +55,7 @@ type TerminalFixture = {
     feeBehaviorClaim: boolean;
     currentReleaseBlockers: {
       cleanRoomBinding: string;
+      cleanRoomReason: string;
       publicItemEvidence: string;
       existingPublicItemClaim: boolean;
       providerOutageClaim: boolean;
@@ -120,7 +146,9 @@ type TerminalFixture = {
   independenceRule: string;
 };
 
-const fixture = JSON.parse(readFileSync(fixturePath, "utf8")) as TerminalFixture;
+const fixture = JSON.parse(
+  readFileSync(fixturePath, "utf8"),
+) as TerminalFixture;
 const abiBytes = readFileSync(abiPath);
 const abi = JSON.parse(abiBytes.toString("utf8")) as Array<
   AbiEvent | Record<string, unknown>
@@ -139,6 +167,43 @@ function sortJsonKeys(value: unknown): unknown {
 }
 
 describe("Robinhood terminal and indexer documentation", () => {
+  it("serves the canonical guide before the GitBook catch-all", () => {
+    const exactRewriteIndex = vercelConfig.rewrites.findIndex(
+      ({ source }) => source === "/docs/developers/robinhood-terminal-indexer",
+    );
+    const gitBookCatchAllIndex = vercelConfig.rewrites.findIndex(
+      ({ source }) => source === "/docs/:match*",
+    );
+
+    expect(exactRewriteIndex).toBeGreaterThanOrEqual(0);
+    expect(gitBookCatchAllIndex).toBeGreaterThan(exactRewriteIndex);
+    expect(vercelConfig.rewrites[exactRewriteIndex]).toEqual({
+      source: "/docs/developers/robinhood-terminal-indexer",
+      destination: "/developer-reference/robinhood-terminal-indexer",
+    });
+    expect(aliasSource).toContain(
+      'from "@/app/docs/developers/robinhood-terminal-indexer/page"',
+    );
+    expect(sitemapSource).toContain(
+      '"/docs/developers/robinhood-terminal-indexer"',
+    );
+    expect(gitBookSummary).toContain(
+      "(developers/robinhood-terminal-indexer.md)",
+    );
+    for (const sentinel of [
+      "eip155:4663",
+      "0x34965F2A2ee9254522232C32F02056E92BE0C98a",
+      "platformId: programmable",
+      "category: custom",
+      "finalized-custom-launches",
+      "robinhood-terminal-indexer-v1.json",
+      "ProgrammableLaunchStampRouterV1.abi.json",
+      "Third-party indexing is not guaranteed",
+    ]) {
+      expect(gitBookSource).toContain(sentinel);
+    }
+  });
+
   it("pins the chain, Router identity, activation gate and fee policy boundary", () => {
     expect(fixture.integrationBoundary).toMatchObject({
       target: "public-self-serve",
@@ -147,6 +212,8 @@ describe("Robinhood terminal and indexer documentation", () => {
       feeBehaviorClaim: false,
       currentReleaseBlockers: {
         cleanRoomBinding: "V4_RELEASE_BINDING_NOT_READY",
+        cleanRoomReason:
+          "Machine-contract hashes are refreshed. The release binding remains incomplete until chain deployment, profile, release manifest, source closure, finality and backend release evidence are all present.",
         publicItemEvidence:
           "pending-per-launch-authoritative-exact-source-capture-persistence-promotion",
         existingPublicItemClaim: false,
@@ -225,7 +292,9 @@ describe("Robinhood terminal and indexer documentation", () => {
       expect(event, expected.name).toBeDefined();
       expect(toEventSelector(event!)).toBe(expected.topic0);
       expect(
-        event!.inputs.filter((input) => input.indexed).map((input) => input.name),
+        event!.inputs
+          .filter((input) => input.indexed)
+          .map((input) => input.name),
       ).toEqual(expected.indexedInputs);
     }
   });
@@ -241,7 +310,9 @@ describe("Robinhood terminal and indexer documentation", () => {
       },
       launches: [],
     });
-    expect(fixture.feed.exampleResponsePurpose).toMatch(/not a captured production/u);
+    expect(fixture.feed.exampleResponsePurpose).toMatch(
+      /not a captured production/u,
+    );
     expect(fixture.feed.requiredTerminalEvidence).toEqual({
       platformId: "programmable",
       category: "custom",
@@ -259,8 +330,7 @@ describe("Robinhood terminal and indexer documentation", () => {
         "programmable.custom-launch-l1-posting.v1",
       "onchain.l1Posting.chainId": "1",
       "onchain.l1Posting.caip2": "eip155:1",
-      "onchain.l1Posting.rollup":
-        "0x23A19d23e89166adedbDcB432518AB01e4272D94",
+      "onchain.l1Posting.rollup": "0x23A19d23e89166adedbDcB432518AB01e4272D94",
       "onchain.l1Posting.sequencerInbox":
         "0xBd0D173EEb87D57A09521c24388a12789F33ba96",
       "onchain.l1FinalizedCheckpoint": "required-object",
@@ -289,8 +359,7 @@ describe("Robinhood terminal and indexer documentation", () => {
       "onchain.terminal": true,
       "onchain.checkpointType": "ethereum_finalized",
       "onchain.router": "0x34965F2A2ee9254522232C32F02056E92BE0C98a",
-      "onchain.l1Posting.rollup":
-        "0x23A19d23e89166adedbDcB432518AB01e4272D94",
+      "onchain.l1Posting.rollup": "0x23A19d23e89166adedbDcB432518AB01e4272D94",
       "onchain.l1Posting.sequencerInbox":
         "0xBd0D173EEb87D57A09521c24388a12789F33ba96",
       "onchain.l1FinalizedCheckpoint.consensusCheckpointTag": "finalized",
@@ -345,9 +414,9 @@ describe("Robinhood terminal and indexer documentation", () => {
     expect(fixture.feed.coordinateSemantics.l1ProviderBindingRule).toMatch(
       /exact order.*ethereumFinalityEvidence/u,
     );
-    expect(fixture.feed.coordinateSemantics.directRouterVerificationRule).toMatch(
-      /Replay onchain\.l2Inclusion\.transactionHash/u,
-    );
+    expect(
+      fixture.feed.coordinateSemantics.directRouterVerificationRule,
+    ).toMatch(/Replay onchain\.l2Inclusion\.transactionHash/u);
     expect(fixture.feed.coordinateSemantics.l2EventOrderRule).toMatch(
       /routeEventLogIndex must be less than.*launchEventLogIndex/u,
     );
@@ -385,15 +454,11 @@ describe("Robinhood terminal and indexer documentation", () => {
     expect(pageSource).toContain(
       'l1SequencerInbox: "0xBd0D173EEb87D57A09521c24388a12789F33ba96"',
     );
-    expect(pageSource).toContain("V4_RELEASE_BINDING_NOT_READY");
-    expect(pageSource).toContain("This is not a provider-outage claim");
+    expect(pageSource).toContain("Source-verification authority");
+    expect(pageSource).toContain("Public activation authority");
     expect(pageSource).toContain("chainId !== 1");
-    expect(pageSource).toContain(
-      'page.quality.status !== "ready"',
-    );
-    expect(pageSource).toContain(
-      "sourceRowCount !== publishedRowCount",
-    );
+    expect(pageSource).toContain('page.quality.status !== "ready"');
+    expect(pageSource).toContain("sourceRowCount !== publishedRowCount");
     expect(pageSource).toContain("quarantinedRowCount !== 0");
     expect(pageSource).toContain("page.launches.length > publishedRowCount");
     expect(pageSource).toContain(
@@ -415,7 +480,9 @@ describe("Robinhood terminal and indexer documentation", () => {
     );
     expect(pageSource).toContain('feePolicyApplicability: "UNVERIFIED"');
     expect(pageSource).not.toContain("platformFeePolicy: {");
-    expect(pageSource).not.toMatch(/const stamp = await publicClient\.readContract/u);
+    expect(pageSource).not.toMatch(
+      /const stamp = await publicClient\.readContract/u,
+    );
   });
 
   it("keeps provenance independent from feed, activation and fee availability", () => {

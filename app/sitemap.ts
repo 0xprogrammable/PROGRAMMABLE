@@ -24,6 +24,7 @@ const PUBLIC_ROUTES = [
   "/docs/developers/verify",
   "/docs/developers/indexing",
   "/docs/developers/machine-readable",
+  "/docs/developers/robinhood-terminal-indexer",
   "/docs/launch-stamps",
   "/docs/models/classic",
   "/docs/models/custom",

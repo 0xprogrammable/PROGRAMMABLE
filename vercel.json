@@ -51,6 +51,10 @@
       "destination": "/api/retired-prediction"
     },
     {
+      "source": "/docs/developers/robinhood-terminal-indexer",
+      "destination": "/developer-reference/robinhood-terminal-indexer"
+    },
+    {
       "source": "/docs",
       "destination": "https://proxy.gitbook.site/sites/site_V93gQ"
     },

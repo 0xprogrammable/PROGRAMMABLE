@@ -19,5 +19,6 @@
   - [Custom Launch API](developers/custom-launch.md)
   - [Verify a launch](developers/verify.md)
   - [Index launches](developers/indexing.md)
+  - [Robinhood terminal indexer](developers/robinhood-terminal-indexer.md)
   - [API reference](developers/machine-readable.md)
 - [Official links](reference/official-links.md)

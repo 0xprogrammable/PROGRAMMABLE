@@ -26,7 +26,7 @@
     "marketSupportClaim": false,
     "currentReleaseBlockers": {
       "cleanRoomBinding": "V4_RELEASE_BINDING_NOT_READY",
-      "cleanRoomReason": "The changed OpenAPI bytes are not yet closed into refreshed V4 release-binding hashes.",
+      "cleanRoomReason": "Machine-contract hashes are refreshed. The release binding remains incomplete until chain deployment, profile, release manifest, source closure, finality and backend release evidence are all present.",
       "publicItemEvidence": "pending-per-launch-authoritative-exact-source-capture-persistence-promotion",
       "existingPublicItemClaim": false,
       "providerOutageClaim": false,
