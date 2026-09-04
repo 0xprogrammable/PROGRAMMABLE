@@ -54,7 +54,7 @@ describe("launch model artwork", () => {
       'aria-labelledby="launch-model-classic-title"',
     );
     expect(source).toContain(
-      'aria-describedby="launch-model-classic-description"',
+      'aria-describedby="launch-model-classic-description launch-model-classic-status"',
     );
     expect(source).toContain(
       'aria-labelledby="launch-model-custom-title"',

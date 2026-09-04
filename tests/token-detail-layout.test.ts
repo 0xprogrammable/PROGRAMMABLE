@@ -200,6 +200,7 @@ describe("token detail layout", () => {
     );
     expect(detailSource).toContain("totalSupplyRaw?: string;");
     expect(detailSource).toContain("return formatUnits(BigInt(rawSupply)");
+    expect(customContent).toContain("Custom V4 Hook");
   });
 
   it("keeps canonical detail valuation independent from chart history", () => {

@@ -11,6 +11,7 @@ import type {
 } from "@/components/explore-view";
 import { DEFAULT_EXPLORE_VIEW_SORT } from "@/lib/explore-defaults";
 import { resolveExploreChainId } from "@/lib/explore-chain";
+import { websiteExploreIndexEnabledV1 } from "@/lib/website-explore-index";
 import {
   VIEW_CHAIN_COOKIE_NAME,
   type ViewChainId,
@@ -104,7 +105,7 @@ function isLocalPreviewHost(host: string | null) {
   );
 }
 
-async function InitialExploreView({
+export async function InitialExploreView({
   searchParams,
 }: Readonly<{ searchParams: ExplorePageSearchParams }>) {
   const [requestHeaders, requestCookies, resolvedSearchParams] =
@@ -117,6 +118,15 @@ async function InitialExploreView({
     requestCookies.get(VIEW_CHAIN_COOKIE_NAME)?.value,
   );
   const modelFilter = initialExploreModelFilter(resolvedSearchParams.model);
+  if (!websiteExploreIndexEnabledV1()) {
+    return (
+      <ExploreView
+        indexRebuilding
+        initialResponseChainId={viewChainId}
+        initialModelFilter={modelFilter}
+      />
+    );
+  }
   if (isLocalPreviewHost(requestHeaders.get("host"))) {
     return <ExploreView initialModelFilter={modelFilter} />;
   }

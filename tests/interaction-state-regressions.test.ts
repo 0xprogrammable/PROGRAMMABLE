@@ -200,7 +200,7 @@ describe("interaction state regressions", () => {
     );
   });
 
-  it("keeps Explore project-first with compact market metadata", () => {
+  it("keeps Explore project-first without interim market metadata", () => {
     const exploreSource = readFileSync(
       join(root, "components/explore-view.tsx"),
       "utf8",
@@ -218,17 +218,16 @@ describe("interaction state regressions", () => {
     expect(exploreSource).not.toContain("V4 model");
     expect(exploreSource).not.toContain("<dt>Market cap</dt>");
     expect(exploreSource).toContain("runnerMeta");
-    expect(exploreSource).toContain("runnerData");
-    expect(exploreSource).toContain("title={token.valuationProvider");
-    expect(exploreSource).toContain(
+    expect(exploreSource).not.toContain("styles.runnerData");
+    expect(exploreSource).not.toContain("title={token.valuationProvider");
+    expect(exploreSource).not.toContain(
       "`Fully diluted valuation from ${token.valuationProvider}`",
     );
-    expect(exploreSource).toContain("FDV{token.valuationProvider");
-    expect(exploreSource).toContain("` · ${token.valuationProvider}`");
-    expect(exploreSource).toContain("token.valuation ? (");
-    expect(exploreSource).toContain("<AnimatedMarketCap");
-    expect(exploreSource).toContain("metric={token.valuation}");
-    expect(exploreSource).toContain(
+    expect(exploreSource).not.toContain("FDV{token.valuationProvider");
+    expect(exploreSource).not.toContain("` · ${token.valuationProvider}`");
+    expect(exploreSource).not.toContain("<AnimatedMarketCap");
+    expect(exploreSource).not.toContain("metric={token.valuation}");
+    expect(exploreSource).not.toContain(
       '<strong>{token.marketStatus ?? "Unavailable"}</strong>',
     );
     expect(exploreSource).not.toContain(

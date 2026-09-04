@@ -187,6 +187,11 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain(
       'id="launch-model-classic-title">Classic</strong>',
     );
+    expect(html).toContain('data-status="ready">Ethereum only</small>');
+    expect(html).toContain('id="launch-model-classic-status"');
+    expect(html).toContain(
+      'aria-describedby="launch-model-classic-description launch-model-classic-status"',
+    );
     expect(html).toContain('data-launch-model-option="custom"');
     const customCard = html.match(
       /<a[^>]*data-launch-model-option="custom"[^>]*>/,
@@ -199,7 +204,7 @@ describe("unreleased launch model gating", () => {
     );
     expect(customCard).not.toContain("disabled");
     expect(html).toContain(
-      'id="launch-model-custom-title">Custom</strong>',
+      'id="launch-model-custom-title">Custom V4 Hook</strong>',
     );
     expect(html).toContain("Create a Classic coin");
     expect(html).toContain(
@@ -208,7 +213,7 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain(
       "Upload an exact packed Custom launch, preflight it against Robinhood Chain, then create the request. Your wallet reviews and signs later.",
     );
-    expect(html).toContain("Open Custom launch");
+    expect(html).toContain("Open Custom V4 Hook");
     expect(html).not.toContain("approved GitHub revision");
     expect(html.indexOf('data-launch-model-option="classic"')).toBeLessThan(
       html.indexOf('data-launch-model-option="custom"'),
@@ -249,7 +254,7 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain(
       'href="/developers/api-keys?start=custom&amp;chainId=4663"',
     );
-    expect(html).toContain("Open Custom launch");
+    expect(html).toContain("Open Custom V4 Hook");
     expect(html).not.toContain("approved GitHub revision");
     expect(html).not.toContain("Build or resume");
   });

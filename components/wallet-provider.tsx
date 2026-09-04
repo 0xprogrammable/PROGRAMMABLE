@@ -358,6 +358,14 @@ export function getWalletSessionAction(ready: boolean, authenticated: boolean) {
   return "login" as const;
 }
 
+export function getWalletOpenAction(
+  sessionAction: ReturnType<typeof getWalletSessionAction>,
+  hasWallet: boolean,
+) {
+  if (sessionAction !== "manage") return sessionAction;
+  return hasWallet ? "manage" as const : "link" as const;
+}
+
 export function isWalletProviderSettled(
   privyReady: boolean,
   walletsReady: boolean,
@@ -1683,10 +1691,20 @@ function PrivyWalletBridge({
     });
   }, [activeAuthenticated, githubConnected, linkGithub, login, ready]);
 
+  const addWallet = useCallback(() => {
+    setDialogOpen(false);
+    linkWallet({
+      description: "Add an Ethereum wallet to Programmable",
+      walletChainType: "ethereum-only",
+    });
+  }, [linkWallet]);
+
   const openWallet = useCallback(() => {
     setError("");
 
-    if (sessionAction === "wait") {
+    const action = getWalletOpenAction(sessionAction, wallet !== null);
+
+    if (action === "wait") {
       if (providerTimedOut) {
         setError(
           "Wallet access is taking longer than expected. Reload the page and try again.",
@@ -1695,13 +1713,18 @@ function PrivyWalletBridge({
       }
       return;
     }
-    if (sessionAction === "manage") {
+    if (action === "manage") {
       setDialogOpen(true);
       return;
     }
 
+    if (action === "link") {
+      addWallet();
+      return;
+    }
+
     startLogin();
-  }, [providerTimedOut, sessionAction, startLogin]);
+  }, [addWallet, providerTimedOut, sessionAction, startLogin, wallet]);
 
   const openWalletWithError = useCallback((message: string) => {
     setError(message);
@@ -1815,14 +1838,6 @@ function PrivyWalletBridge({
       setSwitchingNetwork(false);
     }
   }, [connectedWallet]);
-
-  const addWallet = useCallback(() => {
-    setDialogOpen(false);
-    linkWallet({
-      description: "Add an Ethereum wallet to Programmable",
-      walletChainType: "ethereum-only",
-    });
-  }, [linkWallet]);
 
   const sendTransaction = useCallback(
     async (transaction: PreparedTransaction) => {

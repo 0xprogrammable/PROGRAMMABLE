@@ -61,19 +61,16 @@ test("keeps network selection out of the global header",async ({page})=>{
   await expect(page.getByRole("button",{name:walletName,exact:true})).toBeVisible();
 });
 
-test("Explore exposes one live chain and two truthful coming-soon choices",async ({page})=>{
+test("Explore exposes an icon-only Ethereum trigger and Robinhood choice",async ({page})=>{
   const trigger=page.getByRole("button",{name:"Explore chain: Ethereum",exact:true});
+  await expect(trigger).toHaveText("");
   await trigger.click();
   const listbox=page.getByRole("listbox",{name:"Explore chains",exact:true});
-  await expect(listbox.getByRole("option")).toHaveText([
-    "Ethereum",
-    "RobinhoodComing soon",
-    "BaseComing soon",
-  ]);
-  await expect(listbox.getByRole("option",{name:"Robinhood Coming soon",exact:true})).toHaveAttribute("aria-disabled","true");
-  await expect(listbox.getByRole("option",{name:"Base Coming soon",exact:true})).toHaveAttribute("aria-disabled","true");
+  await expect(listbox.getByRole("option")).toHaveCount(1);
+  await expect(listbox.getByRole("option",{name:"Robinhood coming soon",exact:true})).toHaveAttribute("aria-disabled","true");
+  await expect(listbox).not.toContainText("Base");
   await page.keyboard.press("ArrowDown");
-  await expect(listbox.getByRole("option",{name:"Robinhood Coming soon",exact:true})).toBeFocused();
+  await expect(listbox.getByRole("option",{name:"Robinhood coming soon",exact:true})).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("view-chain")).toHaveText("1");
   await expect(page.getByTestId("requests")).toBeEmpty();

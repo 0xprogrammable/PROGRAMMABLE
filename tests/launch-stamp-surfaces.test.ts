@@ -260,7 +260,7 @@ describe("canonical Router stamp surfaces", () => {
       "classic",
     ]);
     expect(getTokenCards(payload.tokens).map((card) => card.launchCategory))
-      .toEqual(["Custom", "Classic"]);
+      .toEqual(["Custom V4 Hook", "Classic"]);
     expect(payload.tokens[0]).toMatchObject({
       launchStampProvenance: { kind: "custom-graph" },
     });
@@ -281,7 +281,7 @@ describe("canonical Router stamp surfaces", () => {
     ]);
 
     expect(cards[0]).toMatchObject({
-      launchCategory: "Custom",
+      launchCategory: "Custom V4 Hook",
       description:
         "Canonical Router stamp. v4 pool initialized.",
       valuation: undefined,
