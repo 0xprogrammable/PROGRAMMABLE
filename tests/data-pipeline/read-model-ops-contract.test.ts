@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -2665,7 +2665,6 @@ describe("read-model operations source contract", () => {
   it.each([
     "scripts/test/smoke-static-dexscreener-public-apis.test.mjs",
     "tests/bind-vercel-sensitive-production-metadata.test.ts",
-    "tests/resolve-gmgn-production-requirement.test.ts",
     "npm run perf:read-model:ops-gate",
   ])("wires %s into the Custom v2 CI verifier", (needle) => {
     const path = "package.json";
@@ -2692,14 +2691,9 @@ describe("read-model operations source contract", () => {
       "Promise.resolve()",
     ],
     [
-      "the explicit production GMGN requirement Boolean",
-      'typeof input.requireGmgnMarket !== "boolean"',
-      "false",
-    ],
-    [
-      "the strict CLI GMGN requirement handoff",
-      "requireGmgnMarket: args.requireGmgnMarket",
-      "false",
+      "the provider-neutral public smoke invocation",
+      "environment: {},",
+      'environment: { PROGRAMMABLE_REQUIRE_GMGN_MARKET: "true" },',
     ],
     [
       "the exact deployment binding",
@@ -2740,6 +2734,24 @@ describe("read-model operations source contract", () => {
   });
 
   it.each([
+    "PROGRAMMABLE_REQUIRE_GMGN_MARKET",
+    "requireGmgnMarket",
+    "require-gmgn-market",
+    "input.environment",
+  ])("rejects restored post-promotion GMGN coupling through %s", (injection) => {
+    const path = "scripts/perf/read-model-post-promotion.mjs";
+    const source = readFileSync(resolve(ROOT, path), "utf8");
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: {
+        [path]: `${source}\nconst restoredReleaseGate = ${JSON.stringify(injection)};\n`,
+      },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-post-promotion-binding",
+    );
+  });
+
+  it.each([
     [
       "strict shell failure handling",
       "set -euo pipefail\numask 077",
@@ -2751,44 +2763,19 @@ describe("read-model operations source contract", () => {
       "true",
     ],
     [
-      "an immutable staged GMGN requirement",
-      "readonly STAGED_REQUIRE_GMGN_MARKET",
-      'STAGED_REQUIRE_GMGN_MARKET="$REQUIRE_GMGN_MARKET"',
-    ],
-    [
-      "an immutable current GMGN requirement",
-      "readonly REQUIRE_GMGN_MARKET",
+      "the exact staged deployment binding before promotion",
+      'grep -Fx "deployment_id=$STAGED_DEPLOYMENT_ID" "$PRE_PROMOTE_BINDING_OUTPUT"',
       "true",
     ],
     [
-      "current Vercel Production metadata listing",
-      'vercel env ls production --format json --token="$VERCEL_TOKEN" |',
+      "the exact staged target binding before promotion",
+      'grep -Fx "target_url=$STAGED_TARGET_URL" "$PRE_PROMOTE_BINDING_OUTPUT"',
       "true",
     ],
     [
-      "a direct Vercel-to-binder pipe",
-      "node scripts/bind-vercel-sensitive-production-metadata.mjs \\",
-      'tee "$PRE_PROMOTE_GMGN_RAW_OUTPUT" |\n  node scripts/bind-vercel-sensitive-production-metadata.mjs \\',
-    ],
-    [
-      "value-stripping Vercel metadata binder",
-      "node scripts/bind-vercel-sensitive-production-metadata.mjs",
-      "true",
-    ],
-    [
-      "fixed-purpose GMGN metadata resolver",
-      "node scripts/resolve-gmgn-production-requirement.mjs",
-      "true",
-    ],
-    [
-      "staged/current GMGN requirement equality gate",
-      'test "$REQUIRE_GMGN_MARKET" = "$STAGED_REQUIRE_GMGN_MARKET"',
-      'test "$REQUIRE_GMGN_MARKET" = "$STAGED_REQUIRE_GMGN_MARKET" || true',
-    ],
-    [
-      "explicit post-promotion GMGN requirement argument",
-      '--require-gmgn-market "$REQUIRE_GMGN_MARKET"',
-      '--require-gmgn-market "false"',
+      "the exact reviewed commit in post-promotion verification",
+      '--git-head "$GITHUB_SHA"',
+      '--git-head "$PREVIOUS_GIT_HEAD"',
     ],
   ])(
     "rejects a manual promotion runbook without %s",
@@ -2798,6 +2785,36 @@ describe("read-model operations source contract", () => {
       expect(source).toContain(needle);
       const result = evaluateReadModelOperationsSourceContracts(ROOT, {
         sourceOverrides: { [path]: source.replace(needle, replacement) },
+      });
+      expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+        "ops-post-promotion-binding",
+      );
+    },
+  );
+
+  it.each([
+    [
+      "a Production metadata listing",
+      'vercel env ls production --format json --token="$VERCEL_TOKEN" |',
+    ],
+    [
+      "the deleted GMGN requirement resolver",
+      "node scripts/resolve-gmgn-production-requirement.mjs",
+    ],
+    ["a staged GMGN requirement", "STAGED_REQUIRE_GMGN_MARKET=true"],
+    ["a current GMGN requirement", "REQUIRE_GMGN_MARKET=true"],
+    ["a post-promotion GMGN argument", "--require-gmgn-market true"],
+  ])(
+    "rejects a manual promotion runbook that restores %s",
+    (_label, injection) => {
+      const path = "docs/operations/read-model-scheduler-cutover.md";
+      const source = readFileSync(resolve(ROOT, path), "utf8");
+      const boundary = 'test ! -e "$PRE_PROMOTE_BINDING_OUTPUT"';
+      expect(source).toContain(boundary);
+      const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+        sourceOverrides: {
+          [path]: source.replace(boundary, `${injection}\n${boundary}`),
+        },
       });
       expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
         "ops-post-promotion-binding",
@@ -2904,19 +2921,9 @@ describe("read-model operations source contract", () => {
       "true",
     ],
     [
-      "fixed-purpose GMGN metadata resolver",
-      "node scripts/resolve-gmgn-production-requirement.mjs",
-      "true",
-    ],
-    [
-      "an immutable resolved Boolean",
-      "readonly require_gmgn_market",
-      "require_gmgn_market=false\n          readonly require_gmgn_market",
-    ],
-    [
-      "a required GMGN resolution gate",
-      "id: gmgn-market-requirement",
-      "id: gmgn-market-requirement\n        continue-on-error: true",
+      "the generic metadata-binding step",
+      "Bind staged production environment metadata",
+      "Bind optional staged production environment metadata",
     ],
     [
       "a required read-model policy gate",
@@ -2938,22 +2945,29 @@ describe("read-model operations source contract", () => {
       "id: public-provider-smoke",
       "id: public-provider-smoke\n        continue-on-error: true",
     ],
-    [
-      "GMGN requirement smoke handoff",
-      "PROGRAMMABLE_REQUIRE_GMGN_MARKET: ${{ steps.gmgn-market-requirement.outputs.require_gmgn_market }}",
-      'PROGRAMMABLE_REQUIRE_GMGN_MARKET: "false"',
-    ],
-    [
-      "secret-free GMGN requirement output",
-      'printf \'{"status":"resolved","requireGmgnMarket":%s}\\n\'',
-      'echo "$GMGN_API_KEY"',
-    ],
   ])("rejects a staged workflow without %s", (_label, needle, replacement) => {
     const path = ".github/workflows/deploy-production.yml";
     const workflow = readFileSync(resolve(ROOT, path), "utf8");
     expect(workflow).toContain(needle);
     const result = evaluateReadModelOperationsSourceContracts(ROOT, {
       sourceOverrides: { [path]: workflow.replace(needle, replacement) },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-public-provider-stage-smoke",
+    );
+  });
+
+  it.each([
+    "Resolve staged GMGN market requirement",
+    "id: gmgn-market-requirement",
+    "node scripts/resolve-gmgn-production-requirement.mjs",
+    "PROGRAMMABLE_REQUIRE_GMGN_MARKET: true",
+    "GMGN_MARKET_REQUIRED: true",
+  ])("rejects restored staged GMGN release coupling through %s", (injection) => {
+    const path = ".github/workflows/deploy-production.yml";
+    const workflow = readFileSync(resolve(ROOT, path), "utf8");
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: `${workflow}\n${injection}\n` },
     });
     expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
       "ops-protected-public-provider-stage-smoke",
@@ -3008,70 +3022,24 @@ describe("read-model operations source contract", () => {
     },
   );
 
-  it.each([
-    [
-      "the exact GMGN rate metadata key",
-      'GMGN_MAX_REQUESTS_PER_SECOND_ENVIRONMENT_KEY =\n  "GMGN_MAX_REQUESTS_PER_SECOND"',
-      'GMGN_MAX_REQUESTS_PER_SECOND_ENVIRONMENT_KEY =\n  "GMGN_RATE"',
-    ],
-    [
-      "the both-absent optional state",
-      "matches.length === 0 && rateMatches.length === 0",
-      "matches.length === 0 || rateMatches.length === 0",
-    ],
-    [
-      "the partial-metadata failure state",
-      "matches.length === 0 || rateMatches.length === 0",
-      "matches.length === 0 && rateMatches.length === 0",
-    ],
-    ["the exact sensitive type", 'entry.type !== "sensitive"', "false"],
-    [
-      "the exact Production target",
-      'entry.target[0] !== "production"',
-      "false",
-    ],
-    ["duplicate rejection", "matches.length !== 1", "false"],
-    ["value-field rejection", "containsForbiddenValueField(entry)", "false"],
-    [
-      "the protected rate type",
-      '!["sensitive", "encrypted"].includes(rateEntry.type)',
-      "false",
-    ],
-    [
-      "the rate Production target",
-      'rateEntry.target[0] !== "production"',
-      "false",
-    ],
-  ])(
-    "rejects a GMGN metadata resolver without %s",
-    (_label, needle, replacement) => {
-      const path = "scripts/resolve-gmgn-production-requirement.mjs";
-      const source = readFileSync(resolve(ROOT, path), "utf8");
-      expect(source).toContain(needle);
-      const result = evaluateReadModelOperationsSourceContracts(ROOT, {
-        sourceOverrides: { [path]: source.replace(needle, replacement) },
-      });
-      expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
-        "ops-protected-public-provider-stage-smoke",
-      );
-    },
-  );
+  it("keeps the deleted GMGN release resolver out of the release contract", () => {
+    const path = "scripts/resolve-gmgn-production-requirement.mjs";
+    expect(existsSync(resolve(ROOT, path))).toBe(false);
+    const packageSource = readFileSync(resolve(ROOT, "package.json"), "utf8");
+    expect(packageSource).not.toContain("resolve-gmgn-production-requirement");
+    const result = evaluateReadModelOperationsSourceContracts(ROOT, {
+      sourceOverrides: { [path]: "export const restoredGate = true;" },
+    });
+    expect(result.failures.map(({ id }: { id: string }) => id)).toContain(
+      "ops-protected-public-provider-stage-smoke",
+    );
+  });
 
   it.each([
-    [
-      "staged GMGN requirement output",
-      "GMGN_MARKET_REQUIRED: ${{ steps.gmgn-market-requirement.outputs.require_gmgn_market }}",
-      "GMGN_MARKET_REQUIRED: false",
-    ],
     [
       "GMGN account-gate-mode output",
       "GMGN_ACCOUNT_GATE_MODE: ${{ steps.public-provider-smoke.outputs.gmgn_account_gate_mode }}",
       "GMGN_ACCOUNT_GATE_MODE: unavailable",
-    ],
-    [
-      "staged GMGN requirement summary",
-      "GMGN market required by staged public smoke:",
-      "GMGN market requirement omitted:",
     ],
     [
       "visible market provider output",

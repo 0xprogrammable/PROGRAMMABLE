@@ -260,29 +260,14 @@ npm run perf:read-model:real-block-sla -- \
 
 The staging workflow stops here and records the exact deployment ID, URL,
 candidate-only retry override, deploy-policy mode, conditional wake-canary
-result and previous production deployment ID, URL and commit. It also records
-the exact `true` or `false` GMGN
-market requirement and the effective GMGN requests-per-second value returned
-by the staged runtime, together with its non-secret GMGN account-gate mode.
-When GMGN is required, the public smoke accepts only the exact Pro value `20`
-and `providers[0].accountGateMode=multiflight-v1`. A database through `0006`
-reports `legacy-singleflight-v1`; it may preserve rolling availability below
-20 requests per second, but it cannot satisfy this release or authorize a Pro
-throughput promotion. `unavailable` also fails the required smoke. The health
-route obtains the rate from the same server-only parser used by the market,
-discovery, analytics and chart adapters and obtains the gate mode from the
-database readiness probe; neither exposes the key or environment metadata. Set
-`STAGED_REQUIRE_GMGN_MARKET` to that Boolean from the exact staged-candidate
-handoff; do not infer it from the operator's existing environment. Only after
-the command above succeeds, capture the current Vercel Production environment
-metadata through the reviewed value-stripping binder, derive only the GMGN
-requirement Boolean from the exact sensitive Production entry, and require it
-to equal the staged value. The raw CLI response is piped directly into the
-binder and is never written to disk; only its value-free, project-bound
-projection is stored with mode `0600`. A mismatch means Production
-configuration changed after staging, so stop and stage a new candidate. Then
-reverify the same immutable deployment immediately before the manual promotion
-and pass that same Boolean explicitly to the post-promotion gate:
+result and previous production deployment ID, URL and commit. GMGN availability,
+throughput, account-gate mode and market qualification are diagnostic only;
+they do not authorize or block a website release. In particular, the presence
+of `GMGN_API_KEY` must not create a release requirement. The health route may
+still report non-secret provider observations, but neither the staging workflow
+nor the promotion path reads or prints the key. Only after the command above
+succeeds, reverify the same immutable deployment immediately before the manual
+promotion and run the post-promotion binding and public-surface checks:
 
 ```sh
 set -euo pipefail
@@ -290,27 +275,6 @@ umask 077
 : "${VERCEL_ORG_ID:?The Vercel organization ID is required}"
 : "${VERCEL_PROJECT_ID:?The Vercel project ID is required}"
 export VERCEL_ORG_ID VERCEL_PROJECT_ID
-case "${STAGED_REQUIRE_GMGN_MARKET:-}" in
-  true|false) ;;
-  *) echo "The staged GMGN market requirement is missing or invalid" >&2; exit 1 ;;
-esac
-readonly STAGED_REQUIRE_GMGN_MARKET
-test ! -e "$PRE_PROMOTE_GMGN_METADATA_OUTPUT"
-vercel env ls production --format json --token="$VERCEL_TOKEN" |
-  node scripts/bind-vercel-sensitive-production-metadata.mjs \
-    --metadata-file "$PRE_PROMOTE_GMGN_METADATA_OUTPUT" \
-    --vercel-project-id "$VERCEL_PROJECT_ID"
-REQUIRE_GMGN_MARKET="$(
-  node scripts/resolve-gmgn-production-requirement.mjs \
-    --metadata-file "$PRE_PROMOTE_GMGN_METADATA_OUTPUT" \
-    --vercel-project-id "$VERCEL_PROJECT_ID"
-)"
-readonly REQUIRE_GMGN_MARKET
-case "$REQUIRE_GMGN_MARKET" in
-  true|false) ;;
-  *) echo "The current GMGN market requirement is invalid" >&2; exit 1 ;;
-esac
-test "$REQUIRE_GMGN_MARKET" = "$STAGED_REQUIRE_GMGN_MARKET"
 
 test ! -e "$PRE_PROMOTE_BINDING_OUTPUT"
 npm run perf:read-model:staged-deployment -- \
@@ -324,8 +288,7 @@ vercel promote "$STAGED_DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"
 npm run perf:read-model:post-promotion -- \
   --target-url "https://programmable.market" \
   --deployment-id "$STAGED_DEPLOYMENT_ID" \
-  --git-head "$GITHUB_SHA" \
-  --require-gmgn-market "$REQUIRE_GMGN_MARKET"
+  --git-head "$GITHUB_SHA"
 ```
 
 If the promotion command or post-promotion gate returns an uncertain result,
@@ -367,20 +330,13 @@ grep -Fx "deployment_url=$PREVIOUS_DEPLOYMENT_URL" \
 grep -Fx "git_head=$PREVIOUS_GIT_HEAD" "$ROLLBACK_PRODUCTION_BINDING_OUTPUT"
 ```
 
-The metadata binder removes every known value-bearing field recursively before
-writing its exclusive value-free file and emits only a generic error if the
-provider response is malformed. The fixed-purpose resolver requires exactly one
-case-sensitive `GMGN_API_KEY` entry and exactly one case-sensitive
-`GMGN_MAX_REQUESTS_PER_SECOND` entry. Both must be Production-only, branchless,
-non-custom and not decrypted; the key must be sensitive, and the rate entry
-must be sensitive or encrypted. Both entries absent resolves to `false`; either
-entry present alone, duplicates, or malformed metadata fail closed. The concrete rate value is
-intentionally absent from the metadata projection and is verified only through
-the staged runtime health response. The resolver's captured
-stdout is exactly `true` or `false`, and neither the runbook nor the
-post-promotion verifier reads, prints or receives the key. Keep the Vercel CLI
-version aligned with the reviewed Stage workflow; any output-shape drift is a
-release failure rather than a fallback to the local environment.
+The metadata binder remains in the staging workflow for the independent
+read-model deploy policy. It removes every known value-bearing field
+recursively before writing its exclusive value-free file and emits only a
+generic error if the provider response is malformed. That metadata is not
+used to derive a GMGN release requirement. Keep the Vercel CLI version aligned with
+the reviewed Stage workflow; any output-shape drift is a release failure rather
+than a fallback to the local environment.
 The earlier real-block SLA commands require
 `PROGRAMMABLE_PERFORMANCE_PROBE_TOKEN` so the exported HMAC can be verified
 without exposing the secret. The post-promotion command does not reload the

@@ -1626,23 +1626,19 @@ function exactFalseEnvironmentKey(source, name) {
 
 const EXACT_MANUAL_VERCEL_PROMOTION =
   'vercel promote "$STAGED_DEPLOYMENT_ID" --yes --token="$VERCEL_TOKEN"';
-const EXACT_MANUAL_VERCEL_PRODUCTION_METADATA =
-  'vercel env ls production --format json --token="$VERCEL_TOKEN" |';
-const EXACT_MANUAL_GMGN_REQUIREMENT_EQUALITY =
-  'test "$REQUIRE_GMGN_MARKET" = "$STAGED_REQUIRE_GMGN_MARKET"';
 const EXACT_REAL_BLOCK_SLA_OUTPUT =
   "/secure/cutover/real-block-sla-db-attestation.json";
 const MANUAL_PROMOTION_SEQUENCE = Object.freeze([
   "npm run perf:read-model:real-block-sla-operator --",
   "npm run perf:read-model:real-block-sla --",
-  EXACT_MANUAL_VERCEL_PRODUCTION_METADATA,
-  "node scripts/bind-vercel-sensitive-production-metadata.mjs",
-  "node scripts/resolve-gmgn-production-requirement.mjs",
-  EXACT_MANUAL_GMGN_REQUIREMENT_EQUALITY,
   "npm run perf:read-model:staged-deployment --",
+  '--target-url "$STAGED_TARGET_URL"',
+  '--github-output "$PRE_PROMOTE_BINDING_OUTPUT"',
   EXACT_MANUAL_VERCEL_PROMOTION,
   "npm run perf:read-model:post-promotion --",
-  '--require-gmgn-market "$REQUIRE_GMGN_MARKET"',
+  '--target-url "https://programmable.market"',
+  '--deployment-id "$STAGED_DEPLOYMENT_ID"',
+  '--git-head "$GITHUB_SHA"',
 ]);
 
 function manualPromotionSequenceIsFailClosed(source) {
@@ -1682,46 +1678,39 @@ function manualPromotionSequenceIsFailClosed(source) {
   const activeProductionMetadataListings = shellCommands.filter((line) =>
     /\bvercel\s+env\s+ls\s+production(?:\s|$)/u.test(line),
   );
-  const activeRequirementEqualities = shellCommands.filter((line) =>
-    line.startsWith(EXACT_MANUAL_GMGN_REQUIREMENT_EQUALITY),
-  );
   const promotionFence = shellFences.find((lines) =>
     lines.includes(EXACT_MANUAL_VERCEL_PROMOTION),
   );
   const strictShellIndex = promotionFence?.indexOf("set -euo pipefail") ?? -1;
-  const metadataIndex =
-    promotionFence?.indexOf(EXACT_MANUAL_VERCEL_PRODUCTION_METADATA) ?? -1;
+  const stagedBindingIndex =
+    promotionFence?.findIndex((line) =>
+      line.startsWith("npm run perf:read-model:staged-deployment --")
+    ) ??
+    -1;
   return (
     activePromotionCommands.length === 1 &&
     activePromotionCommands[0] === EXACT_MANUAL_VERCEL_PROMOTION &&
-    activeProductionMetadataListings.length === 1 &&
-    activeProductionMetadataListings[0] ===
-      EXACT_MANUAL_VERCEL_PRODUCTION_METADATA &&
-    activeRequirementEqualities.length === 1 &&
-    activeRequirementEqualities[0] === EXACT_MANUAL_GMGN_REQUIREMENT_EQUALITY &&
+    activeProductionMetadataListings.length === 0 &&
     strictShellIndex >= 0 &&
-    strictShellIndex < metadataIndex &&
+    strictShellIndex < stagedBindingIndex &&
     includesExactLineSequence(promotionFence?.join("\n") ?? "", [
-      EXACT_MANUAL_VERCEL_PRODUCTION_METADATA,
-      "node scripts/bind-vercel-sensitive-production-metadata.mjs \\",
-      '--metadata-file "$PRE_PROMOTE_GMGN_METADATA_OUTPUT" \\',
-      '--vercel-project-id "$VERCEL_PROJECT_ID"',
+      'test ! -e "$PRE_PROMOTE_BINDING_OUTPUT"',
+      "npm run perf:read-model:staged-deployment -- \\",
+      '--target-url "$STAGED_TARGET_URL" \\',
+      '--github-output "$PRE_PROMOTE_BINDING_OUTPUT"',
+      'grep -Fx "deployment_id=$STAGED_DEPLOYMENT_ID" "$PRE_PROMOTE_BINDING_OUTPUT"',
+      'grep -Fx "target_url=$STAGED_TARGET_URL" "$PRE_PROMOTE_BINDING_OUTPUT"',
     ]) &&
     includesExactLineSequence(promotionFence?.join("\n") ?? "", [
-      'case "${STAGED_REQUIRE_GMGN_MARKET:-}" in',
-      "true|false) ;;",
-      '*) echo "The staged GMGN market requirement is missing or invalid" >&2; exit 1 ;;',
-      "esac",
-      "readonly STAGED_REQUIRE_GMGN_MARKET",
+      EXACT_MANUAL_VERCEL_PROMOTION,
+      "npm run perf:read-model:post-promotion -- \\",
+      '--target-url "https://programmable.market" \\',
+      '--deployment-id "$STAGED_DEPLOYMENT_ID" \\',
+      '--git-head "$GITHUB_SHA"',
     ]) &&
-    includesExactLineSequence(promotionFence?.join("\n") ?? "", [
-      'REQUIRE_GMGN_MARKET="$(',
-      "node scripts/resolve-gmgn-production-requirement.mjs \\",
-      '--metadata-file "$PRE_PROMOTE_GMGN_METADATA_OUTPUT" \\',
-      '--vercel-project-id "$VERCEL_PROJECT_ID"',
-      ')"',
-      "readonly REQUIRE_GMGN_MARKET",
-    ]) &&
+    !/resolve-gmgn-production-requirement|STAGED_REQUIRE_GMGN_MARKET|REQUIRE_GMGN_MARKET|--require-gmgn-market/u.test(
+      promotionFence?.join("\n") ?? "",
+    ) &&
     !shellCommands.some((line) => /\bvercel\s+pull(?:\s|$)/u.test(line))
   );
 }
@@ -2719,8 +2708,6 @@ export function evaluateReadModelOperationsSourceContracts(
     source("scripts/perf/read-model-deploy-policy.mjs") ?? "";
   const vercelSensitiveMetadataBinder =
     source("scripts/bind-vercel-sensitive-production-metadata.mjs") ?? "";
-  const gmgnProductionRequirement =
-    source("scripts/resolve-gmgn-production-requirement.mjs") ?? "";
   const environmentExample = source(".env.example") ?? "";
   const realBlockSlaOperator =
     source("scripts/perf/read-model-real-block-sla-operator.mjs") ?? "";
@@ -3005,17 +2992,20 @@ export function evaluateReadModelOperationsSourceContracts(
   const stagedBitquerySmoke = deployWorkflow.indexOf(
     "Smoke staged static identity and Dex public APIs",
   );
-  const stagedGmgnRequirement = deployWorkflow.indexOf(
-    "Resolve staged GMGN market requirement",
+  const stagedProductionMetadata = deployWorkflow.indexOf(
+    "Bind staged production environment metadata",
   );
-  const stagedGmgnRequirementEnd = deployWorkflow.indexOf(
+  const stagedProductionMetadataEnd = deployWorkflow.indexOf(
     "Validate staged read-model release policy",
-    stagedGmgnRequirement,
+    stagedProductionMetadata,
   );
-  const stagedGmgnRequirementBlock =
-    stagedGmgnRequirement >= 0 &&
-    stagedGmgnRequirementEnd > stagedGmgnRequirement
-      ? deployWorkflow.slice(stagedGmgnRequirement, stagedGmgnRequirementEnd)
+  const stagedProductionMetadataBlock =
+    stagedProductionMetadata >= 0 &&
+    stagedProductionMetadataEnd > stagedProductionMetadata
+      ? deployWorkflow.slice(
+          stagedProductionMetadata,
+          stagedProductionMetadataEnd,
+        )
       : "";
   const stagedReadModelPolicy = deployWorkflow.indexOf(
     "Validate staged read-model release policy",
@@ -3082,8 +3072,9 @@ export function evaluateReadModelOperationsSourceContracts(
     stagedBitquerySmoke >= 0 && stagedBitquerySmokeEnd > stagedBitquerySmoke
       ? deployWorkflow.slice(stagedBitquerySmoke, stagedBitquerySmokeEnd)
       : "";
-  const stagedProviderHandoff = includesEverySourceFragment(deployWorkflow, [
-    "GMGN_MARKET_REQUIRED: $\{{ steps.gmgn-market-requirement.outputs.require_gmgn_market }}",
+  const stagedProviderDiagnosticsHandoff = includesEverySourceFragment(
+    deployWorkflow,
+    [
     "gmgn_account_gate_mode: $\{{ steps.public-provider-smoke.outputs.gmgn_account_gate_mode }}",
     "GMGN_ACCOUNT_GATE_MODE: $\{{ steps.public-provider-smoke.outputs.gmgn_account_gate_mode }}",
     "gmgn_requests_per_second: $\{{ steps.public-provider-smoke.outputs.gmgn_requests_per_second }}",
@@ -3161,13 +3152,13 @@ export function evaluateReadModelOperationsSourceContracts(
     'echo "- Token detail smoke: \\`${DETAIL_SMOKE_STATUS:-not-run}\\`"',
     'echo "- Descending market-cap ranking: source \\`${MARKET_CAP_DESC_SOURCE:-not-run}\\`',
     'echo "- Ascending market-cap ranking: source \\`${MARKET_CAP_ASC_SOURCE:-not-run}\\`',
-    'echo "- GMGN market required by staged public smoke: \\`$GMGN_MARKET_REQUIRED\\`"',
     'echo "- Effective GMGN requests per second: \\`${GMGN_REQUESTS_PER_SECOND:-not-run}\\`"',
     'echo "- Market chart provider: \\`${CHART_PROVIDER:-not-run}\\`"',
     'echo "- Market chart series scope: \\`${CHART_SCOPE:-not-run}\\`"',
     'echo "- Market chart pool attribution: \\`${CHART_POOL_ATTRIBUTION:-not-run}\\`"',
-    'echo "- Market chart smoke: \\`${CHART_SMOKE_STATUS:-not-run}\\`"',
-  ]);
+      'echo "- Market chart smoke: \\`${CHART_SMOKE_STATUS:-not-run}\\`"',
+    ],
+  );
   const publicActionRoutes = [creatorClaimPrepare, tradePrepare];
   const primaryRpcLaunchCatalogCacheStart = primaryRpcLaunchCatalog.indexOf(
     "export function createPrimaryRpcLaunchCatalogCacheV1",
@@ -4358,12 +4349,12 @@ export function evaluateReadModelOperationsSourceContracts(
     stagedBitquerySmoke >
       deployWorkflow.indexOf("Resolve exact staged deployment") &&
       deployWorkflow.indexOf("Pull production configuration") >= 0 &&
-      stagedGmgnRequirement >
+      stagedProductionMetadata >
         deployWorkflow.indexOf("Pull production configuration") &&
-      stagedGmgnRequirement < stagedBitquerySmoke &&
-      stagedReadModelPolicy > stagedGmgnRequirement &&
+      stagedProductionMetadata < stagedBitquerySmoke &&
+      stagedReadModelPolicy > stagedProductionMetadata &&
       stagedReadModelPolicy < stagedCandidateDeploy &&
-      includesEverySourceFragment(stagedGmgnRequirementBlock, [
+      includesEverySourceFragment(stagedProductionMetadataBlock, [
         "VERCEL_TOKEN: $\{{ secrets.VERCEL_TOKEN }}",
         "set -euo pipefail",
         'metadata_file="$RUNNER_TEMP/vercel-production-env-metadata.json"',
@@ -4372,27 +4363,16 @@ export function evaluateReadModelOperationsSourceContracts(
         "node scripts/bind-vercel-sensitive-production-metadata.mjs",
         '--metadata-file "$metadata_file"',
         '--vercel-project-id "$VERCEL_PROJECT_ID"',
-        "node scripts/resolve-gmgn-production-requirement.mjs",
-        "readonly require_gmgn_market",
-        'echo "require_gmgn_market=$require_gmgn_market" >> "$GITHUB_OUTPUT"',
-        '"requireGmgnMarket":%s',
       ]) &&
-      includesExactLineSequence(stagedGmgnRequirementBlock, [
+      includesExactLineSequence(stagedProductionMetadataBlock, [
         'vercel env ls production --format json --token="$VERCEL_TOKEN" |',
         "node scripts/bind-vercel-sensitive-production-metadata.mjs \\",
         '--metadata-file "$metadata_file" \\',
         '--vercel-project-id "$VERCEL_PROJECT_ID"',
       ]) &&
-      includesExactLineSequence(stagedGmgnRequirementBlock, [
-        'require_gmgn_market="$(',
-        "node scripts/resolve-gmgn-production-requirement.mjs \\",
-        '--metadata-file "$metadata_file" \\',
-        '--vercel-project-id "$VERCEL_PROJECT_ID"',
-        ')"',
-        "readonly require_gmgn_market",
-      ]) &&
-      (stagedGmgnRequirementBlock.match(/require_gmgn_market=/gu)?.length ??
-        0) === 2 &&
+      !/resolve-gmgn-production-requirement|require_gmgn_market|requireGmgnMarket|GMGN_API_KEY|GITHUB_OUTPUT|continue-on-error:/u.test(
+        stagedProductionMetadataBlock,
+      ) &&
       includesEverySourceFragment(stagedReadModelPolicyBlock, [
         "id: read-model-policy",
         "PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT: $\{{ vars.PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT }}",
@@ -4410,11 +4390,11 @@ export function evaluateReadModelOperationsSourceContracts(
         "VERCEL_PROJECT_ID: $\{{ secrets.VERCEL_PROJECT_ID }}",
       ) &&
       !/\bprj_[A-Za-z0-9]{8,128}\b/u.test(deployWorkflow) &&
-      !stagedGmgnRequirementBlock.includes(
+      !stagedProductionMetadataBlock.includes(
         'vercel env ls production --format json --token="$VERCEL_TOKEN" >',
       ) &&
       !/GMGN_API_KEY|\.vercel\/\.env\.production\.local|set -x|console\.log|continue-on-error:/u.test(
-        stagedGmgnRequirementBlock,
+        stagedProductionMetadataBlock,
       ) &&
       includesEverySourceFragment(vercelSensitiveMetadataBinder, [
         "MAXIMUM_METADATA_BYTES",
@@ -4427,33 +4407,7 @@ export function evaluateReadModelOperationsSourceContracts(
         "mode: 0o600",
         'process.stderr.write("Vercel Production metadata binding failed\\n")',
       ]) &&
-      includesEverySourceFragment(gmgnProductionRequirement, [
-        'GMGN_PRODUCTION_ENVIRONMENT_KEY = "GMGN_API_KEY"',
-        'GMGN_MAX_REQUESTS_PER_SECOND_ENVIRONMENT_KEY =\n    "GMGN_MAX_REQUESTS_PER_SECOND"',
-        "VERCEL_SENSITIVE_PRODUCTION_METADATA_SCHEMA",
-        'metadata.target !== "production"',
-        "metadata.vercelProjectId !== vercelProjectId",
-        "containsForbiddenValueField(entry)",
-        "matches.length === 0 && rateMatches.length === 0",
-        "matches.length === 0 || rateMatches.length === 0",
-        'throw new Error("GMGN Production metadata is incomplete")',
-        "matches.length !== 1",
-        "rateMatches.length !== 1",
-        'entry.type !== "sensitive"',
-        "entry.target.length !== 1",
-        'entry.target[0] !== "production"',
-        "!branchless",
-        "!nonCustom",
-        "!notDecrypted",
-        '!["sensitive", "encrypted"].includes(rateEntry.type)',
-        "rateEntry.target.length !== 1",
-        'rateEntry.target[0] !== "production"',
-        "!rateBranchless",
-        "!rateNonCustom",
-        "!rateNotDecrypted",
-        'process.stdout.write(requireGmgnMarket ? "true\\n" : "false\\n")',
-      ]) &&
-      !gmgnProductionRequirement.includes("process.env.GMGN_API_KEY") &&
+      source("scripts/resolve-gmgn-production-requirement.mjs") === null &&
       includesEverySourceFragment(stagedCandidateDeployBlock, [
         "set -euo pipefail",
         "vercel deploy --prod --skip-domain --archive=tgz",
@@ -4482,17 +4436,20 @@ export function evaluateReadModelOperationsSourceContracts(
         "VERCEL_AUTOMATION_BYPASS_SECRET: $\{{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}",
       ) &&
       stagedBitquerySmokeBlock.includes(
-        "PROGRAMMABLE_REQUIRE_GMGN_MARKET: $\{{ steps.gmgn-market-requirement.outputs.require_gmgn_market }}",
-      ) &&
-      stagedBitquerySmokeBlock.includes(
         "node scripts/smoke-static-dexscreener-public-apis.mjs",
+      ) &&
+      !stagedBitquerySmokeBlock.includes(
+        "PROGRAMMABLE_REQUIRE_GMGN_MARKET",
       ) &&
       !stagedBitquerySmokeBlock.includes("continue-on-error:") &&
       (stagedBitquerySmokeBlock.match(
         /smoke-static-dexscreener-public-apis\.mjs/gu,
       )?.length ?? 0) === 1 &&
       !stagedBitquerySmokeBlock.includes("        if:") &&
-      stagedProviderHandoff &&
+      stagedProviderDiagnosticsHandoff &&
+      !/Resolve staged GMGN market requirement|gmgn-market-requirement|resolve-gmgn-production-requirement|PROGRAMMABLE_REQUIRE_GMGN_MARKET|GMGN_MARKET_REQUIRED/u.test(
+        deployWorkflow,
+      ) &&
       includesEverySourceFragment(operationsHealth, [
         "getProductionGmgnAccountGateStatusV1",
         "const gmgnAccountGate = await getProductionGmgnAccountGateStatusV1()",
@@ -4845,13 +4802,13 @@ export function evaluateReadModelOperationsSourceContracts(
       packageJson?.scripts?.["verify:custom-v2:ci"]?.includes(
         "tests/bind-vercel-sensitive-production-metadata.test.ts",
       ) === true &&
-      packageJson?.scripts?.["verify:custom-v2:ci"]?.includes(
-        "tests/resolve-gmgn-production-requirement.test.ts",
-      ) === true &&
+      !packageJson?.scripts?.["verify:custom-v2:ci"]?.includes(
+        "resolve-gmgn-production-requirement",
+      ) &&
       packageJson?.scripts?.["verify:custom-v2:ci"]?.includes(
         "npm run perf:read-model:ops-gate",
       ) === true,
-    "the immutable staged candidate proves validated last-good identities, bounded GMGN-visible and detail enrichment with Dexscreener fallback, mandatory exact-identity GMGN detail when configured, an exact-input durable full GMGN plus token_info plus Dexscreener market-cap composition across pagination with bounded drift retry and committed coverage, token-address GMGN chart primary with explicit exact-or-unavailable current locator attribution, token-level GMGN pool_info with unavailable attribution, and exact-pool Bitquery fallback with scope and provider handed off explicitly",
+    "the immutable staged candidate keeps generic sensitive metadata bound to deploy policy and runs the public provider smoke without deriving or enforcing a GMGN release requirement; the standalone smoke retains bounded provider diagnostics and exact identity, ranking, analytics and chart validation",
   );
   check(
     "ops-obsolete-public-read-gates-absent",
@@ -4999,44 +4956,33 @@ export function evaluateReadModelOperationsSourceContracts(
       retiredCandidateCutoverIsFailClosed(retiredCandidateCutover) &&
       postPromotion.includes("verifyProductionDeploymentBinding") &&
       productionBinding.includes("resolveProductionBinding") &&
-      stagedProviderHandoff &&
+      stagedProviderDiagnosticsHandoff &&
       includesEverySourceFragment(postPromotion, [
         "export function parsePostPromotionArguments(argv)",
-        '"require-gmgn-market"',
-        '!["true", "false"].includes(result["require-gmgn-market"])',
-        'requireGmgnMarket: result["require-gmgn-market"] === "true"',
-        "requireGmgnMarket: args.requireGmgnMarket",
+        '"target-url"',
+        '"deployment-id"',
+        '"git-head"',
+        '"--target-url, --deployment-id and --git-head are required"',
       ]) &&
       includesEverySourceFragment(postPromotionVerifierBlock, [
         "target.toString() !== `${PRODUCTION_ORIGIN}/`",
-        'typeof input.requireGmgnMarket !== "boolean"',
-        'throw new Error("an explicit GMGN market requirement boolean is required")',
         'throw new Error("exact production deployment binding is required")',
         "verifyProductionDeploymentBinding({",
         "runProductionStaticDexscreenerSmokeV1({",
-        "PROGRAMMABLE_REQUIRE_GMGN_MARKET: String(input.requireGmgnMarket)",
+        "environment: {}",
         'id: "production-static-identity-dexscreener-public-apis"',
       ]) &&
-      !postPromotion.includes("GMGN_API_KEY") &&
-      !postPromotion.includes("input.environment") &&
+      !/GMGN_API_KEY|PROGRAMMABLE_REQUIRE_GMGN_MARKET|requireGmgnMarket|require-gmgn-market|input\.environment/u.test(
+        postPromotion,
+      ) &&
       includesEverySourceFragment(operationsRunbook, [
         ': "${VERCEL_ORG_ID:?The Vercel organization ID is required}"',
         ': "${VERCEL_PROJECT_ID:?The Vercel project ID is required}"',
         "export VERCEL_ORG_ID VERCEL_PROJECT_ID",
-        'test ! -e "$PRE_PROMOTE_GMGN_METADATA_OUTPUT"',
-        'vercel env ls production --format json --token="$VERCEL_TOKEN" |',
-        "node scripts/bind-vercel-sensitive-production-metadata.mjs",
-        '--metadata-file "$PRE_PROMOTE_GMGN_METADATA_OUTPUT"',
-        '--vercel-project-id "$VERCEL_PROJECT_ID"',
-        "node scripts/resolve-gmgn-production-requirement.mjs",
-        'test "$REQUIRE_GMGN_MARKET" = "$STAGED_REQUIRE_GMGN_MARKET"',
-        '--require-gmgn-market "$REQUIRE_GMGN_MARKET"',
-        "Both entries absent resolves to `false`",
-        "either\nentry present alone, duplicates, or malformed metadata fail closed",
+        "GMGN availability,\nthroughput, account-gate mode and market qualification are diagnostic only",
+        "the presence\nof `GMGN_API_KEY` must not create a release requirement",
+        "That metadata is not\nused to derive a GMGN release requirement",
       ]) &&
-      !operationsRunbook.includes(
-        'vercel env ls production --format json --token="$VERCEL_TOKEN" >',
-      ) &&
       !/\bprj_[A-Za-z0-9]{8,128}\b/u.test(operationsRunbook) &&
       !/process\.env\.GMGN_API_KEY|\.vercel\/\.env\.production\.local|set -x|console\.log/u.test(
         operationsRunbook,
@@ -5052,7 +4998,7 @@ export function evaluateReadModelOperationsSourceContracts(
       !operationsRunbook.includes(
         '--evidence "$READ_MODEL_RELEASE_EVIDENCE_PATH"',
       ),
-    "the workflow is stage-only and the manual promotion sequence binds a secret-safe current Production GMGN requirement to the staged and post-promotion public checks",
+    "the workflow is stage-only and the fail-closed manual promotion binds the exact candidate and commit, keeps rollback safety and runs the public smoke without deriving or enforcing a GMGN release requirement",
   );
   check(
     "ops-vercel-project-prerequisite",
