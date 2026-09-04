@@ -141,7 +141,9 @@ jobs:
       - name: Audit indexer production dependencies
         if: needs.scope.outputs.indexer == 'true'
         working-directory: indexer
-        run: pnpm audit --prod --audit-level high
+        run: |
+          node --test ../scripts/ci/run-indexer-dependency-audit.test.mjs
+          node ../scripts/ci/run-indexer-dependency-audit.mjs
 
       - name: Generate and verify indexer
         if: needs.scope.outputs.indexer == 'true'
