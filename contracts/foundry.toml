@@ -11,6 +11,9 @@ optimizer_runs = 1_000
 bytecode_hash = "none"
 cbor_metadata = false
 ffi = false
+# This surface has its own via-IR compiler and invariant/filesystem settings.
+# Both verification entrypoints must run the late-migration profile separately.
+skip = ["src/late-migration/**", "test/late-migration/**"]
 fs_permissions = [
   { access = "read", path = "./dependencies" },
   { access = "read", path = "./spec" },
@@ -29,6 +32,28 @@ fail_on_revert = false
 [profile.ci]
 fuzz = { runs = 10_000, max_test_rejects = 65_536 }
 invariant = { runs = 1_000, depth = 128, fail_on_revert = false }
+
+# The late-migration intake uses IR compilation, while enabling IR for the
+# repository-wide profile currently exposes unrelated legacy Yul stack limits.
+# Keep this release surface isolated and reproducible without changing the
+# compiler settings used by any existing contract suite.
+[profile.late-migration]
+skip = []
+src = "src/late-migration"
+test = "test/late-migration"
+script = "script/late-migration"
+via_ir = true
+auto_detect_remappings = false
+fs_permissions = [{ access = "read", path = "../config/late-migration-eligibility.v1.json" }]
+
+[profile.late-migration.fuzz]
+runs = 1_000
+max_test_rejects = 65_536
+
+[profile.late-migration.invariant]
+runs = 256
+depth = 64
+fail_on_revert = true
 
 [fmt]
 line_length = 120
