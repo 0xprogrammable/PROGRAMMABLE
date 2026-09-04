@@ -3610,7 +3610,7 @@ export const programmablePublicOpenApi = {
       finalizedMetadataPath: "/v4/chains/4663/finalized-custom-launches",
       statusPath: "/v4/chains/4663/custom-launches/{launchId}",
       terminalIndexerGuideUrl:
-        `${SITE_ORIGIN}/docs/developers/robinhood-terminal-indexer`,
+        `${SITE_ORIGIN}/developer-reference/robinhood-terminal-indexer`,
       terminalIndexerFixtureUrl:
         `${SITE_ORIGIN}/fixtures/robinhood-terminal-indexer-v1.json`,
       launchStampRouterAbiUrl:

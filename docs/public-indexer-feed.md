@@ -35,7 +35,7 @@ response intentionally remains `not-deployed` with activation stage
 `planned-not-deployed`. That response describes only this Explore lane; it is
 not evidence that the Router or backend is undeployed and is not authoritative
 evidence that no launches exist. Use the
-[Robinhood terminal integration](https://programmable.market/docs/developers/robinhood-terminal-indexer)
+[Robinhood terminal integration](https://programmable.market/developer-reference/robinhood-terminal-indexer)
 for the exact Router, start block and finalized-feed boundary.
 
 ## Launch models

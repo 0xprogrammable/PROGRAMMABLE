@@ -174,7 +174,7 @@ function sortJsonKeys(value: unknown): unknown {
 }
 
 describe("Robinhood terminal and indexer documentation", () => {
-  it("serves the canonical guide before the GitBook fallback", async () => {
+  it("publishes the canonical guide independently of the GitBook fallback", async () => {
     const rewrites = await nextConfig.rewrites?.();
 
     expect(vercelConfig.rewrites).not.toEqual(
@@ -202,8 +202,11 @@ describe("Robinhood terminal and indexer documentation", () => {
     expect(aliasSource).toContain(
       'from "@/app/docs/developers/robinhood-terminal-indexer/page"',
     );
+    expect(pageSource).toContain(
+      'canonical: "/developer-reference/robinhood-terminal-indexer"',
+    );
     expect(sitemapSource).toContain(
-      '"/docs/developers/robinhood-terminal-indexer"',
+      '"/developer-reference/robinhood-terminal-indexer"',
     );
     expect(gitBookSummary).toContain(
       "(developers/robinhood-terminal-indexer.md)",

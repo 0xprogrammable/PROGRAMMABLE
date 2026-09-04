@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   description:
     "Index Programmable Custom launches on Robinhood Chain with the canonical Router, finalized feed, event topics and fail-closed result states.",
   alternates: {
-    canonical: "/docs/developers/robinhood-terminal-indexer",
+    canonical: "/developer-reference/robinhood-terminal-indexer",
   },
 };
 
@@ -299,7 +299,7 @@ const sections = [
 export default function RobinhoodTerminalIndexerPage() {
   return (
     <DocsShell
-      currentPath="/docs/developers/robinhood-terminal-indexer"
+      currentPath="/developer-reference/robinhood-terminal-indexer"
       description="Use the chain-bound Router and finalized feed to identify Programmable Custom launches on Robinhood Chain. Resolve public self-serve activation live and report fee behavior separately."
       kicker="Trading terminal integration"
       parentHref="/docs/developers"
