@@ -216,6 +216,8 @@ jobs:
       - name: Require protected CLI tags and a fresh release identity
         env:
           GH_TOKEN: ${{ github.token }}
+          IMMUTABLE_RELEASES_PREFLIGHT_RECORD_BASE64: ${{ vars.PROGRAMMABLE_IMMUTABLE_RELEASES_PREFLIGHT_RECORD_BASE64 }}
+          IMMUTABLE_RELEASES_PREFLIGHT_SIGNATURE_BASE64: ${{ vars.PROGRAMMABLE_IMMUTABLE_RELEASES_PREFLIGHT_SIGNATURE_BASE64 }}
           TAG: ${{ steps.identity.outputs.tag }}
         run: |
           set -euo pipefail
@@ -234,7 +236,7 @@ jobs:
             --header "X-GitHub-Api-Version: 2026-03-10" \
             "https://api.github.com/repos/$GITHUB_REPOSITORY/rulesets/$ruleset_id" \
             --output "$rulesets"
-          node scripts/verify-programmable-launch-tag-ruleset.mjs "$rulesets"
+          node scripts/verify-programmable-launch-tag-ruleset.mjs "$rulesets" --owner-preflight
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release already exists and will not be changed." >&2
             exit 1
@@ -313,6 +315,12 @@ jobs:
             --environment "production" \
             --actor-id "$GITHUB_ACTOR_ID" \
             --actor-login "$GITHUB_ACTOR"
+          rulesets="$RUNNER_TEMP/programmable-launch-tag-ruleset-before-publication.json"
+          gh api \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/$GITHUB_REPOSITORY/rulesets/21679403" > "$rulesets"
+          node scripts/verify-programmable-launch-tag-ruleset.mjs "$rulesets" --owner-preflight
           test "$GITHUB_REF_PROTECTED" = "true"
           test "$(gh api \
             --header "Accept: application/vnd.github+json" \

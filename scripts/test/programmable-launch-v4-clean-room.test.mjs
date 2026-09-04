@@ -220,16 +220,25 @@ test("V4 release contract binds canonical manifest, checksum, assets, and produc
   assert.throws(() => validateReleaseFiles(extra), /RELEASE_FILES_SHAPE_INVALID/u);
 });
 
-test("reviewed release coordinate blocks the current unreleased state and binds every future byte", () => {
+test("reviewed release coordinate preserves the blocked baseline and binds every released byte", () => {
   const coordinateSchema = JSON.parse(readFileSync(new URL(
     "../../docs/operations/releases/custom-launch-v4/clean-room-release-coordinate.schema.json",
     import.meta.url,
   ), "utf8"));
   const validateCoordinateSchema = new Ajv2020({ strict: true }).compile(coordinateSchema);
-  const blocked = JSON.parse(readFileSync(new URL(
+  const committed = JSON.parse(readFileSync(new URL(
     "../../docs/operations/releases/custom-launch-v4/clean-room-release-coordinate.json",
     import.meta.url,
   ), "utf8"));
+  assert.equal(validateCoordinateSchema(committed), true, JSON.stringify(validateCoordinateSchema.errors));
+  if (committed.releaseReady) {
+    const bindingBytes = readFileSync(path.join(repositoryRoot, bindingPath));
+    validateReviewedReleaseCoordinate(committed, {
+      releaseReady: JSON.parse(bindingBytes).releaseReady,
+      bindingSha256: `sha256:${hexSha(bindingBytes)}`,
+    });
+  }
+  const blocked = blockedCoordinateBaseline(committed);
   assert.equal(validateCoordinateSchema(blocked), true, JSON.stringify(validateCoordinateSchema.errors));
   assert.equal(validateReviewedReleaseCoordinate(blocked, {
     releaseReady: false,

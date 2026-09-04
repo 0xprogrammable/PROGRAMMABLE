@@ -18,9 +18,10 @@ import {
   canonicalizeJson,
   parseStrictJson,
 } from "../packages/launch/src/canonical-json.mjs";
+import { assertProgrammableLaunchTagRuleset } from "./verify-programmable-launch-tag-ruleset.mjs";
 
 export const IMMUTABLE_RELEASE_PREFLIGHT_SCHEMA =
-  "programmable.github-immutable-release-owner-preflight.v2";
+  "programmable.github-immutable-release-owner-preflight.v3";
 export const IMMUTABLE_RELEASE_PREFLIGHT_API_VERSION = "2026-03-10";
 export const IMMUTABLE_RELEASE_PREFLIGHT_SIGNER =
   "258789013+hazarxyz@users.noreply.github.com";
@@ -73,6 +74,7 @@ const RECORD_KEYS = Object.freeze([
   "response",
   "revision",
   "schemaVersion",
+  "tagRuleset",
   "url",
 ]);
 const RESPONSE_KEYS = Object.freeze([
@@ -333,6 +335,28 @@ export function verifyImmutableReleaseOwnerPreflight({
     throw new TypeError("immutable-release owner preflight is stale or differs");
   }
 
+  const tag = exactKeys(value.tagRuleset, ["url", "response"], "owner tag ruleset");
+  const tagResponse = exactKeys(tag.response,
+    ["bodyBase64", "bodySha256", "date", "requestId", "status"], "owner tag ruleset response");
+  const tagBytes = decodeCanonicalBase64(tagResponse.bodyBase64, "owner tag ruleset body", MAXIMUM_RESPONSE_BODY_BYTES);
+  const tagRuleset = parseStrictJson(decodeUtf8(tagBytes, "owner tag ruleset body"),
+    { maximumBytes: MAXIMUM_RESPONSE_BODY_BYTES, maximumDepth: 8 });
+  assertProgrammableLaunchTagRuleset(tagRuleset);
+  const tagDate = Date.parse(tagResponse.date);
+  const tagUpdated = Date.parse(tagRuleset.updated_at);
+  if (tag.url !== `https://api.github.com/repos/${repository}/rulesets/21679403`
+    || tagResponse.status !== 200 || tagResponse.bodySha256 !== sha256(tagBytes)
+    || typeof tagResponse.requestId !== "string" || !GITHUB_REQUEST_ID.test(tagResponse.requestId)
+    || typeof tagResponse.date !== "string" || !Number.isFinite(tagDate)
+    || new Date(tagDate).toUTCString() !== tagResponse.date
+    || tagDate > nowMilliseconds + MAXIMUM_FUTURE_SKEW_MS
+    || nowMilliseconds - tagDate > MAXIMUM_AGE_MS
+    || Math.abs(tagDate - observedAtMilliseconds) > MAXIMUM_FUTURE_SKEW_MS
+    || typeof tagRuleset.updated_at !== "string" || !Number.isFinite(tagUpdated)
+    || tagUpdated > tagDate + MAXIMUM_FUTURE_SKEW_MS) {
+    throw new TypeError("owner tag ruleset preflight is stale or differs");
+  }
+
   return Object.freeze({
     actorId,
     actorLogin,
@@ -350,6 +374,7 @@ export function verifyImmutableReleaseOwnerPreflight({
     revision,
     schemaVersion: IMMUTABLE_RELEASE_PREFLIGHT_SCHEMA,
     signer: policy.principal,
+    tagRuleset,
     url: expectedUrl,
   });
 }

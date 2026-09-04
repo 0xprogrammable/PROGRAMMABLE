@@ -50,7 +50,7 @@ node scripts/capture-immutable-release-owner-preflight.mjs \
 
 The helper refuses to run when `GITHUB_ACTIONS` is present. It validates
 `gh api /user` as the exact login and numeric owner, validates the live `production` ref
-as the requested SHA, and makes one owner-authenticated request to the
+as the requested SHA, and makes owner-authenticated requests to the
 [immutable release setting endpoint](https://docs.github.com/en/rest/repos/repos#check-if-immutable-releases-are-enabled-for-a-repository).
 It retains that response's exact body bytes, SHA-256, canonical HTTP `Date`,
 `X-GitHub-Request-Id`, status `200`, and the exact parsed two-key body
@@ -59,12 +59,14 @@ It retains that response's exact body bytes, SHA-256, canonical HTTP `Date`,
 signs the record locally and verifies the result against
 the checked-in trust root before emitting the capture JSON.
 
+The same signature also binds the complete response for tag ruleset `21679403`, including an explicit empty `bypass_actors` array. GitHub [omits this field for callers without ruleset write access](https://docs.github.com/en/rest/repos/rules#get-a-repository-ruleset), including the ordinary workflow token. The workflow requires the signed owner response and compares every public protection field and the normalized `updated_at` timestamp against a fresh workflow read before building and before publication. Missing owner permissions, any bypass actor, changed protection, or changed update timestamp fails closed. Both signed endpoint observations must be fresh and within 30 seconds of each other. No owner API token is passed to Actions.
+
 The signed record uses schema
-`programmable.github-immutable-release-owner-preflight.v2`. Its UTF-8 bytes are
+`programmable.github-immutable-release-owner-preflight.v3`. Its UTF-8 bytes are
 RFC 8785/JCS JSON followed by exactly one LF. The record has exactly these fields:
 
 ```json
-{"actorId":"258789013","actorLogin":"hazarxyz","apiVersion":"2026-03-10","environment":"production","observedAt":"YYYY-MM-DDTHH:MM:SSZ","repository":"programmablehq/PROGRAMMABLE","repositoryId":"1314365508","response":{"bodyBase64":"RAW_ENDPOINT_BODY_BASE64","bodySha256":"sha256:...","date":"HTTP_DATE","enabled":true,"enforcedByOwner":false,"requestId":"X_GITHUB_REQUEST_ID","status":200},"revision":"EXACT_PRODUCTION_SHA","schemaVersion":"programmable.github-immutable-release-owner-preflight.v2","url":"https://api.github.com/repos/programmablehq/PROGRAMMABLE/immutable-releases"}
+{"actorId":"258789013","actorLogin":"hazarxyz","apiVersion":"2026-03-10","environment":"production","observedAt":"YYYY-MM-DDTHH:MM:SSZ","repository":"programmablehq/PROGRAMMABLE","repositoryId":"1314365508","response":{"bodyBase64":"RAW_ENDPOINT_BODY_BASE64","bodySha256":"sha256:...","date":"HTTP_DATE","enabled":true,"enforcedByOwner":false,"requestId":"X_GITHUB_REQUEST_ID","status":200},"revision":"EXACT_PRODUCTION_SHA","schemaVersion":"programmable.github-immutable-release-owner-preflight.v3","tagRuleset":{"response":{"bodyBase64":"RAW_RULESET_BODY_BASE64","bodySha256":"sha256:...","date":"HTTP_DATE","requestId":"X_GITHUB_REQUEST_ID","status":200},"url":"https://api.github.com/repos/programmablehq/PROGRAMMABLE/rulesets/21679403"},"url":"https://api.github.com/repos/programmablehq/PROGRAMMABLE/immutable-releases"}
 ```
 
 Both the LF-terminated record and the complete armored OpenSSH signature are
