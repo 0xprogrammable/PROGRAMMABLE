@@ -4309,9 +4309,7 @@ export function ExploreView({
 
                   {!embedded ? (
                     <div className={styles.chainControl}>
-                      <ExploreChainSelector
-                        probeAvailability={!indexRebuilding}
-                      />
+                      <ExploreChainSelector />
                     </div>
                   ) : null}
 

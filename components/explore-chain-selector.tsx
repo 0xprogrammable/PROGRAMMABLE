@@ -1,21 +1,9 @@
 "use client";
 
-import {
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 
-import {
-  useViewChain,
-  type ViewChainId,
-} from "@/components/view-chain";
-import {
-  isRobinhoodExploreAvailableResponse,
-  resolveExploreChainId,
-} from "@/lib/explore-chain";
+import { useViewChain, type ViewChainId } from "@/components/view-chain";
+import { resolveExploreChainId } from "@/lib/explore-chain";
 import styles from "@/components/explore-chain-selector.module.css";
 
 type ExploreChainOption = Readonly<{
@@ -39,11 +27,13 @@ const EXPLORE_CHAIN_OPTIONS = [
     label: "Robinhood",
     mark: "robinhood",
     viewChainId: 4663,
-    available: false,
+    available: true,
   },
 ] as const satisfies readonly ExploreChainOption[];
 
-function ExploreChainMark({ mark }: Readonly<{ mark: ExploreChainOption["mark"] }>) {
+function ExploreChainMark({
+  mark,
+}: Readonly<{ mark: ExploreChainOption["mark"] }>) {
   if (mark === "ethereum") {
     return (
       <svg
@@ -69,17 +59,10 @@ function ExploreChainMark({ mark }: Readonly<{ mark: ExploreChainOption["mark"] 
   return <span className={styles.robinhoodMark} aria-hidden="true" />;
 }
 
-export function ExploreChainSelector({
-  probeAvailability = true,
-}: Readonly<{ probeAvailability?: boolean }> = {}) {
+export function ExploreChainSelector() {
   const { hydrated, viewChainId, setViewChainId } = useViewChain();
   const [open, setOpen] = useState(false);
-  const [robinhoodAvailable, setRobinhoodAvailable] = useState(false);
-  const exploreChainOptions = EXPLORE_CHAIN_OPTIONS.map((option) =>
-    option.id === 4663
-      ? { ...option, available: probeAvailability && robinhoodAvailable }
-      : option
-  ) satisfies readonly ExploreChainOption[];
+  const exploreChainOptions = EXPLORE_CHAIN_OPTIONS;
   const selectedViewChainId = resolveExploreChainId(viewChainId);
   const selectedIndex = Math.max(
     0,
@@ -98,24 +81,6 @@ export function ExploreChainSelector({
   );
 
   useEffect(() => {
-    if (!probeAvailability) return;
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 5_000);
-    void fetch("/api/explore?chain=4663&limit=1&page=1&q=&sort=newest", {
-      cache: "no-store",
-      credentials: "same-origin",
-      signal: controller.signal,
-    }).then(async (response) => {
-      if (!response.ok) return false;
-      return isRobinhoodExploreAvailableResponse(await response.json());
-    }).then(setRobinhoodAvailable).catch(() => setRobinhoodAvailable(false));
-    return () => {
-      window.clearTimeout(timeout);
-      controller.abort();
-    };
-  }, [probeAvailability]);
-
-  useEffect(() => {
     if (!open) return;
     const closeOnOutsidePress = (event: PointerEvent) => {
       if (
@@ -126,7 +91,8 @@ export function ExploreChainSelector({
       }
     };
     document.addEventListener("pointerdown", closeOnOutsidePress);
-    return () => document.removeEventListener("pointerdown", closeOnOutsidePress);
+    return () =>
+      document.removeEventListener("pointerdown", closeOnOutsidePress);
   }, [open]);
 
   useEffect(() => {
@@ -231,29 +197,33 @@ export function ExploreChainSelector({
           aria-label="Explore chains"
         >
           {alternateOptions.map((option, index) => (
-              <button
-                key={option.id}
-                ref={(element) => {
-                  optionRefs.current[index] = element;
-                }}
-                className={styles.option}
-                type="button"
-                role="option"
-                aria-selected={false}
-                aria-disabled={!option.available || undefined}
-                aria-label={option.available
+            <button
+              key={option.id}
+              ref={(element) => {
+                optionRefs.current[index] = element;
+              }}
+              className={styles.option}
+              type="button"
+              role="option"
+              aria-selected={false}
+              aria-disabled={!option.available || undefined}
+              aria-label={
+                option.available
                   ? `Switch Explore to ${option.label}`
-                  : `${option.label} coming soon`}
-                title={option.available
+                  : `${option.label} coming soon`
+              }
+              title={
+                option.available
                   ? option.label
-                  : `${option.label} · Coming soon`}
-                data-active={activeIndex === index ? "true" : "false"}
-                tabIndex={activeIndex === index ? 0 : -1}
-                onClick={() => selectChain(option)}
-                onKeyDown={(event) => handleOptionKeyDown(event, index)}
-              >
-                <ExploreChainMark mark={option.mark} />
-              </button>
+                  : `${option.label} · Coming soon`
+              }
+              data-active={activeIndex === index ? "true" : "false"}
+              tabIndex={activeIndex === index ? 0 : -1}
+              onClick={() => selectChain(option)}
+              onKeyDown={(event) => handleOptionKeyDown(event, index)}
+            >
+              <ExploreChainMark mark={option.mark} />
+            </button>
           ))}
         </div>
       ) : null}

@@ -13,15 +13,11 @@ describe("landing page contract", () => {
 
     expect(homePage).toContain("import { LandingPage }");
     expect(homePage).toContain("return <LandingPage />");
-    expect(explorePage).toContain("import { ExploreView }");
+    expect(explorePage).toContain("import { ExploreIndexResetView }");
     expect(explorePage).toContain('canonical: "/explore"');
-    expect(navigation).toContain(
-      '{ href: "/explore", label: "Explore" }',
-    );
+    expect(navigation).toContain('{ href: "/explore", label: "Explore" }');
     expect(navigation).toContain('href="/"');
-    expect(homePage).toContain(
-      '"Build and launch custom Uniswap v4 hooks.',
-    );
+    expect(homePage).toContain('"Build and launch custom Uniswap v4 hooks.');
     expect(homePage).toContain("description: pageDescription");
     expect(homePage).toContain("openGraph:");
     expect(homePage).toContain("twitter:");
@@ -91,38 +87,24 @@ describe("landing page contract", () => {
     }
   });
 
-  it("loads the embedded Explore view near visibility without shifting its deep-link heading", () => {
+  it("renders the embedded reset directly without loading the old Explore bundle", () => {
     const landing = read("components/landing-page.tsx");
     const gate = read("components/landing-explore-gate.tsx");
+    const resetView = read("components/explore-index-reset-view.tsx");
     const styles = read("components/landing-page.module.css");
 
     expect(landing).not.toContain('from "@/components/explore-view"');
-    expect(landing).toContain(
-      'from "@/components/landing-explore-gate"',
+    expect(landing).toContain('from "@/components/landing-explore-gate"');
+    expect(gate).toContain("<ExploreIndexResetView embedded />");
+    expect(gate).not.toContain('import("@/components/explore-view")');
+    expect(gate).not.toContain("IntersectionObserver");
+    expect(gate).not.toContain("Try again");
+    expect(resetView).toContain(
+      "<Heading data-explore-heading>Explore</Heading>",
     );
-    expect(gate).toContain("if (!shouldLoad || ExploreComponent) return");
-    expect(gate).toContain('import("@/components/explore-view")');
-    expect(gate).toContain("setExploreComponent(() => module.ExploreView)");
-    expect(gate).toContain("Unable to load launches.");
-    expect(gate).toContain("Try again");
-    expect(gate).toContain('rootMargin: EXPLORE_LOAD_MARGIN');
-    expect(gate).toContain('const EXPLORE_LOAD_MARGIN = "720px 0px"');
-    expect(gate).toContain('window.location.hash === "#explore"');
-    expect(gate).toContain('window.addEventListener("hashchange"');
-    expect(gate).toContain('!("IntersectionObserver" in window)');
-    expect(gate).toContain("aria-busy={!failed || retrying ? true : undefined}");
-    expect(gate).toContain("aria-disabled={retrying}");
-    expect(gate).toContain("retryRequestedRef.current = true");
-    expect(gate).toContain('"[data-explore-heading]"');
-    expect(gate).toContain('<h2 data-explore-heading>Explore</h2>');
+    expect(resetView).toContain("No token data is loaded");
     expect(styles).toMatch(
       /\.exploreGate\s*\{[^}]*min-height:\s*calc\(100svh - var\(--header-height\)\);/s,
-    );
-    expect(styles).toMatch(
-      /\.exploreFallback\s*\{[^}]*min-height:\s*calc\(100svh - 88px\);[^}]*padding-block:\s*34px 70px;/s,
-    );
-    expect(styles).toMatch(
-      /\.exploreFallbackHeading\s*\{[^}]*min-height:\s*102px;/s,
     );
   });
 
@@ -154,7 +136,9 @@ describe("landing page contract", () => {
       'window.scrollTo({ behavior: "auto", left: 0, top: 0 })',
     );
     expect(landing).toContain('window.location.hash !== "#explore"');
-    expect(landing).toContain('document.querySelector<HTMLElement>(".header-inner")');
+    expect(landing).toContain(
+      'document.querySelector<HTMLElement>(".header-inner")',
+    );
     expect(landing).toContain(
       'chapter?.querySelector<HTMLElement>("[data-explore-heading]")',
     );
@@ -183,15 +167,9 @@ describe("landing page contract", () => {
     expect(styles).toMatch(
       /:global\(body \.app-frame\):has\(\.page\) :global\(\.route-transition\)\s*\{[^}]*height:\s*auto;[^}]*overflow-x:\s*clip;[^}]*overflow-y:\s*visible;/s,
     );
-    expect(globalStyles).toMatch(
-      /html\s*\{[^}]*overflow-x:\s*clip;/s,
-    );
-    expect(globalStyles).toMatch(
-      /body\s*\{[^}]*overflow-x:\s*clip;/s,
-    );
-    expect(globalStyles).toMatch(
-      /\.app-frame\s*\{[^}]*overflow-x:\s*clip;/s,
-    );
+    expect(globalStyles).toMatch(/html\s*\{[^}]*overflow-x:\s*clip;/s);
+    expect(globalStyles).toMatch(/body\s*\{[^}]*overflow-x:\s*clip;/s);
+    expect(globalStyles).toMatch(/\.app-frame\s*\{[^}]*overflow-x:\s*clip;/s);
     expect(interfaceStyles).not.toMatch(
       /\.app-frame:has\(\.landing-page-root\)[^{]*\{[^}]*overflow:\s*hidden;/s,
     );
@@ -240,20 +218,18 @@ describe("landing page contract", () => {
   it("opens Explore as its own route from the shared topbar", () => {
     const navigation = read("components/site-navigation.tsx");
 
-    expect(navigation).toContain(
-      '{ href: "/explore", label: "Explore" }',
-    );
+    expect(navigation).toContain('{ href: "/explore", label: "Explore" }');
     expect(navigation).not.toContain("prepareLandingExploreNavigation(");
-    expect(navigation).not.toContain('window.history.pushState(null, "", "/#explore")');
+    expect(navigation).not.toContain(
+      'window.history.pushState(null, "", "/#explore")',
+    );
   });
 
   it("uses fluid shared gutters instead of a desktop to mobile width jump", () => {
     const finalStyles = read("app/webde-final-ui.css");
     const landingStyles = read("components/landing-page.module.css");
 
-    expect(finalStyles).toContain(
-      "calc(100% - clamp(2rem, 5vw, 5rem))",
-    );
+    expect(finalStyles).toContain("calc(100% - clamp(2rem, 5vw, 5rem))");
     expect(landingStyles).toContain(
       "max(clamp(24px, 4vw, 40px), calc((100% - 1280px) / 2))",
     );

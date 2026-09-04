@@ -67,17 +67,16 @@ test("Explore exposes an icon-only Ethereum trigger and Robinhood choice",async 
   await trigger.click();
   const listbox=page.getByRole("listbox",{name:"Explore chains",exact:true});
   await expect(listbox.getByRole("option")).toHaveCount(1);
-  await expect(listbox.getByRole("option",{name:"Robinhood coming soon",exact:true})).toHaveAttribute("aria-disabled","true");
+  const robinhoodOption=listbox.getByRole("option",{name:"Switch Explore to Robinhood",exact:true});
+  await expect(robinhoodOption).not.toHaveAttribute("aria-disabled");
   await expect(listbox).not.toContainText("Base");
   await page.keyboard.press("ArrowDown");
-  await expect(listbox.getByRole("option",{name:"Robinhood coming soon",exact:true})).toBeFocused();
+  await expect(robinhoodOption).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(page.getByTestId("view-chain")).toHaveText("1");
+  await expect(page.getByTestId("view-chain")).toHaveText("4663");
   await expect(page.getByTestId("requests")).toBeEmpty();
-  await expect(listbox).toBeVisible();
-  await page.keyboard.press("Escape");
   await expect(listbox).toHaveCount(0);
-  await expect(trigger).toBeFocused();
+  await expect(page.getByRole("button",{name:"Explore chain: Robinhood",exact:true})).toBeFocused();
 });
 
 test("Explore chain menu closes outside and stays inside the mobile viewport",async ({page})=>{

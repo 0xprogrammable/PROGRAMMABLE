@@ -5,91 +5,39 @@ import { describe, expect, it } from "vitest";
 const root = process.cwd();
 
 describe("Explore UI contract", () => {
-  it("streams the initial Explore response and suppresses the hydration refetch", () => {
+  it("hard-resets public Explore without index loading capability", () => {
     const page = readFileSync(join(root, "app/explore/page.tsx"), "utf8");
-    const source = readFileSync(
-      join(root, "components/explore-view.tsx"),
+    const resetView = readFileSync(
+      join(root, "components/explore-index-reset-view.tsx"),
+      "utf8",
+    );
+    const selector = readFileSync(
+      join(root, "components/explore-chain-selector.tsx"),
       "utf8",
     );
 
-    expect(page).toContain("<Suspense fallback={<ExploreView loadingOnly />}>");
-    expect(page).toContain(
-      'import { GET as readExploreResponse } from "@/app/api/explore/route"',
+    expect(page).toContain("<ExploreIndexResetView />");
+    expect(page).toContain("index: false");
+    expect(page).not.toContain("ExploreView");
+    expect(page).not.toContain("@/app/api/explore/route");
+    expect(page).not.toContain("websiteExploreIndexEnabledV1");
+    expect(resetView).toContain('const Heading = embedded ? "h2" : "h1"');
+    expect(resetView).toContain(
+      "<Heading data-explore-heading>Explore</Heading>",
     );
-    expect(page).toContain("await readExploreResponse(new NextRequest(");
-    expect(page).toContain(
-      "return await Promise.race([guardedRead, deadline])",
+    expect(resetView).toContain("<ExploreChainSelector />");
+    expect(resetView.indexOf("<ExploreChainSelector />")).toBeGreaterThan(
+      resetView.indexOf("className={styles.disabledSearch}"),
     );
-    expect(page).toContain("controller.abort()");
-    expect(page).not.toContain("AbortSignal.timeout(");
-    expect(page).not.toContain('fetch("https://programmable.market');
-    expect(page).toContain("initialResponse={initialResponse}");
-    expect(page).toContain("initialResponseChainId={viewChainId}");
-    expect(page).toContain("initialModelFilter={modelFilter}");
-    expect(page).toContain("requestCookies.get(VIEW_CHAIN_COOKIE_NAME)");
-    expect(page).toContain("resolveExploreChainId(");
-    expect(page).toContain("initialExploreQuery(modelFilter, viewChainId)");
-    expect(page).toContain("if (!websiteExploreIndexEnabledV1())");
-    expect(page).toContain("indexRebuilding");
-    expect(source).toContain("hydrated: viewChainReady");
-    expect(source).toContain("viewChainId: resolvedViewChainId");
-    expect(source).toContain("resolveExploreChainId(hydratedViewChainId)");
-    expect(source).toContain("setViewChainId(viewChainId)");
-    expect(source).toContain(
-      "!viewChainReady && initialResponseChainId !== undefined",
+    expect(resetView.indexOf("<ExploreChainSelector />")).toBeLessThan(
+      resetView.indexOf("className={styles.disabledFilter}"),
     );
-    expect(source).toContain("chain: String(viewChainId)");
-    expect(source).toContain("const chainContentKey = `${viewChainId}`");
-    expect(source).toContain(
-      'initialState?.phase === "ready" ? initialState : null',
-    );
-    expect(source).not.toContain(
-      "if (handledRequestKey.current === requestKey)",
-    );
-    expect(source).toContain(
-      "handledInitialExploreRequestKey(initialState, requestKey)",
-    );
-    expect(source).toContain(
-      "isClassicV4AnchoredPublicReleaseBinding(",
-    );
-    expect(source).toContain(
-      '...(classicV4IsBound ? ["classic-v4"] : [])',
-    );
-    expect(source).not.toContain("useLiveDataRefresh");
-    expect(source).toContain(
-      "const [valuationSort, setValuationSort] = useState<ExploreValuationSort>",
-    );
-    expect(source).toContain(
-      'const [ageSort, setAgeSort] = useState<ExploreAgeSort>("none")',
-    );
-    expect(source).toContain("inert={loadingOnly ? true : undefined}");
-    expect(source).toContain('const Heading = embedded ? "h2" : "h1"');
-    expect(source).toContain("<Heading data-explore-heading>Explore</Heading>");
-    expect(source).toContain("<ExploreChainSelector");
-    expect(source).toContain("probeAvailability={!indexRebuilding}");
-    expect(source.indexOf("<ExploreChainSelector")).toBeGreaterThan(
-      source.indexOf('className="token-search liquid-glass-control"'),
-    );
-    expect(source.indexOf("<ExploreChainSelector")).toBeLessThan(
-      source.indexOf("<details"),
-    );
-    expect(source).toContain("indexRebuilding ||\n      preview ||");
-    expect(source).toContain("const displayState: ExploreState = indexRebuilding");
-    expect(source).not.toContain("ExploreModeSwitch");
-    expect(source).toContain("const eagerImage = !embedded");
-    expect(source).toContain("onPointerEnter={() => router.prefetch(href)}");
-    expect(source).toContain("onFocus={() => router.prefetch(href)}");
-    expect(source).toContain("function ExploreGridSkeleton");
-    expect(source).toContain(
-      "<ExploreGridSkeleton count={pageSize} />",
-    );
-    expect(source).toContain('data-skeleton="true"');
-    expect(source).toContain(
-      'className={styles.loadingState} aria-busy="true"',
-    );
-    expect(source).toContain(
-      'className={styles.loadingStatus} role="status" aria-live="polite"',
-    );
+    expect(resetView).toContain("disabled");
+    expect(resetView).toContain("Launch indexing is being rebuilt");
+    expect(resetView).not.toContain("fetch(");
+    expect(resetView).not.toContain("router.prefetch");
+    expect(selector).not.toContain("fetch(");
+    expect(selector).not.toContain("/api/explore");
   });
 
   it("keeps public Explore limited to token discovery", () => {
@@ -171,12 +119,10 @@ describe("Explore UI contract", () => {
     expect(source).toContain('id="explore-age-label"');
     expect(source).toContain('id="explore-socials-label"');
     expect(source).toContain('{ id: "classic", label: "Classic" }');
+    expect(source).toContain('{ id: "custom-hook", label: "Custom V4 Hook" }');
+    expect(source).toContain("sort,\n      page: String(currentPage)");
     expect(source).toContain(
-      '{ id: "custom-hook", label: "Custom V4 Hook" }',
-    );
-    expect(source).toContain('sort,\n      page: String(currentPage)');
-    expect(source).toContain(
-      'valuationSort !== DEFAULT_EXPLORE_VALUATION_SORT',
+      "valuationSort !== DEFAULT_EXPLORE_VALUATION_SORT",
     );
     expect(source).toContain("const newestLaunchOrderApplied =");
     expect(source).toContain("exploreActiveSelectionState({");
@@ -191,25 +137,21 @@ describe("Explore UI contract", () => {
     expect(source).not.toContain("valuationSortOptions.map((option) => (");
     expect(source).toContain("ageSortOptions.map((option) => (");
     expect(source).toContain("resolveExploreSortSelectionsForChain(");
-    expect(source).toContain(
-      "aria-pressed={ageSortForChain === option.id}",
-    );
+    expect(source).toContain("aria-pressed={ageSortForChain === option.id}");
     expect(source).toMatch(
       /disabled=\{viewChainId === 4663 &&\s+option\.id === "oldest"\}/u,
     );
-    expect(source).toContain(
-      "valuationSort: valuationSortForChain",
-    );
+    expect(source).toContain("valuationSort: valuationSortForChain");
     expect(source).toContain("ageSort: ageSortForChain");
     expect(source).toContain(
-      "if (viewChainId === 1) {\n                                setDiscoverySort(\"none\");",
+      'if (viewChainId === 1) {\n                                setDiscoverySort("none");',
     );
     expect(source).toContain("setAgeSort((current) =>");
     expect(source).toContain('search.set(\n        "model",');
     expect(source).toContain(
       'modelFilter === "custom-hook" ? "custom" : "classic"',
     );
-    expect(source).toContain("initialModelFilter = \"all\"");
+    expect(source).toContain('initialModelFilter = "all"');
     expect(source).toContain("window.history.replaceState(");
     expect(source.match(/setModelFilter\(/gu)).toHaveLength(1);
     expect(source).not.toContain("setSort(option.id)");
@@ -305,9 +247,11 @@ describe("Explore UI contract", () => {
     expect(source).not.toContain("<small>CA</small>");
     expect(source).not.toContain("<AnimatedMarketCap");
     expect(source).not.toContain("FDV{token.valuationProvider");
-    expect(source).toContain("formatExploreContractAddress(token.tokenAddress)");
     expect(source).toContain(
-      '`/token/${token.tokenAddress}?chain=${viewChainId}`',
+      "formatExploreContractAddress(token.tokenAddress)",
+    );
+    expect(source).toContain(
+      "`/token/${token.tokenAddress}?chain=${viewChainId}`",
     );
     expect(source).toMatch(
       /className=\{styles\.runnerHitArea\}[\s\S]{0,160}prefetch=\{false\}/u,
