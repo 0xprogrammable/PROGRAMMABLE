@@ -79,6 +79,13 @@ const HEX40 = /^(?!0{40}$)[0-9a-f]{40}$/u;
 const HEX32 = /^0x(?!0{64}$)[0-9a-f]{64}$/u;
 const ISO_SECOND = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/u;
 const CAPTURE_ID = /^[0-9a-f]{64}$/u;
+const FLY_RELEASE_ID = /^[A-Za-z0-9_-]{1,128}$/u;
+const FLY_MACHINE_RELEASE_ID = /^rel_[a-z0-9]{6,128}$/u;
+const FLY_V1_SCHEME = "FlyV1 ";
+const FLY_V1_SEGMENT = /^fm2_([A-Za-z0-9/+_-]+={0,2})$/u;
+const FLY_V1_MAXIMUM_SEGMENTS = 16;
+const FLY_V1_MINIMUM_SEGMENT_BYTES = 32;
+const FLY_V1_MAXIMUM_SEGMENT_BYTES = 12_288;
 const BACKEND_REPOSITORY = "programmablehq/programmable-open-hook-v2-internal";
 const BACKEND_REPOSITORY_ID = "1318883798";
 const PROGRAMMABLE_REPOSITORY = "programmablehq/PROGRAMMABLE";
@@ -95,7 +102,8 @@ const UNISWAP_REGISTRY = Object.freeze({
 });
 const COMPOSITION_KEYS = Object.freeze([
   "authoritativeChainRuntime",
-  "apiSignerObserverRoleAttestation",
+  "liveExactPrivyPolicyReadiness",
+  "apiSignerObserverVerifierRoleAttestation",
   "durableLedger",
   "exactCredentialScopeRecheck",
   "isolatedImageDecoder",
@@ -107,9 +115,65 @@ const COMPOSITION_KEYS = Object.freeze([
   "dualProviderSubmissionDiscovery",
   "finalityObserver",
   "finalityWorkerLifecycle",
+  "sourceVerificationWorkerConfigured",
+  "sourceVerificationWorkerStarted",
+  "sourceVerificationWorkerLifecycle",
 ]);
+
+function failFlyV1TokenWire() {
+  throw new TypeError("FLY_V1_TOKEN_WIRE_INVALID");
+}
+
+function canonicalFlyV1Segment(segment) {
+  const match = FLY_V1_SEGMENT.exec(segment);
+  if (match === null) failFlyV1TokenWire();
+  const encoded = match[1];
+  const unpadded = encoded.replace(/=+$/u, "");
+  const paddingLength = encoded.length - unpadded.length;
+  const remainder = unpadded.length % 4;
+  if (remainder === 1) failFlyV1TokenWire();
+  const requiredPadding = remainder === 0 ? 0 : 4 - remainder;
+  if (paddingLength !== 0 && paddingLength !== requiredPadding) failFlyV1TokenWire();
+  if (/[+/]/u.test(unpadded) && /[-_]/u.test(unpadded)) failFlyV1TokenWire();
+  const standardUnpadded = unpadded.replaceAll("-", "+").replaceAll("_", "/");
+  const standard = `${standardUnpadded}${"=".repeat(requiredPadding)}`;
+  const bytes = Buffer.from(standard, "base64");
+  if (bytes.byteLength < FLY_V1_MINIMUM_SEGMENT_BYTES
+    || bytes.byteLength > FLY_V1_MAXIMUM_SEGMENT_BYTES
+    || bytes.toString("base64") !== standard) {
+    bytes.fill(0);
+    failFlyV1TokenWire();
+  }
+  bytes.fill(0);
+  return `fm2_${standard}`;
+}
+
+function normalizeFlyV1TokenWireV1(value, { requireScheme = false } = {}) {
+  if (typeof value !== "string" || !/^[\x20-\x7e]+$/u.test(value)) failFlyV1TokenWire();
+  const hasScheme = value.startsWith(FLY_V1_SCHEME);
+  if (requireScheme && !hasScheme) failFlyV1TokenWire();
+  const raw = hasScheme ? value.slice(FLY_V1_SCHEME.length) : value;
+  const segments = raw.split(",");
+  if (segments.length < 1 || segments.length > FLY_V1_MAXIMUM_SEGMENTS) {
+    failFlyV1TokenWire();
+  }
+  const canonicalRaw = segments.map(canonicalFlyV1Segment).join(",");
+  return Object.freeze({
+    raw: canonicalRaw,
+    header: `${FLY_V1_SCHEME}${canonicalRaw}`,
+  });
+}
+
+function normalizeFlyV1Authorization(value) {
+  if (typeof value !== "string" || value.length < 16 || value.length > 16_384
+    || !/^[\x20-\x7e]+$/u.test(value)) {
+    failFlyV1TokenWire();
+  }
+  return normalizeFlyV1TokenWireV1(value);
+}
 const MAX_CAPTURE_AGE_MS = 15 * 60 * 1000;
 const MAX_FUTURE_SKEW_MS = 2 * 60 * 1000;
+const MAX_FLY_RELEASE_AGE_MS = 24 * 60 * 60 * 1000;
 const MAX_CAPTURE_AUTHORIZATION_DELAY_MS = 10 * 60 * 1000;
 const BACKEND_SAFE_RECEIPTS_DOMAIN =
   "programmable.robinhood-custom-launch.backend-safe-readback-receipts.v2";
@@ -144,12 +208,14 @@ const BACKEND_RESPONSE_BYTES = Object.freeze({
   metadata: 1 * 1024 * 1024,
 });
 const FLY_RELEASES_QUERY = "query ProgrammableRobinhoodRelease($appName: String!, $first: Int!) { app(name: $appName) { releasesUnprocessed(first: $first) { totalCount pageInfo { hasNextPage hasPreviousPage startCursor endCursor } nodes { id version status stable imageRef image { registry repository tag digest } createdAt } } } }";
-const BACKEND_MIGRATION_PATH = "migrations/0017_chain_aware_custom_launch_v4.sql";
+const BACKEND_MIGRATION_PATH = "migrations/0024_custom_launch_source_authority_v4.sql";
 const BACKEND_MIGRATION_SHA256 =
-  "sha256:40f0e2fb30af99e53649d0091a1571f88b9503aa7001c32dca11050b747f2eab";
+  "sha256:51efb50f6f59131042d4253ce485cf14c3d375ab639d8c7075eb22dc8a9d44a0";
 const BACKEND_API_CONTRACT_PATH = "release/custom-launch-api-contract.v4.json";
 const BACKEND_API_CONTRACT_SHA256 =
-  "sha256:ddf45b96ff5bc402951e009849924fda8796b8db8498521c6903f7b1a2c29e62";
+  "sha256:1c22711fa0516507d1e207ee7cb565d9ec95f59e042d869c0052a98a57d73634";
+const ROBINHOOD_PROVIDER_PROFILE_SHA256 =
+  "sha256:88daed906c2a142c57d2483099a6d18be31dbff2a282108657ec6f5e73f53132";
 
 export function validateSigstoreMessageBundleV03({ bundleBytes, subjectBytes }) {
   if (!Buffer.isBuffer(bundleBytes) || bundleBytes.byteLength < 1
@@ -411,9 +477,9 @@ function bindingMachineContract(stageBundle, name) {
 function exactReadinessIdentity(value, stageBundle, backendSource) {
   assertExactKeys(value, [
     "schemaVersion", "status", "service", "sourceCommit", "sourceTree", "chainId",
-    "chainDeploymentId", "chainDeploymentDescriptorDigest", "migration", "apiContract",
-    "openApiSha256", "finalityPolicy", "uniswapRegistrySnapshot", "policySource", "profile",
-    "providerQuorums", "composition",
+    "chainDeploymentId", "chainDeploymentDescriptorDigest", "providerProfileDigest",
+    "migration", "apiContract", "openApiSha256", "finalityPolicy",
+    "uniswapRegistrySnapshot", "policySource", "profile", "providerQuorums", "composition",
   ], "backend readiness release identity");
   const descriptorDigest = stageBundle.finalizedBindings.chainDeploymentDescriptorDigest;
   const releaseIdentity = stageBundle.artifacts.cliReleaseBinding.value.releaseIdentity;
@@ -421,7 +487,8 @@ function exactReadinessIdentity(value, stageBundle, backendSource) {
     || value.service !== "custom-launch-api-v1" || value.sourceCommit !== backendSource.sourceCommit
     || value.sourceTree !== backendSource.sourceTree || value.chainId !== CHAIN_ID
     || value.chainDeploymentId !== CHAIN_DEPLOYMENT_ID
-    || value.chainDeploymentDescriptorDigest !== descriptorDigest) {
+    || value.chainDeploymentDescriptorDigest !== descriptorDigest
+    || value.providerProfileDigest !== ROBINHOOD_PROVIDER_PROFILE_SHA256) {
     throw new TypeError("backend readiness release identity does not bind the staged deployment");
   }
   assertExactKeys(value.migration, ["path", "sha256"], "backend readiness migration");
@@ -444,21 +511,23 @@ function exactReadinessIdentity(value, stageBundle, backendSource) {
   }
   assertExactKeys(value.profile, [
     "structuralProfileId", "businessProfileId", "profileRevision", "profileVersion",
-    "profileDigest",
+    "profileDigest", "providerProfileDigest",
   ], "backend readiness profile");
   const expectedProfile = releaseIdentity.profile;
   if (value.profile.structuralProfileId !== expectedProfile.structuralProfileId
     || value.profile.businessProfileId !== expectedProfile.businessProfileId
     || value.profile.profileRevision !== expectedProfile.profileRevision
     || value.profile.profileVersion !== expectedProfile.profileVersion
-    || value.profile.profileDigest !== expectedProfile.profileDigest) {
+    || value.profile.profileDigest !== expectedProfile.profileDigest
+    || value.profile.providerProfileDigest !== ROBINHOOD_PROVIDER_PROFILE_SHA256
+    || value.profile.providerProfileDigest !== value.providerProfileDigest) {
     throw new TypeError("backend readiness profile differs");
   }
   assertExactKeys(value.providerQuorums, ["robinhood", "ethereum"],
     "backend readiness provider quorums");
   if (canonicalizeJson(value.providerQuorums) !== canonicalizeJson({
     robinhood: [
-      { providerId: "quicknode", trustDomain: "quicknode.com" },
+      { providerId: "drpc", trustDomain: "drpc.org" },
       { providerId: "alchemy", trustDomain: "alchemy.com" },
     ],
     ethereum: [
@@ -488,33 +557,61 @@ function normalizeFlyBodies(fly, backendSource, observedAt) {
     || typeof app.id !== "string" || app.id.length === 0) {
     throw new TypeError("Fly app identity/status differs");
   }
-  if (fly.releases.body?.errors !== undefined) {
+  const releasesBody = fly.releases.body;
+  if (Object.hasOwn(releasesBody, "errors")) {
     throw new TypeError("Fly releases GraphQL response contains errors");
   }
-  const releaseConnection = fly.releases.body?.data?.app?.releasesUnprocessed;
-  const releases = releaseConnection?.nodes;
-  if (!Array.isArray(releases) || releases.length < 1 || releases.length > 256) {
-    throw new TypeError("Fly releasesUnprocessed inventory is invalid");
+  assertExactKeys(releasesBody, ["data"], "Fly GraphQL response");
+  assertExactKeys(releasesBody.data, ["app"], "Fly GraphQL data");
+  assertExactKeys(releasesBody.data.app, ["releasesUnprocessed"], "Fly GraphQL app");
+  const releaseConnection = releasesBody.data.app.releasesUnprocessed;
+  assertExactKeys(releaseConnection, ["totalCount", "pageInfo", "nodes"],
+    "Fly releasesUnprocessed connection");
+  assertExactKeys(releaseConnection.pageInfo, [
+    "hasNextPage", "hasPreviousPage", "startCursor", "endCursor",
+  ], "Fly release pageInfo");
+  const pageInfo = releaseConnection.pageInfo;
+  if (pageInfo.hasNextPage !== false || pageInfo.hasPreviousPage !== false) {
+    throw new TypeError("Fly releasesUnprocessed inventory is paginated or incomplete");
   }
-  if (releaseConnection.totalCount !== releases.length
-    || releaseConnection.pageInfo?.hasNextPage !== false) {
-    throw new TypeError("Fly releasesUnprocessed inventory is incomplete or paginated");
+  if (typeof pageInfo.startCursor !== "string" || pageInfo.startCursor.length < 1
+    || pageInfo.startCursor.length > 2048 || typeof pageInfo.endCursor !== "string"
+    || pageInfo.endCursor.length < 1 || pageInfo.endCursor.length > 2048) {
+    throw new TypeError("Fly release inventory cursors are invalid");
+  }
+  const releases = releaseConnection.nodes;
+  if (!Array.isArray(releases) || releases.length < 1 || releases.length > 256
+    || !Number.isSafeInteger(releaseConnection.totalCount)
+    || releaseConnection.totalCount !== releases.length) {
+    throw new TypeError("Fly releasesUnprocessed inventory count is invalid or incomplete");
   }
   const versions = releases.map((entry) => entry?.version);
   const ids = releases.map((entry) => entry?.id);
+  for (const entry of releases) {
+    assertExactKeys(entry, [
+      "id", "version", "status", "stable", "imageRef", "image", "createdAt",
+    ], "Fly release node");
+  }
+  const observedTime = Date.parse(observedAt);
   if (versions.some((version) => !Number.isSafeInteger(version) || version < 1)
-    || ids.some((id) => typeof id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/u.test(id))
+    || ids.some((id) => typeof id !== "string" || !FLY_RELEASE_ID.test(id))
     || new Set(versions).size !== versions.length || new Set(ids).size !== ids.length
-    || releases.some((entry) => typeof entry.createdAt !== "string"
+    || releases.some((entry) => typeof entry.status !== "string"
+      || typeof entry.stable !== "boolean" || !ISO_SECOND.test(entry.createdAt)
       || Number.isNaN(Date.parse(entry.createdAt))
-      || Date.parse(entry.createdAt) > Date.parse(observedAt) + MAX_FUTURE_SKEW_MS)) {
+      || Date.parse(entry.createdAt) > observedTime + MAX_FUTURE_SKEW_MS)) {
     throw new TypeError("Fly release identities/versions/timestamps are invalid");
   }
   const release = releases.reduce((latest, entry) => entry.version > latest.version
     ? entry : latest);
-  if (release.status !== "complete" || release.stable !== true) {
-    throw new TypeError("Fly absolute latest release is not complete and stable");
+  if (release.status !== "complete") {
+    throw new TypeError("The latest Fly release is not complete");
   }
+  if (observedTime - Date.parse(release.createdAt) > MAX_FLY_RELEASE_AGE_MS) {
+    throw new TypeError("The latest Fly release is stale or future-dated");
+  }
+  assertExactKeys(release.image, ["registry", "repository", "tag", "digest"],
+    "latest Fly release image");
   if (release.imageRef !== `registry.fly.io/${ROBINHOOD_FLY_APP}:${release.image?.tag}`
     || release.image?.registry !== "registry.fly.io"
     || release.image?.repository !== ROBINHOOD_FLY_APP
@@ -538,8 +635,7 @@ function normalizeFlyBodies(fly, backendSource, observedAt) {
     imageTag: release.image.tag,
     imageDigest: release.image.digest,
   });
-  const listedMachines = Array.isArray(fly.machineList.body)
-    ? fly.machineList.body : fly.machineList.body?.machines;
+  const listedMachines = fly.machineList.body;
   if (!Array.isArray(listedMachines) || listedMachines.length < 1
     || listedMachines.length > 8) {
     throw new TypeError("Fly machine inventory is invalid");
@@ -550,6 +646,7 @@ function normalizeFlyBodies(fly, backendSource, observedAt) {
     || canonicalizeJson(listedIds) !== canonicalizeJson([...fly.machines.keys()])) {
     throw new TypeError("Fly list/individual machine inventories differ");
   }
+  let machineReleaseId = null;
   const normalizedMachines = listedIds.map((id, index) => {
     const listed = listedMachines.find((entry) => entry?.id === id);
     const machine = fly.machines.get(id).body;
@@ -577,10 +674,17 @@ function normalizeFlyBodies(fly, backendSource, observedAt) {
       || listedImageRef.repository !== imageRef.repository
       || listedImageRef.tag !== imageRef.tag
       || listedImageRef.digest !== imageRef.digest
-      || listed.config.image !== machine.config.image
-      || metadata?.fly_release_id !== release.id
-      || metadata?.fly_release_version !== String(release.version)) {
+      || listed.config.image !== machine.config.image) {
       throw new TypeError("Fly machine identity/state/image differs");
+    }
+    if (typeof metadata?.fly_release_id !== "string"
+      || !FLY_MACHINE_RELEASE_ID.test(metadata.fly_release_id)
+      || metadata.fly_release_version !== String(release.version)) {
+      throw new TypeError("Fly machine metadata differs from the latest release");
+    }
+    if (machineReleaseId === null) machineReleaseId = metadata.fly_release_id;
+    else if (metadata.fly_release_id !== machineReleaseId) {
+      throw new TypeError("Fly machine release metadata inventories differ");
     }
     return Object.freeze({
       slot: String(index + 1),
@@ -1503,6 +1607,7 @@ export function buildRobinhoodBackendPromotionFixture(stageBundle) {
     chainDeploymentId: CHAIN_DEPLOYMENT_ID,
     chainDeploymentDescriptorDigest:
       stageBundle.finalizedBindings.chainDeploymentDescriptorDigest,
+    providerProfileDigest: ROBINHOOD_PROVIDER_PROFILE_SHA256,
     migration: {
       path: BACKEND_MIGRATION_PATH,
       sha256: BACKEND_MIGRATION_SHA256,
@@ -1521,10 +1626,11 @@ export function buildRobinhoodBackendPromotionFixture(stageBundle) {
       profileRevision: binding.releaseIdentity.profile.profileRevision,
       profileVersion: binding.releaseIdentity.profile.profileVersion,
       profileDigest: binding.releaseIdentity.profile.profileDigest,
+      providerProfileDigest: ROBINHOOD_PROVIDER_PROFILE_SHA256,
     },
     providerQuorums: {
       robinhood: [
-        { providerId: "quicknode", trustDomain: "quicknode.com" },
+        { providerId: "drpc", trustDomain: "drpc.org" },
         { providerId: "alchemy", trustDomain: "alchemy.com" },
       ],
       ethereum: [
@@ -1562,7 +1668,7 @@ export function buildRobinhoodBackendPromotionFixture(stageBundle) {
             id: "release_123",
             version: 123,
             status: "complete",
-            stable: true,
+            stable: false,
             imageRef,
             image: {
               registry: "registry.fly.io",
@@ -1602,7 +1708,7 @@ export function buildRobinhoodBackendPromotionFixture(stageBundle) {
       readback("metadata:abcdef123456", ROBINHOOD_FLY_MACHINES_HOSTNAME,
         `/v1/apps/${ROBINHOOD_FLY_APP}/machines/abcdef123456/metadata`,
         "fly-api-token-redacted", {
-          fly_release_id: "release_123",
+          fly_release_id: "rel_abcdef123456",
           fly_release_version: "123",
         }, 5),
     ],
@@ -1627,10 +1733,7 @@ async function fetchRawReadback({
   const headers = { accept: "application/json" };
   if (method === "POST") headers["content-type"] = "application/json";
   if (authentication === "fly-api-token-redacted") {
-    if (typeof token !== "string" || token.length < 16 || /[\r\n]/u.test(token)) {
-      throw new TypeError("fresh Fly readback requires a non-empty protected API token");
-    }
-    headers.authorization = `Bearer ${token}`;
+    headers.authorization = normalizeFlyV1TokenWireV1(token, { requireScheme: true }).header;
   }
   const response = await fetchImpl(`https://${hostname}${requestPath}`, {
     method,
@@ -1692,13 +1795,12 @@ export async function freshVerifyRobinhoodBackendPromotionInput({
   now = () => new Date(),
 }) {
   if (typeof fetchImpl !== "function") throw new TypeError("fresh backend fetch is unavailable");
+  const flyAuthorization = normalizeFlyV1Authorization(flyApiToken).header;
   const captured = validateRobinhoodBackendPromotionPublicInput({
     input: capturedInput,
     stageBundle,
     now: () => new Date(capturedInput.observedAt),
   });
-  const observedAt = canonicalRobinhoodFreshObservedAt(now);
-  const backendInputObservedAt = observedAt.replace(".000Z", "Z");
   const responseBudget = createRobinhoodResponseBudget(BACKEND_FRESH_AGGREGATE_BYTES);
   const readinessReadback = await fetchRawReadback({
     kind: "readiness",
@@ -1715,7 +1817,7 @@ export async function freshVerifyRobinhoodBackendPromotionInput({
     hostname: ROBINHOOD_FLY_GRAPHQL_HOSTNAME,
     requestPath: "/graphql",
     authentication: "fly-api-token-redacted",
-    token: flyApiToken,
+    token: flyAuthorization,
     fetchImpl,
     method: "POST",
     requestBody: {
@@ -1730,7 +1832,7 @@ export async function freshVerifyRobinhoodBackendPromotionInput({
     hostname: ROBINHOOD_FLY_MACHINES_HOSTNAME,
     requestPath: `/v1/apps/${ROBINHOOD_FLY_APP}`,
     authentication: "fly-api-token-redacted",
-    token: flyApiToken,
+    token: flyAuthorization,
     fetchImpl,
     maximumResponseBytes: BACKEND_RESPONSE_BYTES.app,
     responseBudget,
@@ -1740,7 +1842,7 @@ export async function freshVerifyRobinhoodBackendPromotionInput({
     hostname: ROBINHOOD_FLY_MACHINES_HOSTNAME,
     requestPath: `/v1/apps/${ROBINHOOD_FLY_APP}/machines`,
     authentication: "fly-api-token-redacted",
-    token: flyApiToken,
+    token: flyAuthorization,
     fetchImpl,
     maximumResponseBytes: BACKEND_RESPONSE_BYTES["machine-list"],
     responseBudget,
@@ -1750,7 +1852,7 @@ export async function freshVerifyRobinhoodBackendPromotionInput({
     "fresh Fly machine list",
     BACKEND_RESPONSE_BYTES["machine-list"],
   ).value;
-  const listed = Array.isArray(listValue) ? listValue : listValue?.machines;
+  const listed = listValue;
   if (!Array.isArray(listed)) throw new TypeError("fresh Fly machine list is invalid");
   const machineIds = listed.map(({ id } = {}) => id).sort();
   if (machineIds.length < 1 || machineIds.length > 8
@@ -1765,7 +1867,7 @@ export async function freshVerifyRobinhoodBackendPromotionInput({
       hostname: ROBINHOOD_FLY_MACHINES_HOSTNAME,
       requestPath: `/v1/apps/${ROBINHOOD_FLY_APP}/machines/${machineId}`,
       authentication: "fly-api-token-redacted",
-      token: flyApiToken,
+      token: flyAuthorization,
       fetchImpl,
       maximumResponseBytes: BACKEND_RESPONSE_BYTES.machine,
       responseBudget,
@@ -1775,7 +1877,7 @@ export async function freshVerifyRobinhoodBackendPromotionInput({
       hostname: ROBINHOOD_FLY_MACHINES_HOSTNAME,
       requestPath: `/v1/apps/${ROBINHOOD_FLY_APP}/machines/${machineId}/metadata`,
       authentication: "fly-api-token-redacted",
-      token: flyApiToken,
+      token: flyAuthorization,
       fetchImpl,
       maximumResponseBytes: BACKEND_RESPONSE_BYTES.metadata,
       responseBudget,
@@ -1784,6 +1886,8 @@ export async function freshVerifyRobinhoodBackendPromotionInput({
       throw new TypeError("fresh Fly machine inventory ordering differs");
     }
   }
+  const observedAt = canonicalRobinhoodFreshObservedAt(now);
+  const backendInputObservedAt = observedAt.replace(".000Z", "Z");
   const freshInput = buildRobinhoodBackendPromotionInput({
     schemaVersion: ROBINHOOD_BACKEND_PROMOTION_INPUT_SCHEMA,
     captureId: createHash("sha256")

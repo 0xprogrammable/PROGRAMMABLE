@@ -637,7 +637,7 @@ async function addCompleteEvidence(root, binding) {
       sha256: `sha256:${"1".repeat(64)}`,
     },
     migration: {
-      path: "migrations/0017_chain_aware_custom_launch_v4.sql",
+      path: "migrations/0024_custom_launch_source_authority_v4.sql",
       sha256: `sha256:${"2".repeat(64)}`,
     },
     openApiSha256: binding.machineContracts.find(({ name }) => name === "openapi").sha256,
