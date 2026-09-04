@@ -1,7 +1,7 @@
 {
   "$schema": "./cli-release-binding.schema.json",
   "schemaVersion": "programmable.launch-cli-v4-release-binding.v1",
-  "releaseReady": false,
+  "releaseReady": true,
   "releaseIdentity": {
     "package": {
       "name": "@programmable/launch",
@@ -58,7 +58,7 @@
     "chainId": "4663",
     "caip2": "eip155:4663",
     "chainDeploymentId": "robinhood-mainnet-custom-launch-v1",
-    "chainDeploymentDescriptorDigest": null
+    "chainDeploymentDescriptorDigest": "0x4bde6e26b6630aa684b4ac2a987d6322755896b249a189843bd3a58fe313694c"
   },
   "machineContracts": [
     {
@@ -71,13 +71,13 @@
       "name": "packConfig",
       "path": "public/schemas/custom-launch/v4/pack-config.json",
       "url": "https://programmable.market/schemas/custom-launch/v4/pack-config.json",
-    "sha256": "sha256:0295020845d3d9328cf6be3da81e39da29ce929cd3e8672d9ac4f2d96f886a90"
+      "sha256": "sha256:0295020845d3d9328cf6be3da81e39da29ce929cd3e8672d9ac4f2d96f886a90"
     },
     {
       "name": "createRequest",
       "path": "public/schemas/custom-launch/v4/custom-launch-create-request.json",
       "url": "https://programmable.market/schemas/custom-launch/v4/custom-launch-create-request.json",
-    "sha256": "sha256:5924dbcb0c5b599a9b62a9e36f02c1e08ae53beff2e2bffd9acce17ef4b30289"
+      "sha256": "sha256:5924dbcb0c5b599a9b62a9e36f02c1e08ae53beff2e2bffd9acce17ef4b30289"
     },
     {
       "name": "resource",
@@ -95,7 +95,7 @@
       "name": "capabilities",
       "path": "public/schemas/custom-launch/v4/capabilities.json",
       "url": "https://programmable.market/schemas/custom-launch/v4/capabilities.json",
-    "sha256": "sha256:e1502c54f9499f2ef19234ea92ab19b6011a5076001ba97f4e53b468ce7c979d"
+      "sha256": "sha256:e1502c54f9499f2ef19234ea92ab19b6011a5076001ba97f4e53b468ce7c979d"
     },
     {
       "name": "preflight",
@@ -107,29 +107,1017 @@
       "name": "onchainEvidence",
       "path": "public/schemas/custom-launch/v4/onchain-evidence.json",
       "url": "https://programmable.market/schemas/custom-launch/v4/onchain-evidence.json",
-    "sha256": "sha256:09fa9dca75c941b2c93d3249e6249813c0b56b8ea4e5adfd08d8c7fc1150ebdd"
+      "sha256": "sha256:09fa9dca75c941b2c93d3249e6249813c0b56b8ea4e5adfd08d8c7fc1150ebdd"
     },
     {
       "name": "exactWalletTransaction",
       "path": "public/schemas/custom-launch/v4/exact-wallet-transaction.json",
       "url": "https://programmable.market/schemas/custom-launch/v4/exact-wallet-transaction.json",
-    "sha256": "sha256:b2e09eb929f451311c81f84a5450e34646a8d55137d8b876c171264dc4131f4d"
+      "sha256": "sha256:b2e09eb929f451311c81f84a5450e34646a8d55137d8b876c171264dc4131f4d"
     }
   ],
   "evidence": {
-    "chainDeployment": null,
-    "profile": null,
-    "manifest": null,
-    "source": null,
-    "finality": null,
-    "backend": null
+    "chainDeployment": {
+      "schemaVersion": "programmable.launch-cli-v4-chain-deployment-binding.v1",
+      "descriptor": {
+        "schemaVersion": "programmable.custom-launch-chain-deployment.v1",
+        "chainDeploymentId": "robinhood-mainnet-custom-launch-v1",
+        "chainId": "4663",
+        "caip2": "eip155:4663",
+        "finality": {
+          "schemaVersion": "programmable.custom-launch-finality-policy-ref.v1",
+          "policyId": "robinhood-stage-finality-v1",
+          "policyRevision": 1,
+          "policyDigest": "sha256:537d531423d1285a3808556a57303ec68f1e6bdeea3c9aaf6320f9e5a0e47153"
+        },
+        "foundationSourceCommitment": "0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730",
+        "deploymentEvidence": {
+          "schemaVersion": "programmable.robinhood-atomic-root-deployment-evidence.v1",
+          "deploymentId": "robinhood-mainnet-custom-launch-v1",
+          "chainId": "4663",
+          "coveredContracts": [
+            "programmableLaunchStampRouter",
+            "graphFactory",
+            "permitAuthority"
+          ],
+          "transactionHash": "0x30617f11ef467997bace3ab8b8d6048a19e42675fc101c73b1b216b5f8b0d08d",
+          "from": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+          "to": "0xcA11bde05977b3631167028862bE2a173976CA11",
+          "valueWei": "0",
+          "selector": "0x82ad56cb",
+          "calldataHash": "0x3ba04469085b17e12843a94c154a335c9c384837f8f6531f179cb4915fd237d9",
+          "calldataBytes": 33412,
+          "nonce": "41",
+          "transactionIndex": "9",
+          "receiptStatus": "1",
+          "blockNumber": "50469365",
+          "blockHash": "0x6f3331471a5b96a23b951116be75f74a3cedf1c5f95f7d07d7f0e23f7b8493f0",
+          "receiptLogs": [
+            {
+              "address": "0xeD617CE7f82e2AB589aDeFFD319D1D872Bc8De06",
+              "topics": [
+                "0x141df868a6331af528e38c83b7aa03edc19be66e37ae67f9285bf4f8e3c6a1a8",
+                "0x0000000000000000000000004e1dcf7ad4e460cfd30791ccc4f9c8a4f820ec67"
+              ],
+              "data": "0x000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000fd0732dc9e303f09fcef3a7388ad10a83459ec990000000000000000000000000000000000000000000000000000000000000002000000000000000000000000032b1c7b96793717f0bd2f11eb86cd10cdefc4a30000000000000000000000002bb333d48dfaf1596d9036671d2e43168994249e",
+              "logIndex": "41"
+            },
+            {
+              "address": "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67",
+              "topics": [
+                "0x4f51faf6c4561ff95f067657e43439f0f856d97c04d9ec9070a6199ad418e235",
+                "0x000000000000000000000000ed617ce7f82e2ab589adeffd319d1d872bc8de06"
+              ],
+              "data": "0x00000000000000000000000041675c099f32341bf84bfc5382af534df5c7461a",
+              "logIndex": "42"
+            }
+          ],
+          "receiptLogsDigest": "sha256:45e5d4496283226c2229facfe61a75304ea36d4abc2bed7d359993dcf05bf4d8",
+          "providerReadbacks": [
+            {
+              "providerId": "quicknode",
+              "trustDomain": "quicknode.com",
+              "transactionHash": "0x30617f11ef467997bace3ab8b8d6048a19e42675fc101c73b1b216b5f8b0d08d",
+              "transactionResponseDigest": "sha256:7b1d52f60cf13831fdfb18b004ad73e64c54353e08780ccc4155d0e7133bed11",
+              "transactionReceiptDigest": "sha256:c9042c4fdd9e836695e8efe7d4ad902a16867ef38e1b96ee9697afdfd123646b",
+              "evidenceDigest": "sha256:365dec33c457a099bd54297c7afa2aed679441582718eedccded6800f99c6874"
+            },
+            {
+              "providerId": "alchemy",
+              "trustDomain": "alchemy.com",
+              "transactionHash": "0x30617f11ef467997bace3ab8b8d6048a19e42675fc101c73b1b216b5f8b0d08d",
+              "transactionResponseDigest": "sha256:7b1d52f60cf13831fdfb18b004ad73e64c54353e08780ccc4155d0e7133bed11",
+              "transactionReceiptDigest": "sha256:c9042c4fdd9e836695e8efe7d4ad902a16867ef38e1b96ee9697afdfd123646b",
+              "evidenceDigest": "sha256:200d30d77b17009819fe38f0b2ba4de3db4621569074dcef8e5e399bf53dc431"
+            }
+          ],
+          "resultingContracts": [
+            {
+              "contract": "permitAuthority",
+              "address": "0xeD617CE7f82e2AB589aDeFFD319D1D872Bc8De06",
+              "runtimeCodeHash": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
+              "previousBlockRuntimeCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+              "providerReadbacks": [
+                {
+                  "schemaVersion": "programmable.robinhood-atomic-root-runtime-transition-provider-readback.v1",
+                  "providerId": "quicknode",
+                  "trustDomain": "quicknode.com",
+                  "contract": "permitAuthority",
+                  "address": "0xeD617CE7f82e2AB589aDeFFD319D1D872Bc8De06",
+                  "preDeploymentBlockNumber": "50469364",
+                  "preDeploymentBlockHash": "0x291e16ff725ef97944fb36db6fc1ddbd055236df020d5e216f8ef1509d3fb8e4",
+                  "preDeploymentRuntimeCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+                  "deploymentBlockNumber": "50469365",
+                  "deploymentBlockHash": "0x6f3331471a5b96a23b951116be75f74a3cedf1c5f95f7d07d7f0e23f7b8493f0",
+                  "deploymentRuntimeCodeHash": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
+                  "evidenceDigest": "sha256:cfebd0e93c4d1875f6903145f13b7c1fe40719355f7de8cb32423a8a1d5f3fdc"
+                },
+                {
+                  "schemaVersion": "programmable.robinhood-atomic-root-runtime-transition-provider-readback.v1",
+                  "providerId": "alchemy",
+                  "trustDomain": "alchemy.com",
+                  "contract": "permitAuthority",
+                  "address": "0xeD617CE7f82e2AB589aDeFFD319D1D872Bc8De06",
+                  "preDeploymentBlockNumber": "50469364",
+                  "preDeploymentBlockHash": "0x291e16ff725ef97944fb36db6fc1ddbd055236df020d5e216f8ef1509d3fb8e4",
+                  "preDeploymentRuntimeCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+                  "deploymentBlockNumber": "50469365",
+                  "deploymentBlockHash": "0x6f3331471a5b96a23b951116be75f74a3cedf1c5f95f7d07d7f0e23f7b8493f0",
+                  "deploymentRuntimeCodeHash": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
+                  "evidenceDigest": "sha256:fb50fda42dcb228a5986eb0329fd406b3083147aab430ef6f9c2c2d73cb3caec"
+                }
+              ],
+              "stateEvidenceDigest": "sha256:137f4ffc362627944987524460ad429d3706faeeacbf70eb3d2a369d2c3d0202"
+            },
+            {
+              "contract": "graphFactory",
+              "address": "0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd",
+              "runtimeCodeHash": "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8",
+              "previousBlockRuntimeCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+              "providerReadbacks": [
+                {
+                  "schemaVersion": "programmable.robinhood-atomic-root-runtime-transition-provider-readback.v1",
+                  "providerId": "quicknode",
+                  "trustDomain": "quicknode.com",
+                  "contract": "graphFactory",
+                  "address": "0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd",
+                  "preDeploymentBlockNumber": "50469364",
+                  "preDeploymentBlockHash": "0x291e16ff725ef97944fb36db6fc1ddbd055236df020d5e216f8ef1509d3fb8e4",
+                  "preDeploymentRuntimeCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+                  "deploymentBlockNumber": "50469365",
+                  "deploymentBlockHash": "0x6f3331471a5b96a23b951116be75f74a3cedf1c5f95f7d07d7f0e23f7b8493f0",
+                  "deploymentRuntimeCodeHash": "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8",
+                  "evidenceDigest": "sha256:4c0c30ac1b3aa2b519f4324147a68a1dd806f6b8cc60ddec4fc07ac4e07ff768"
+                },
+                {
+                  "schemaVersion": "programmable.robinhood-atomic-root-runtime-transition-provider-readback.v1",
+                  "providerId": "alchemy",
+                  "trustDomain": "alchemy.com",
+                  "contract": "graphFactory",
+                  "address": "0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd",
+                  "preDeploymentBlockNumber": "50469364",
+                  "preDeploymentBlockHash": "0x291e16ff725ef97944fb36db6fc1ddbd055236df020d5e216f8ef1509d3fb8e4",
+                  "preDeploymentRuntimeCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+                  "deploymentBlockNumber": "50469365",
+                  "deploymentBlockHash": "0x6f3331471a5b96a23b951116be75f74a3cedf1c5f95f7d07d7f0e23f7b8493f0",
+                  "deploymentRuntimeCodeHash": "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8",
+                  "evidenceDigest": "sha256:56b537d411934ab0903e652ab80762107ad84b61df820aa4da8e7608edac78df"
+                }
+              ],
+              "stateEvidenceDigest": "sha256:0f0777574e17c446a489281fae417c75e06c8fc2938ad205b958747af2dfe614"
+            },
+            {
+              "contract": "programmableLaunchStampRouter",
+              "address": "0x34965F2A2ee9254522232C32F02056E92BE0C98a",
+              "runtimeCodeHash": "0x1dbbdaaad901ea3c6134dca0d4872a4789b3c071bf8ccfb44edd65d26d817388",
+              "previousBlockRuntimeCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+              "providerReadbacks": [
+                {
+                  "schemaVersion": "programmable.robinhood-atomic-root-runtime-transition-provider-readback.v1",
+                  "providerId": "quicknode",
+                  "trustDomain": "quicknode.com",
+                  "contract": "programmableLaunchStampRouter",
+                  "address": "0x34965F2A2ee9254522232C32F02056E92BE0C98a",
+                  "preDeploymentBlockNumber": "50469364",
+                  "preDeploymentBlockHash": "0x291e16ff725ef97944fb36db6fc1ddbd055236df020d5e216f8ef1509d3fb8e4",
+                  "preDeploymentRuntimeCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+                  "deploymentBlockNumber": "50469365",
+                  "deploymentBlockHash": "0x6f3331471a5b96a23b951116be75f74a3cedf1c5f95f7d07d7f0e23f7b8493f0",
+                  "deploymentRuntimeCodeHash": "0x1dbbdaaad901ea3c6134dca0d4872a4789b3c071bf8ccfb44edd65d26d817388",
+                  "evidenceDigest": "sha256:0365fb187b9ae82209836d8405fc129ad9c68d5b9fd9125c3aebea0100aec7e7"
+                },
+                {
+                  "schemaVersion": "programmable.robinhood-atomic-root-runtime-transition-provider-readback.v1",
+                  "providerId": "alchemy",
+                  "trustDomain": "alchemy.com",
+                  "contract": "programmableLaunchStampRouter",
+                  "address": "0x34965F2A2ee9254522232C32F02056E92BE0C98a",
+                  "preDeploymentBlockNumber": "50469364",
+                  "preDeploymentBlockHash": "0x291e16ff725ef97944fb36db6fc1ddbd055236df020d5e216f8ef1509d3fb8e4",
+                  "preDeploymentRuntimeCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+                  "deploymentBlockNumber": "50469365",
+                  "deploymentBlockHash": "0x6f3331471a5b96a23b951116be75f74a3cedf1c5f95f7d07d7f0e23f7b8493f0",
+                  "deploymentRuntimeCodeHash": "0x1dbbdaaad901ea3c6134dca0d4872a4789b3c071bf8ccfb44edd65d26d817388",
+                  "evidenceDigest": "sha256:1f7e5f200d0ff1eab3388a3abf66839ecb5d4fe6c39442488440a8f27aeea93d"
+                }
+              ],
+              "stateEvidenceDigest": "sha256:ea9a7374387c93fa145fa01b8daf66f73ea3fd779bcbd3444d53a1f8579f492a"
+            }
+          ],
+          "ethereumFinalityEvidence": {
+            "schemaVersion": "programmable.robinhood-l2-checkpoint-ethereum-finality.v1",
+            "profile": {
+              "schemaVersion": "programmable.custom-launch-profile-ref.v4",
+              "structuralProfileId": "programmable.custom-launch.robinhood-mainnet.v1",
+              "businessProfileId": "robinhood-production-launch",
+              "admissionDescriptorDigest": "sha256:99b4ccabdaaf143bad28a8f6af441a1b93e1f113d0179236328b7fa594d1f948",
+              "admissionPolicyDigest": "sha256:31e6b286ca839b31cb1edfe30c05d9f334892f3d84377961dc10b93959c7e216",
+              "admissionBindingDigest": "sha256:f31643e6e9ff6d5409d59a2fc3ac7fb5ac9cfcb3af08e95c9478bc95ddfa66a2",
+              "admissionSchemaDigest": "sha256:a28a6de6208d6ba7b65b4b706174509570955ba9ce9714624bcb2046ab7beae7",
+              "profileRevision": 1,
+              "profileVersion": "4.0.0",
+              "profileDigest": "sha256:484b1dc6e9091804fabc230f2b3a7504940fa00264f8e66e82a66a951e71f1a0"
+            },
+            "l2Checkpoint": {
+              "blockNumber": "50469365",
+              "blockHash": "0x6f3331471a5b96a23b951116be75f74a3cedf1c5f95f7d07d7f0e23f7b8493f0"
+            },
+            "batchNumber": "166387",
+            "l2Providers": [
+              {
+                "providerId": "quicknode",
+                "trustDomain": "quicknode.com",
+                "l1Confirmations": "1"
+              },
+              {
+                "providerId": "alchemy",
+                "trustDomain": "alchemy.com",
+                "l1Confirmations": "1"
+              }
+            ],
+            "ethereumProviders": [
+              {
+                "providerId": "drpc",
+                "trustDomain": "drpc.org"
+              },
+              {
+                "providerId": "quicknode",
+                "trustDomain": "quicknode.com"
+              }
+            ],
+            "rollup": "0x23A19d23e89166adedbDcB432518AB01e4272D94",
+            "sequencerInbox": "0xBd0D173EEb87D57A09521c24388a12789F33ba96",
+            "postingTransactionHash": "0x1a1291108c140a721ed2d0fb76bfce47e9f1e151a55dac8539bd6f1ea7612550",
+            "postingBlockNumber": "25871959",
+            "postingBlockHash": "0xa91c89a31aff6066c6c822249a37557c08addd535df7ba848137ae0587834ba9",
+            "postingLogIndex": "964",
+            "ethereumFinalizedCheckpoint": {
+              "blockNumber": "25903848",
+              "blockHash": "0x1d2e1666a9447fa06ae6e516e51ed5df2ca3bfe54e59d6bfb3e3592b8b5fabf5",
+              "tag": "finalized"
+            },
+            "observedAt": "2026-09-04T12:24:55.123Z",
+            "captureClosureDigest": "sha256:86f769caeccef49275ae0972007316f0b10953d2b0baa3a6fb313029fe87a25c",
+            "postingEventDigest": "sha256:9de54f83b00f0304097472c4ba995a6660b816542e045abd54cedd1eecae46e8",
+            "l1EvidenceDigest": "sha256:a38ff2eb5035b4980eca88273235e967a8526220c79c0250272c6f142912bde6",
+            "evidenceDigest": "sha256:0ae4e5a1274728cfbf25e73bfe098393760467d48ab6ccfcb11f3782904453e1"
+          },
+          "sourceVerification": {
+            "sourcifyProviderMatchCoveredContracts": [
+              "programmableLaunchStampRouter",
+              "graphFactory"
+            ],
+            "exactByteSourceBuildTransactionCoveredContracts": [
+              "programmableLaunchStampRouter",
+              "graphFactory"
+            ],
+            "officialSourcePinnedCoveredContracts": [
+              "permitAuthority"
+            ]
+          },
+          "evidenceDigest": "sha256:0f853f120560e8dcd15e748850cd648baf1f22bfa0c4a425ced058449c0b4ccf"
+        },
+        "permit2GenesisProvenance": {
+          "schemaVersion": "programmable.custom-launch-genesis-provenance.v1",
+          "kind": "genesis-predeploy",
+          "address": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+          "startBlock": "0",
+          "genesisSourceUrl": "https://cdn.robinhood.com/assets/generated_assets/hoodchain_docsite/chain-node-configs/robinhood-genesis.json",
+          "genesisSourceDigest": "sha256:353e6f6441b47695b41cee0c3645cde8dd7492d2f7f574bfb6aa4371e41bb6ba",
+          "allocRuntimeCodeBytes": 9152,
+          "providerReadbacks": [
+            {
+              "schemaVersion": "programmable.custom-launch-genesis-provider-readback.v1",
+              "providerId": "quicknode",
+              "trustDomain": "quicknode.com",
+              "blockNumber": "0",
+              "blockHash": "0xaad15f3d702aaea00caf3e9bb56395efe9127bc3b31b24921abf1eee3409305c",
+              "runtimeCodeHash": "0x5208783f52488f7d3493e5e38311ab707c1d75457fe472a19b0b4d57d66a7fca",
+              "evidenceDigest": "sha256:42c4c3c53fc5306c2bdb4133afdf4d1990437e30c0047b6f670bdd889148d086"
+            },
+            {
+              "schemaVersion": "programmable.custom-launch-genesis-provider-readback.v1",
+              "providerId": "alchemy",
+              "trustDomain": "alchemy.com",
+              "blockNumber": "0",
+              "blockHash": "0xaad15f3d702aaea00caf3e9bb56395efe9127bc3b31b24921abf1eee3409305c",
+              "runtimeCodeHash": "0x5208783f52488f7d3493e5e38311ab707c1d75457fe472a19b0b4d57d66a7fca",
+              "evidenceDigest": "sha256:73e85ac55572d1ccf1c05ef1f1e297494b3933572120d6bb64a93a0c86f24a2a"
+            }
+          ],
+          "evidenceDigest": "sha256:93200f4be1543da0ea876af1d91ff0cd4dc3da0b500f170b3d42731776be8568"
+        },
+        "permitAuthoritySourceProvenance": {
+          "schemaVersion": "programmable.custom-launch-deployment-evidence.v1",
+          "kind": "official-source-pinned",
+          "address": "0xeD617CE7f82e2AB589aDeFFD319D1D872Bc8De06",
+          "transactionHash": "0x30617f11ef467997bace3ab8b8d6048a19e42675fc101c73b1b216b5f8b0d08d",
+          "blockNumber": "50469365",
+          "blockHash": "0x6f3331471a5b96a23b951116be75f74a3cedf1c5f95f7d07d7f0e23f7b8493f0",
+          "sourceCommitment": "sha256:4591dc35029cba2a869f91919cb3cf7e7c68f26727cc68e4b03d99cdf1bc2ebb",
+          "configurationEvidence": {
+            "schemaVersion": "programmable.safe-configuration-evidence.v1",
+            "finalized": true,
+            "blockNumber": "50469365",
+            "blockHash": "0x6f3331471a5b96a23b951116be75f74a3cedf1c5f95f7d07d7f0e23f7b8493f0",
+            "proxyRuntimeCodeHash": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c",
+            "singleton": {
+              "address": "0x41675C099F32341bf84BFc5382aF534df5C7461a",
+              "runtimeCodeHash": "0x1fe2df852ba3299d6534ef416eefa406e56ced995bca886ab7a553e6d0c5e1c4",
+              "version": "1.4.1",
+              "sourceCommitment": "sha256:4591dc35029cba2a869f91919cb3cf7e7c68f26727cc68e4b03d99cdf1bc2ebb"
+            },
+            "fallbackHandler": "0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99",
+            "fallbackHandlerRuntimeCodeHash": "0x7c6007a5d711cea8dfd5d91f5940ec29c7f200fe511eb1fc1397b367af3c42f9",
+            "owners": [
+              "0x032b1c7b96793717F0BD2f11eb86cd10CdefC4a3",
+              "0x2Bb333d48DFAF1596D9036671d2E43168994249E"
+            ],
+            "threshold": 1,
+            "nonce": "0",
+            "modules": [],
+            "modulesNext": "0x0000000000000000000000000000000000000001",
+            "guard": null,
+            "singletonSlot": "0x00000000000000000000000041675c099f32341bf84bfc5382af534df5c7461a",
+            "fallbackHandlerSlot": "0x000000000000000000000000fd0732dc9e303f09fcef3a7388ad10a83459ec99",
+            "guardSlot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "primaryProvider": {
+              "providerId": "quicknode",
+              "trustDomain": "quicknode.com",
+              "evidenceDigest": "sha256:6445f23a791e357b9a36a35e88ba0fe8614f9884fb37bc11b497439f37d52160"
+            },
+            "secondaryProvider": {
+              "providerId": "alchemy",
+              "trustDomain": "alchemy.com",
+              "evidenceDigest": "sha256:6c84709c09060bef51f8df4c565c49bd46669518206f879a41ca1f6e7b77127a"
+            },
+            "atomicRootStateEvidenceDigest": "sha256:137f4ffc362627944987524460ad429d3706faeeacbf70eb3d2a369d2c3d0202",
+            "ethereumFinalityEvidence": {
+              "schemaVersion": "programmable.robinhood-l2-checkpoint-ethereum-finality.v1",
+              "profile": {
+                "schemaVersion": "programmable.custom-launch-profile-ref.v4",
+                "structuralProfileId": "programmable.custom-launch.robinhood-mainnet.v1",
+                "businessProfileId": "robinhood-production-launch",
+                "admissionDescriptorDigest": "sha256:99b4ccabdaaf143bad28a8f6af441a1b93e1f113d0179236328b7fa594d1f948",
+                "admissionPolicyDigest": "sha256:31e6b286ca839b31cb1edfe30c05d9f334892f3d84377961dc10b93959c7e216",
+                "admissionBindingDigest": "sha256:f31643e6e9ff6d5409d59a2fc3ac7fb5ac9cfcb3af08e95c9478bc95ddfa66a2",
+                "admissionSchemaDigest": "sha256:a28a6de6208d6ba7b65b4b706174509570955ba9ce9714624bcb2046ab7beae7",
+                "profileRevision": 1,
+                "profileVersion": "4.0.0",
+                "profileDigest": "sha256:484b1dc6e9091804fabc230f2b3a7504940fa00264f8e66e82a66a951e71f1a0"
+              },
+              "l2Checkpoint": {
+                "blockNumber": "50469365",
+                "blockHash": "0x6f3331471a5b96a23b951116be75f74a3cedf1c5f95f7d07d7f0e23f7b8493f0"
+              },
+              "batchNumber": "166387",
+              "l2Providers": [
+                {
+                  "providerId": "quicknode",
+                  "trustDomain": "quicknode.com",
+                  "l1Confirmations": "1"
+                },
+                {
+                  "providerId": "alchemy",
+                  "trustDomain": "alchemy.com",
+                  "l1Confirmations": "1"
+                }
+              ],
+              "ethereumProviders": [
+                {
+                  "providerId": "drpc",
+                  "trustDomain": "drpc.org"
+                },
+                {
+                  "providerId": "quicknode",
+                  "trustDomain": "quicknode.com"
+                }
+              ],
+              "rollup": "0x23A19d23e89166adedbDcB432518AB01e4272D94",
+              "sequencerInbox": "0xBd0D173EEb87D57A09521c24388a12789F33ba96",
+              "postingTransactionHash": "0x1a1291108c140a721ed2d0fb76bfce47e9f1e151a55dac8539bd6f1ea7612550",
+              "postingBlockNumber": "25871959",
+              "postingBlockHash": "0xa91c89a31aff6066c6c822249a37557c08addd535df7ba848137ae0587834ba9",
+              "postingLogIndex": "964",
+              "ethereumFinalizedCheckpoint": {
+                "blockNumber": "25903848",
+                "blockHash": "0x1d2e1666a9447fa06ae6e516e51ed5df2ca3bfe54e59d6bfb3e3592b8b5fabf5",
+                "tag": "finalized"
+              },
+              "observedAt": "2026-09-04T12:24:55.123Z",
+              "captureClosureDigest": "sha256:86f769caeccef49275ae0972007316f0b10953d2b0baa3a6fb313029fe87a25c",
+              "postingEventDigest": "sha256:9de54f83b00f0304097472c4ba995a6660b816542e045abd54cedd1eecae46e8",
+              "l1EvidenceDigest": "sha256:a38ff2eb5035b4980eca88273235e967a8526220c79c0250272c6f142912bde6",
+              "evidenceDigest": "sha256:0ae4e5a1274728cfbf25e73bfe098393760467d48ab6ccfcb11f3782904453e1"
+            },
+            "evidenceDigest": "sha256:382b17d7f5b10ab0af1b64c84f03d3e745fd73388b29a2ff0a25c9ebb4c8519a"
+          },
+          "evidenceDigest": "sha256:ad061a3e564c70e6d7d0a95775cd1eeb0c0476bd166f6fe0aaead6be16f95bfd"
+        },
+        "externalRootDeploymentEvidence": [
+          {
+            "schemaVersion": "programmable.custom-launch-deployment-evidence.v1",
+            "contract": "poolManager",
+            "kind": "exact-observed-deployment",
+            "address": "0x8366a39CC670B4001A1121B8F6A443A643e40951",
+            "runtimeCodeHash": "0xbd3881180b547f5fe817545743cfb4343e96b1bc6640dcd70c106b0066e95626",
+            "transactionHash": "0x4fb28d4935866f462582c6c931c6f2705e55f5be5eb178c7d8d9329a95c44c41",
+            "previousBlockNumber": "9069",
+            "previousBlockHash": "0x453d2e99fea8384bba9325dcd9e4e726e4631443f68bd03ab84d9ccbc88e0c52",
+            "previousBlockRuntimeCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+            "startBlock": "9070",
+            "blockHash": "0x9165e92381503c5e0cd1afc3e3647089d93a301c3e010722dbaf6e605d4ce38c",
+            "registrySource": {
+              "repository": "Uniswap/contracts",
+              "commit": "4cfc406c8e34da3ce04e60657a7825075b64fd22",
+              "path": "deployments/json/4663.json",
+              "rawUrl": "https://raw.githubusercontent.com/Uniswap/contracts/4cfc406c8e34da3ce04e60657a7825075b64fd22/deployments/json/4663.json",
+              "sha256": "sha256:21964cefbfc24b0ee89e7427acf74d223ce5a50aeb4216a9bac361a6148dea15"
+            },
+            "providerReadbacks": [
+              {
+                "providerId": "quicknode",
+                "trustDomain": "quicknode.com",
+                "transactionHash": "0x4fb28d4935866f462582c6c931c6f2705e55f5be5eb178c7d8d9329a95c44c41",
+                "rawTransactionDigest": "sha256:18d771cfd343faf3827ef0ee72b8c58b03231f928eaef2e0b14b8a8f20f0e8c0",
+                "transactionDigest": "sha256:de0019f2c0afd7fd6b3a0dd0eab93b354da246ae2aeb5e11b4d29ab96889d66f",
+                "previousBlockNumber": "9069",
+                "previousBlockHash": "0x453d2e99fea8384bba9325dcd9e4e726e4631443f68bd03ab84d9ccbc88e0c52",
+                "previousBlockRuntimeCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+                "blockNumber": "9070",
+                "blockHash": "0x9165e92381503c5e0cd1afc3e3647089d93a301c3e010722dbaf6e605d4ce38c",
+                "runtimeCodeHash": "0xbd3881180b547f5fe817545743cfb4343e96b1bc6640dcd70c106b0066e95626",
+                "transactionReceiptDigest": "sha256:bebec6b78b92b7eedcaf4ea630ae1e9d01ac9190032a7c6607f04c187c30465c",
+                "evidenceDigest": "sha256:788ce43959fa57d53875de6ffb74ddfbbd2477ee151b3dee645c6b85adb4147d"
+              },
+              {
+                "providerId": "alchemy",
+                "trustDomain": "alchemy.com",
+                "transactionHash": "0x4fb28d4935866f462582c6c931c6f2705e55f5be5eb178c7d8d9329a95c44c41",
+                "rawTransactionDigest": "sha256:18d771cfd343faf3827ef0ee72b8c58b03231f928eaef2e0b14b8a8f20f0e8c0",
+                "transactionDigest": "sha256:de0019f2c0afd7fd6b3a0dd0eab93b354da246ae2aeb5e11b4d29ab96889d66f",
+                "previousBlockNumber": "9069",
+                "previousBlockHash": "0x453d2e99fea8384bba9325dcd9e4e726e4631443f68bd03ab84d9ccbc88e0c52",
+                "previousBlockRuntimeCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+                "blockNumber": "9070",
+                "blockHash": "0x9165e92381503c5e0cd1afc3e3647089d93a301c3e010722dbaf6e605d4ce38c",
+                "runtimeCodeHash": "0xbd3881180b547f5fe817545743cfb4343e96b1bc6640dcd70c106b0066e95626",
+                "transactionReceiptDigest": "sha256:bebec6b78b92b7eedcaf4ea630ae1e9d01ac9190032a7c6607f04c187c30465c",
+                "evidenceDigest": "sha256:dc4931b4d9b0e61feba6ef05f46860ed683eed413ced26a943d8c23f8b9967d7"
+              }
+            ],
+            "evidenceDigest": "sha256:19fd81eab9228d6bcb15f6a9736910670ea8da4e772abb04de262d8677d5d919"
+          },
+          {
+            "schemaVersion": "programmable.custom-launch-deployment-evidence.v1",
+            "contract": "positionManager",
+            "kind": "exact-observed-deployment",
+            "address": "0x58daec3116aae6D93017bAAea7749052E8a04fA7",
+            "runtimeCodeHash": "0xc873e135dc9aaec88489cfbad146b4cb49d6a32e0d80326377784b7ba17670b2",
+            "transactionHash": "0x228c18ada6cb46b4fbcc18f4ec1519953415393e256fa8349aafbd5a2db037c8",
+            "previousBlockNumber": "9072",
+            "previousBlockHash": "0x62de7c960bbeffa2ccc0cd8613e153135d2f57f72c505c0e47dc2ec541cf51af",
+            "previousBlockRuntimeCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+            "startBlock": "9073",
+            "blockHash": "0x57535f50e190e2806787481baf10fbc16899c78db3d81fd5792b75d8447bf1dd",
+            "registrySource": {
+              "repository": "Uniswap/contracts",
+              "commit": "4cfc406c8e34da3ce04e60657a7825075b64fd22",
+              "path": "deployments/json/4663.json",
+              "rawUrl": "https://raw.githubusercontent.com/Uniswap/contracts/4cfc406c8e34da3ce04e60657a7825075b64fd22/deployments/json/4663.json",
+              "sha256": "sha256:21964cefbfc24b0ee89e7427acf74d223ce5a50aeb4216a9bac361a6148dea15"
+            },
+            "providerReadbacks": [
+              {
+                "providerId": "quicknode",
+                "trustDomain": "quicknode.com",
+                "transactionHash": "0x228c18ada6cb46b4fbcc18f4ec1519953415393e256fa8349aafbd5a2db037c8",
+                "rawTransactionDigest": "sha256:86648fff36e61f6d1d01b8fcc55f6d37e02bde4ec5cb8de3cefa6431f9096117",
+                "transactionDigest": "sha256:6a3e6e0ee28146e666ae9348b9db9ebb0fcfe70b3980a91a8e9c4a770038d9fb",
+                "previousBlockNumber": "9072",
+                "previousBlockHash": "0x62de7c960bbeffa2ccc0cd8613e153135d2f57f72c505c0e47dc2ec541cf51af",
+                "previousBlockRuntimeCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+                "blockNumber": "9073",
+                "blockHash": "0x57535f50e190e2806787481baf10fbc16899c78db3d81fd5792b75d8447bf1dd",
+                "runtimeCodeHash": "0xc873e135dc9aaec88489cfbad146b4cb49d6a32e0d80326377784b7ba17670b2",
+                "transactionReceiptDigest": "sha256:50a9567499cca2d7256550302e3165caaec81b33c733f20b78be90ee3c0e34fb",
+                "evidenceDigest": "sha256:42058db18db614a0b46d1e34367257e51cb6e5d1045044ac158bb22a83dc40cb"
+              },
+              {
+                "providerId": "alchemy",
+                "trustDomain": "alchemy.com",
+                "transactionHash": "0x228c18ada6cb46b4fbcc18f4ec1519953415393e256fa8349aafbd5a2db037c8",
+                "rawTransactionDigest": "sha256:86648fff36e61f6d1d01b8fcc55f6d37e02bde4ec5cb8de3cefa6431f9096117",
+                "transactionDigest": "sha256:6a3e6e0ee28146e666ae9348b9db9ebb0fcfe70b3980a91a8e9c4a770038d9fb",
+                "previousBlockNumber": "9072",
+                "previousBlockHash": "0x62de7c960bbeffa2ccc0cd8613e153135d2f57f72c505c0e47dc2ec541cf51af",
+                "previousBlockRuntimeCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+                "blockNumber": "9073",
+                "blockHash": "0x57535f50e190e2806787481baf10fbc16899c78db3d81fd5792b75d8447bf1dd",
+                "runtimeCodeHash": "0xc873e135dc9aaec88489cfbad146b4cb49d6a32e0d80326377784b7ba17670b2",
+                "transactionReceiptDigest": "sha256:50a9567499cca2d7256550302e3165caaec81b33c733f20b78be90ee3c0e34fb",
+                "evidenceDigest": "sha256:d54d95d08a2991bfdf7405d320b600f6da902a1cb1320e185b43d210f85906b5"
+              }
+            ],
+            "evidenceDigest": "sha256:1c63c0c1d97d3981bb537ec064e07edac9fc606b3a4766b6ba831e706a0c97f2"
+          },
+          {
+            "schemaVersion": "programmable.custom-launch-deployment-evidence.v1",
+            "contract": "stateView",
+            "kind": "exact-observed-deployment",
+            "address": "0xF3334192D15450CdD385c8B70e03f9A6bD9E673b",
+            "runtimeCodeHash": "0x7d9c591e0956fd89d98feb4ffcfe8bf1f7a62bd485edd979fa21d104b49878a6",
+            "transactionHash": "0x3d61e2c9eeb482385b1aa436b9e8f812167ea579cc390e4f93bc5abde00582f4",
+            "previousBlockNumber": "9074",
+            "previousBlockHash": "0xe4e326b8cb7d06096a189ad4755858db343274c690ae2bf832132e90cc04907f",
+            "previousBlockRuntimeCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+            "startBlock": "9075",
+            "blockHash": "0x30e8a2c1d72be59a478815404c310a5608fffe4ecc22e58074ba2e77c90b6be3",
+            "registrySource": {
+              "repository": "Uniswap/contracts",
+              "commit": "4cfc406c8e34da3ce04e60657a7825075b64fd22",
+              "path": "deployments/json/4663.json",
+              "rawUrl": "https://raw.githubusercontent.com/Uniswap/contracts/4cfc406c8e34da3ce04e60657a7825075b64fd22/deployments/json/4663.json",
+              "sha256": "sha256:21964cefbfc24b0ee89e7427acf74d223ce5a50aeb4216a9bac361a6148dea15"
+            },
+            "providerReadbacks": [
+              {
+                "providerId": "quicknode",
+                "trustDomain": "quicknode.com",
+                "transactionHash": "0x3d61e2c9eeb482385b1aa436b9e8f812167ea579cc390e4f93bc5abde00582f4",
+                "rawTransactionDigest": "sha256:097e214f7673cb69aa7c151ccfb6812f86697496b06fa2ee496d145c947e8a4f",
+                "transactionDigest": "sha256:bfdfabe65294c658250f26f6ba115874cb4dbfefa9785d38a3c54e4f4fbf75e4",
+                "previousBlockNumber": "9074",
+                "previousBlockHash": "0xe4e326b8cb7d06096a189ad4755858db343274c690ae2bf832132e90cc04907f",
+                "previousBlockRuntimeCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+                "blockNumber": "9075",
+                "blockHash": "0x30e8a2c1d72be59a478815404c310a5608fffe4ecc22e58074ba2e77c90b6be3",
+                "runtimeCodeHash": "0x7d9c591e0956fd89d98feb4ffcfe8bf1f7a62bd485edd979fa21d104b49878a6",
+                "transactionReceiptDigest": "sha256:b61e5deb03c003a13ca5c2a5fd9923920c066011a66b7bccaa781747ded778be",
+                "evidenceDigest": "sha256:7a51bce58bb6a2e3a902c7faae3f104753811b9c06d0766806efb2b24a7408ce"
+              },
+              {
+                "providerId": "alchemy",
+                "trustDomain": "alchemy.com",
+                "transactionHash": "0x3d61e2c9eeb482385b1aa436b9e8f812167ea579cc390e4f93bc5abde00582f4",
+                "rawTransactionDigest": "sha256:097e214f7673cb69aa7c151ccfb6812f86697496b06fa2ee496d145c947e8a4f",
+                "transactionDigest": "sha256:bfdfabe65294c658250f26f6ba115874cb4dbfefa9785d38a3c54e4f4fbf75e4",
+                "previousBlockNumber": "9074",
+                "previousBlockHash": "0xe4e326b8cb7d06096a189ad4755858db343274c690ae2bf832132e90cc04907f",
+                "previousBlockRuntimeCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+                "blockNumber": "9075",
+                "blockHash": "0x30e8a2c1d72be59a478815404c310a5608fffe4ecc22e58074ba2e77c90b6be3",
+                "runtimeCodeHash": "0x7d9c591e0956fd89d98feb4ffcfe8bf1f7a62bd485edd979fa21d104b49878a6",
+                "transactionReceiptDigest": "sha256:b61e5deb03c003a13ca5c2a5fd9923920c066011a66b7bccaa781747ded778be",
+                "evidenceDigest": "sha256:99625a5456575faeac8fa3d0d71ae6b4e06d4bf234807069b935854c451c63b4"
+              }
+            ],
+            "evidenceDigest": "sha256:1c1fac08f22e8041a0737e2eff4cfc18c4523a2b774fe71f48d40399b9e93239"
+          },
+          {
+            "schemaVersion": "programmable.custom-launch-deployment-evidence.v1",
+            "contract": "v4Quoter",
+            "kind": "exact-observed-deployment",
+            "address": "0x8Dc178eFB8111BB0973Dd9d722ebeFF267c98F94",
+            "runtimeCodeHash": "0xd707b1da8cb165e5ea35a3b4450d971eb562ec171e23492aa117036b78a868f6",
+            "transactionHash": "0x6bf436d72a17f87284ddcab43094689bd320dfb39b535213b9a0b669fabc4ab4",
+            "previousBlockNumber": "9073",
+            "previousBlockHash": "0x57535f50e190e2806787481baf10fbc16899c78db3d81fd5792b75d8447bf1dd",
+            "previousBlockRuntimeCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+            "startBlock": "9074",
+            "blockHash": "0xe4e326b8cb7d06096a189ad4755858db343274c690ae2bf832132e90cc04907f",
+            "registrySource": {
+              "repository": "Uniswap/contracts",
+              "commit": "4cfc406c8e34da3ce04e60657a7825075b64fd22",
+              "path": "deployments/json/4663.json",
+              "rawUrl": "https://raw.githubusercontent.com/Uniswap/contracts/4cfc406c8e34da3ce04e60657a7825075b64fd22/deployments/json/4663.json",
+              "sha256": "sha256:21964cefbfc24b0ee89e7427acf74d223ce5a50aeb4216a9bac361a6148dea15"
+            },
+            "providerReadbacks": [
+              {
+                "providerId": "quicknode",
+                "trustDomain": "quicknode.com",
+                "transactionHash": "0x6bf436d72a17f87284ddcab43094689bd320dfb39b535213b9a0b669fabc4ab4",
+                "rawTransactionDigest": "sha256:afbdfd6943aba8d7ed6f54ebc73bb6dda11ea5d6eeec8085c5d5b336898ceaac",
+                "transactionDigest": "sha256:4fd1cf384f78f5f5366f75384cde062e0a665454bf34d2d5f6c5ea08c5d7758d",
+                "previousBlockNumber": "9073",
+                "previousBlockHash": "0x57535f50e190e2806787481baf10fbc16899c78db3d81fd5792b75d8447bf1dd",
+                "previousBlockRuntimeCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+                "blockNumber": "9074",
+                "blockHash": "0xe4e326b8cb7d06096a189ad4755858db343274c690ae2bf832132e90cc04907f",
+                "runtimeCodeHash": "0xd707b1da8cb165e5ea35a3b4450d971eb562ec171e23492aa117036b78a868f6",
+                "transactionReceiptDigest": "sha256:1183cb61e1beace61dcc7049f7bc59e11d007e90217724b21f62e0318adca735",
+                "evidenceDigest": "sha256:b4465a1464bdeb90eb076758c1b219b338e9f80f8b5adfc4c3ed1d7ca5a707ac"
+              },
+              {
+                "providerId": "alchemy",
+                "trustDomain": "alchemy.com",
+                "transactionHash": "0x6bf436d72a17f87284ddcab43094689bd320dfb39b535213b9a0b669fabc4ab4",
+                "rawTransactionDigest": "sha256:afbdfd6943aba8d7ed6f54ebc73bb6dda11ea5d6eeec8085c5d5b336898ceaac",
+                "transactionDigest": "sha256:4fd1cf384f78f5f5366f75384cde062e0a665454bf34d2d5f6c5ea08c5d7758d",
+                "previousBlockNumber": "9073",
+                "previousBlockHash": "0x57535f50e190e2806787481baf10fbc16899c78db3d81fd5792b75d8447bf1dd",
+                "previousBlockRuntimeCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+                "blockNumber": "9074",
+                "blockHash": "0xe4e326b8cb7d06096a189ad4755858db343274c690ae2bf832132e90cc04907f",
+                "runtimeCodeHash": "0xd707b1da8cb165e5ea35a3b4450d971eb562ec171e23492aa117036b78a868f6",
+                "transactionReceiptDigest": "sha256:1183cb61e1beace61dcc7049f7bc59e11d007e90217724b21f62e0318adca735",
+                "evidenceDigest": "sha256:3092d6c28961a0b6bc2e3db75baba49c54bdb770e4d9cb62fb5f44a6ee7597c5"
+              }
+            ],
+            "evidenceDigest": "sha256:57ddccbbb905c13f5a0a7d3a7646f4d2e7d05e351620066d66635d8fee03804e"
+          },
+          {
+            "schemaVersion": "programmable.custom-launch-deployment-evidence.v1",
+            "contract": "universalRouter",
+            "kind": "exact-observed-deployment",
+            "address": "0x06AfBA43Fd06227fA663b0DAecF536f6EaA6bf99",
+            "runtimeCodeHash": "0xbe8e8191bb42d843c2e948a5a55772eaab864ce01e54dcd47c9d089170b302d5",
+            "transactionHash": "0xdfb76494e158d8dea4376160315239271636a18515207fd4526e574bc7eeb456",
+            "previousBlockNumber": "3347898",
+            "previousBlockHash": "0x70c95a3715c2d276366c01b1995c8864f20a457bb3fa09e4bf6afa1858813b28",
+            "previousBlockRuntimeCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+            "startBlock": "3347899",
+            "blockHash": "0xd94fe7a9d1f90bf582c3b2fa91c97eb924d6dd82ba7d41effe2de414f09259f7",
+            "registrySource": {
+              "repository": "Uniswap/contracts",
+              "commit": "4cfc406c8e34da3ce04e60657a7825075b64fd22",
+              "path": "deployments/json/4663.json",
+              "rawUrl": "https://raw.githubusercontent.com/Uniswap/contracts/4cfc406c8e34da3ce04e60657a7825075b64fd22/deployments/json/4663.json",
+              "sha256": "sha256:21964cefbfc24b0ee89e7427acf74d223ce5a50aeb4216a9bac361a6148dea15"
+            },
+            "providerReadbacks": [
+              {
+                "providerId": "quicknode",
+                "trustDomain": "quicknode.com",
+                "transactionHash": "0xdfb76494e158d8dea4376160315239271636a18515207fd4526e574bc7eeb456",
+                "rawTransactionDigest": "sha256:e2624395f53dde73f137d1506f484ad4657ff0a263f3ceaba8942743b7b7d9df",
+                "transactionDigest": "sha256:af8a678896427d2354c4db04d5ef344bd5f0bbc1f328601259378f4e65b8f0c9",
+                "previousBlockNumber": "3347898",
+                "previousBlockHash": "0x70c95a3715c2d276366c01b1995c8864f20a457bb3fa09e4bf6afa1858813b28",
+                "previousBlockRuntimeCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+                "blockNumber": "3347899",
+                "blockHash": "0xd94fe7a9d1f90bf582c3b2fa91c97eb924d6dd82ba7d41effe2de414f09259f7",
+                "runtimeCodeHash": "0xbe8e8191bb42d843c2e948a5a55772eaab864ce01e54dcd47c9d089170b302d5",
+                "transactionReceiptDigest": "sha256:e66fa4ac67b408a49358b2b7262aa72c574c6d6afabf5b5a1520d7b7eb4256c3",
+                "evidenceDigest": "sha256:1ffa752daab3d55b70a0fa652718a71683e5254ff72923c004e232777570492b"
+              },
+              {
+                "providerId": "alchemy",
+                "trustDomain": "alchemy.com",
+                "transactionHash": "0xdfb76494e158d8dea4376160315239271636a18515207fd4526e574bc7eeb456",
+                "rawTransactionDigest": "sha256:e2624395f53dde73f137d1506f484ad4657ff0a263f3ceaba8942743b7b7d9df",
+                "transactionDigest": "sha256:af8a678896427d2354c4db04d5ef344bd5f0bbc1f328601259378f4e65b8f0c9",
+                "previousBlockNumber": "3347898",
+                "previousBlockHash": "0x70c95a3715c2d276366c01b1995c8864f20a457bb3fa09e4bf6afa1858813b28",
+                "previousBlockRuntimeCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+                "blockNumber": "3347899",
+                "blockHash": "0xd94fe7a9d1f90bf582c3b2fa91c97eb924d6dd82ba7d41effe2de414f09259f7",
+                "runtimeCodeHash": "0xbe8e8191bb42d843c2e948a5a55772eaab864ce01e54dcd47c9d089170b302d5",
+                "transactionReceiptDigest": "sha256:e66fa4ac67b408a49358b2b7262aa72c574c6d6afabf5b5a1520d7b7eb4256c3",
+                "evidenceDigest": "sha256:782457312e40f5e765d38f8939381656c38f073a7715a8100d48cac1dfd94ca4"
+              }
+            ],
+            "evidenceDigest": "sha256:72f8a3b701264aeeb93a7b4583309ad6c1334f1cc8546475c20f76975a8fb7eb"
+          }
+        ],
+        "contracts": {
+          "programmableLaunchStampRouter": {
+            "address": "0x34965F2A2ee9254522232C32F02056E92BE0C98a",
+            "runtimeCodeHash": "0x1dbbdaaad901ea3c6134dca0d4872a4789b3c071bf8ccfb44edd65d26d817388"
+          },
+          "permitAuthority": {
+            "address": "0xeD617CE7f82e2AB589aDeFFD319D1D872Bc8De06",
+            "runtimeCodeHash": "0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c"
+          },
+          "graphFactory": {
+            "address": "0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd",
+            "runtimeCodeHash": "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8"
+          },
+          "poolManager": {
+            "address": "0x8366a39CC670B4001A1121B8F6A443A643e40951",
+            "runtimeCodeHash": "0xbd3881180b547f5fe817545743cfb4343e96b1bc6640dcd70c106b0066e95626"
+          },
+          "positionManager": {
+            "address": "0x58daec3116aae6D93017bAAea7749052E8a04fA7",
+            "runtimeCodeHash": "0xc873e135dc9aaec88489cfbad146b4cb49d6a32e0d80326377784b7ba17670b2"
+          },
+          "stateView": {
+            "address": "0xF3334192D15450CdD385c8B70e03f9A6bD9E673b",
+            "runtimeCodeHash": "0x7d9c591e0956fd89d98feb4ffcfe8bf1f7a62bd485edd979fa21d104b49878a6"
+          },
+          "v4Quoter": {
+            "address": "0x8Dc178eFB8111BB0973Dd9d722ebeFF267c98F94",
+            "runtimeCodeHash": "0xd707b1da8cb165e5ea35a3b4450d971eb562ec171e23492aa117036b78a868f6"
+          },
+          "permit2": {
+            "address": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+            "runtimeCodeHash": "0x5208783f52488f7d3493e5e38311ab707c1d75457fe472a19b0b4d57d66a7fca"
+          },
+          "universalRouter": {
+            "address": "0x06AfBA43Fd06227fA663b0DAecF536f6EaA6bf99",
+            "runtimeCodeHash": "0xbe8e8191bb42d843c2e948a5a55772eaab864ce01e54dcd47c9d089170b302d5"
+          }
+        }
+      },
+      "descriptorDigest": "0x4bde6e26b6630aa684b4ac2a987d6322755896b249a189843bd3a58fe313694c",
+      "bindingDigest": "sha256:a4cd76691e5ba3c468703dcecb0b02d42c1785e1ba54eb17ff26619ed9bc86f5"
+    },
+    "profile": {
+      "schemaVersion": "programmable.launch-cli-v4-profile-evidence.v1",
+      "profile": {
+        "schemaVersion": "programmable.custom-launch-profile-ref.v4",
+        "structuralProfileId": "programmable.custom-launch.robinhood-mainnet.v1",
+        "businessProfileId": "robinhood-production-launch",
+        "admissionDescriptorDigest": "sha256:99b4ccabdaaf143bad28a8f6af441a1b93e1f113d0179236328b7fa594d1f948",
+        "admissionPolicyDigest": "sha256:31e6b286ca839b31cb1edfe30c05d9f334892f3d84377961dc10b93959c7e216",
+        "admissionBindingDigest": "sha256:f31643e6e9ff6d5409d59a2fc3ac7fb5ac9cfcb3af08e95c9478bc95ddfa66a2",
+        "admissionSchemaDigest": "sha256:a28a6de6208d6ba7b65b4b706174509570955ba9ce9714624bcb2046ab7beae7",
+        "profileRevision": 1,
+        "profileVersion": "4.0.0",
+        "profileDigest": "sha256:484b1dc6e9091804fabc230f2b3a7504940fa00264f8e66e82a66a951e71f1a0"
+      },
+      "chainDeploymentDescriptorDigest": "0x4bde6e26b6630aa684b4ac2a987d6322755896b249a189843bd3a58fe313694c",
+      "fundingModes": [
+        "none",
+        "wallet-transaction-value"
+      ],
+      "capabilities": {
+        "feeBehaviorClaim": false,
+        "universalFeeBehaviorClaim": false,
+        "genericClaimingLive": false,
+        "buybacksLive": false
+      },
+      "profileEvidenceDigest": "sha256:2d58e5ce11a480a50552e11cac301cc8a95a7d71a6685b46c6bcdd423eee4015"
+    },
+    "manifest": {
+      "schemaVersion": "programmable.launch-cli-v4-release-manifest.v1",
+      "releaseIdentity": {
+        "package": {
+          "name": "@programmable/launch",
+          "version": "4.0.0",
+          "tag": "programmable-launch-v4.0.0",
+          "repository": "programmablehq/PROGRAMMABLE"
+        },
+        "profile": {
+          "schemaVersion": "programmable.custom-launch-profile-ref.v4",
+          "structuralProfileId": "programmable.custom-launch.robinhood-mainnet.v1",
+          "businessProfileId": "robinhood-production-launch",
+          "admissionDescriptorDigest": "sha256:99b4ccabdaaf143bad28a8f6af441a1b93e1f113d0179236328b7fa594d1f948",
+          "admissionPolicyDigest": "sha256:31e6b286ca839b31cb1edfe30c05d9f334892f3d84377961dc10b93959c7e216",
+          "admissionBindingDigest": "sha256:f31643e6e9ff6d5409d59a2fc3ac7fb5ac9cfcb3af08e95c9478bc95ddfa66a2",
+          "admissionSchemaDigest": "sha256:a28a6de6208d6ba7b65b4b706174509570955ba9ce9714624bcb2046ab7beae7",
+          "profileRevision": 1,
+          "profileVersion": "4.0.0",
+          "profileDigest": "sha256:484b1dc6e9091804fabc230f2b3a7504940fa00264f8e66e82a66a951e71f1a0"
+        },
+        "finalityPolicy": {
+          "schemaVersion": "programmable.custom-launch-finality-policy-ref.v1",
+          "policyId": "robinhood-stage-finality-v1",
+          "policyRevision": 1,
+          "policyDigest": "sha256:537d531423d1285a3808556a57303ec68f1e6bdeea3c9aaf6320f9e5a0e47153"
+        },
+        "policySource": {
+          "schemaVersion": "programmable.custom-launch-policy-source.v1",
+          "repository": "programmablehq/Launch-Policy",
+          "repositoryId": 1320171831,
+          "protectedBranch": "main",
+          "verifiedMergeCommit": "987215867472229690e30e11000c626d58f46e16",
+          "verifiedTree": "284fb19f05cdf9b5b60b8bacfbd480f6b98decd3",
+          "artifacts": {
+            "descriptor": {
+              "path": "policy/custom-launch-admission-v4.json",
+              "digest": "sha256:99b4ccabdaaf143bad28a8f6af441a1b93e1f113d0179236328b7fa594d1f948"
+            },
+            "businessPolicy": {
+              "path": "policy/launch-policy.v1.json",
+              "digest": "sha256:31e6b286ca839b31cb1edfe30c05d9f334892f3d84377961dc10b93959c7e216"
+            },
+            "generatedBinding": {
+              "path": ".programmable/custom-launch-admission.v4.json",
+              "digest": "sha256:f31643e6e9ff6d5409d59a2fc3ac7fb5ac9cfcb3af08e95c9478bc95ddfa66a2"
+            },
+            "schema": {
+              "path": "policy/schemas/custom-launch-admission-v4.schema.json",
+              "digest": "sha256:a28a6de6208d6ba7b65b4b706174509570955ba9ce9714624bcb2046ab7beae7"
+            }
+          }
+        }
+      },
+      "chainId": "4663",
+      "caip2": "eip155:4663",
+      "chainDeploymentId": "robinhood-mainnet-custom-launch-v1",
+      "chainDeploymentDescriptorDigest": "0x4bde6e26b6630aa684b4ac2a987d6322755896b249a189843bd3a58fe313694c",
+      "chainDeploymentBindingDigest": "sha256:a4cd76691e5ba3c468703dcecb0b02d42c1785e1ba54eb17ff26619ed9bc86f5",
+      "profileEvidenceDigest": "sha256:2d58e5ce11a480a50552e11cac301cc8a95a7d71a6685b46c6bcdd423eee4015",
+      "sourceRevision": "cbcabd3cfc166124485c6f7e7c3951810cf60dc1",
+      "sourceTree": "971fef2085ed6dae93b48e19d44d68a5427dcdc6",
+      "sourceClosureDigest": "sha256:7a7f0d3fd4945051fd17700482ec1b519b44a54a35ee60f342cb4d21f9018172",
+      "sourceVerificationClosureDigest": "sha256:e3904268f0943dac0ac7c24ed054ad8551d4a1da425dc579e9530230f025f28c",
+      "deploymentTransactionHash": "0x30617f11ef467997bace3ab8b8d6048a19e42675fc101c73b1b216b5f8b0d08d",
+      "deploymentBlockHash": "0x6f3331471a5b96a23b951116be75f74a3cedf1c5f95f7d07d7f0e23f7b8493f0",
+      "finalityEvidenceDigest": "sha256:33606e5561b4b8387619264a83ae93a67faca7f8c492af445be4b17f4e0f611b",
+      "backendReleaseEvidenceDigest": "sha256:3775edb66efd460ef5af99354103d0dca45f8e7c80cbe9d5d59094e60059b756",
+      "machineContracts": [
+        {
+          "name": "openapi",
+          "sha256": "sha256:6dccb474a7d0b2c664157369b46a223d66a4d72d2e211064d15896f5abfc99db"
+        },
+        {
+          "name": "packConfig",
+          "sha256": "sha256:0295020845d3d9328cf6be3da81e39da29ce929cd3e8672d9ac4f2d96f886a90"
+        },
+        {
+          "name": "createRequest",
+          "sha256": "sha256:5924dbcb0c5b599a9b62a9e36f02c1e08ae53beff2e2bffd9acce17ef4b30289"
+        },
+        {
+          "name": "resource",
+          "sha256": "sha256:8b33b8ef06f955c72c1a9fd9e2c74961b6ffe2b1f624a77eb5f25696f269654e"
+        },
+        {
+          "name": "sourceVerificationStatus",
+          "sha256": "sha256:09844bfb244839084f06925f9f7fe8d2689e46c66ea4c453c7a7931fb68bb94c"
+        },
+        {
+          "name": "capabilities",
+          "sha256": "sha256:e1502c54f9499f2ef19234ea92ab19b6011a5076001ba97f4e53b468ce7c979d"
+        },
+        {
+          "name": "preflight",
+          "sha256": "sha256:58075dde83c658fd85996b4e3f073fa6cfd5f80c472fd162aad7fede77530ffa"
+        },
+        {
+          "name": "onchainEvidence",
+          "sha256": "sha256:09fa9dca75c941b2c93d3249e6249813c0b56b8ea4e5adfd08d8c7fc1150ebdd"
+        },
+        {
+          "name": "exactWalletTransaction",
+          "sha256": "sha256:b2e09eb929f451311c81f84a5450e34646a8d55137d8b876c171264dc4131f4d"
+        }
+      ],
+      "releaseManifestDigest": "sha256:9c8bafcbf1776b842c27e14ce75234d94a24bbac61acd054c7eac462b768a752"
+    },
+    "source": {
+      "schemaVersion": "programmable.launch-cli-v4-source-closure.v1",
+      "repository": "programmablehq/PROGRAMMABLE",
+      "repositoryId": "1314365508",
+      "branch": "production",
+      "protectedRef": "refs/heads/production",
+      "revision": "cbcabd3cfc166124485c6f7e7c3951810cf60dc1",
+      "tree": "971fef2085ed6dae93b48e19d44d68a5427dcdc6",
+      "foundationSourceCommitment": "0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730",
+      "entries": [
+        {
+          "path": "contracts/spec/robinhood-custom-launch/standard-json/ProgrammableCreate2GraphDeployerV1.standard-input.json",
+          "byteLength": "22985",
+          "sha256": "sha256:8ab811a215d70b1d5aef0c71a47153173953ee78d7632725413833888369ec4d"
+        },
+        {
+          "path": "contracts/spec/robinhood-custom-launch/standard-json/ProgrammableLaunchStampRouterV1.standard-input.json",
+          "byteLength": "312700",
+          "sha256": "sha256:6abca24d06b013599f4ff63e049976419c3f17455fa9bc343b15ec0d6e6a078a"
+        },
+        {
+          "path": "contracts/src/ProgrammableCreate2GraphDeployerV1.sol",
+          "byteLength": "20603",
+          "sha256": "sha256:06a3acaf9beeb68647af231f5524c5a34dc013d99611a1b2d0a6c80895f595e9"
+        },
+        {
+          "path": "contracts/src/robinhood-custom-launch/ProgrammableLaunchStampRouterV1.sol",
+          "byteLength": "39809",
+          "sha256": "sha256:ef87aa9338c364634bffda64423bd3fb096c1630a45cc58ecf854d24959ff163"
+        }
+      ],
+      "sourceVerificationClosureDigest": "sha256:e3904268f0943dac0ac7c24ed054ad8551d4a1da425dc579e9530230f025f28c",
+      "sourceClosureDigest": "sha256:7a7f0d3fd4945051fd17700482ec1b519b44a54a35ee60f342cb4d21f9018172"
+    },
+    "finality": {
+      "schemaVersion": "programmable.launch-cli-v4-finality-evidence.v1",
+      "chainDeploymentDescriptorDigest": "0x4bde6e26b6630aa684b4ac2a987d6322755896b249a189843bd3a58fe313694c",
+      "deploymentTransactionHash": "0x30617f11ef467997bace3ab8b8d6048a19e42675fc101c73b1b216b5f8b0d08d",
+      "l2Checkpoint": {
+        "blockNumber": "50469365",
+        "blockHash": "0x6f3331471a5b96a23b951116be75f74a3cedf1c5f95f7d07d7f0e23f7b8493f0"
+      },
+      "ethereumFinalityEvidence": {
+        "schemaVersion": "programmable.robinhood-l2-checkpoint-ethereum-finality.v1",
+        "profile": {
+          "schemaVersion": "programmable.custom-launch-profile-ref.v4",
+          "structuralProfileId": "programmable.custom-launch.robinhood-mainnet.v1",
+          "businessProfileId": "robinhood-production-launch",
+          "admissionDescriptorDigest": "sha256:99b4ccabdaaf143bad28a8f6af441a1b93e1f113d0179236328b7fa594d1f948",
+          "admissionPolicyDigest": "sha256:31e6b286ca839b31cb1edfe30c05d9f334892f3d84377961dc10b93959c7e216",
+          "admissionBindingDigest": "sha256:f31643e6e9ff6d5409d59a2fc3ac7fb5ac9cfcb3af08e95c9478bc95ddfa66a2",
+          "admissionSchemaDigest": "sha256:a28a6de6208d6ba7b65b4b706174509570955ba9ce9714624bcb2046ab7beae7",
+          "profileRevision": 1,
+          "profileVersion": "4.0.0",
+          "profileDigest": "sha256:484b1dc6e9091804fabc230f2b3a7504940fa00264f8e66e82a66a951e71f1a0"
+        },
+        "l2Checkpoint": {
+          "blockNumber": "50469365",
+          "blockHash": "0x6f3331471a5b96a23b951116be75f74a3cedf1c5f95f7d07d7f0e23f7b8493f0"
+        },
+        "batchNumber": "166387",
+        "l2Providers": [
+          {
+            "providerId": "quicknode",
+            "trustDomain": "quicknode.com",
+            "l1Confirmations": "1"
+          },
+          {
+            "providerId": "alchemy",
+            "trustDomain": "alchemy.com",
+            "l1Confirmations": "1"
+          }
+        ],
+        "ethereumProviders": [
+          {
+            "providerId": "drpc",
+            "trustDomain": "drpc.org"
+          },
+          {
+            "providerId": "quicknode",
+            "trustDomain": "quicknode.com"
+          }
+        ],
+        "rollup": "0x23A19d23e89166adedbDcB432518AB01e4272D94",
+        "sequencerInbox": "0xBd0D173EEb87D57A09521c24388a12789F33ba96",
+        "postingTransactionHash": "0x1a1291108c140a721ed2d0fb76bfce47e9f1e151a55dac8539bd6f1ea7612550",
+        "postingBlockNumber": "25871959",
+        "postingBlockHash": "0xa91c89a31aff6066c6c822249a37557c08addd535df7ba848137ae0587834ba9",
+        "postingLogIndex": "964",
+        "ethereumFinalizedCheckpoint": {
+          "blockNumber": "25903848",
+          "blockHash": "0x1d2e1666a9447fa06ae6e516e51ed5df2ca3bfe54e59d6bfb3e3592b8b5fabf5",
+          "tag": "finalized"
+        },
+        "observedAt": "2026-09-04T12:24:55.123Z",
+        "captureClosureDigest": "sha256:86f769caeccef49275ae0972007316f0b10953d2b0baa3a6fb313029fe87a25c",
+        "postingEventDigest": "sha256:9de54f83b00f0304097472c4ba995a6660b816542e045abd54cedd1eecae46e8",
+        "l1EvidenceDigest": "sha256:a38ff2eb5035b4980eca88273235e967a8526220c79c0250272c6f142912bde6",
+        "evidenceDigest": "sha256:0ae4e5a1274728cfbf25e73bfe098393760467d48ab6ccfcb11f3782904453e1"
+      },
+      "finalityEvidenceDigest": "sha256:33606e5561b4b8387619264a83ae93a67faca7f8c492af445be4b17f4e0f611b"
+    },
+    "backend": {
+      "schemaVersion": "programmable.launch-cli-v4-backend-release-evidence.v1",
+      "repository": "programmablehq/programmable-open-hook-v2-internal",
+      "sourceCommit": "f901edce03214877d74eeae7d5a6ea2b3bb5ece1",
+      "sourceTree": "138de0330ca8766758e43a59b5b63f34cbfe8242",
+      "chainDeploymentDescriptorDigest": "0x4bde6e26b6630aa684b4ac2a987d6322755896b249a189843bd3a58fe313694c",
+      "backendPromotionInputDigest": "sha256:334cc921d6f81a6e7c04960eb9a81026ae22e3299b2a09d1d2ff26f217fc9743",
+      "apiContract": {
+        "path": "release/custom-launch-api-contract.v4.json",
+        "sha256": "sha256:1c22711fa0516507d1e207ee7cb565d9ec95f59e042d869c0052a98a57d73634"
+      },
+      "migration": {
+        "path": "migrations/0024_custom_launch_source_authority_v4.sql",
+        "sha256": "sha256:51efb50f6f59131042d4253ce485cf14c3d375ab639d8c7075eb22dc8a9d44a0"
+      },
+      "openApiSha256": "sha256:6dccb474a7d0b2c664157369b46a223d66a4d72d2e211064d15896f5abfc99db",
+      "profileDigest": "sha256:484b1dc6e9091804fabc230f2b3a7504940fa00264f8e66e82a66a951e71f1a0",
+      "admissionPolicyDigest": "sha256:31e6b286ca839b31cb1edfe30c05d9f334892f3d84377961dc10b93959c7e216",
+      "finalityPolicyDigest": "sha256:537d531423d1285a3808556a57303ec68f1e6bdeea3c9aaf6320f9e5a0e47153",
+      "runtimeReadiness": {
+        "schemaVersion": "programmable.custom-launch-api-runtime-readiness-receipt.v4",
+        "path": "/v4/chains/4663/readiness",
+        "httpStatus": 200,
+        "contentType": "application/json",
+        "normalizedResponseSha256": "sha256:54d43683a892d5da6b74ea21a0db2c899487cb871a3cbbcc842e39fdcb5164e1",
+        "releaseIdentityDigest": "sha256:4f9e188360009da98720fcac90750b247cff56e98df11be69ee7bbf19f82cfba",
+        "observedAt": "2026-09-04T22:29:16Z",
+        "authorizationDigest": "sha256:50167584399ac5723134fd97e0dd436e54bf9cae1c51c5b9e7a893546d884835"
+      },
+      "flyControlPlane": {
+        "schemaVersion": "programmable.custom-launch-api-fly-control-plane-receipt.v2",
+        "app": "programmable-custom-launch-api",
+        "appStatus": "deployed",
+        "releaseIdDigest": "sha256:9c5e4a70a2b2cada79a88063f6b876d3830c7cf08849ab2562df74cd2afc8a0c",
+        "releaseVersionDigest": "sha256:0bc8312768a16d4875a4f29ae8b7fe06d8b40d283a4ef5756681f7ba93d3ecad",
+        "imageTag": "main-f901edce0321",
+        "imageIdentityDigest": "sha256:84379e0a0e16071143acd8412e2e4cad73c3a9c6e324b6c15150fb95e28c0033",
+        "machines": [
+          {
+            "slot": "1",
+            "machineIdentityDigest": "sha256:5da0bfc4328a9077483852ec7ed720becd3516ced914514f4a37b5ddaeb73b7f",
+            "state": "started",
+            "region": "fra"
+          },
+          {
+            "slot": "2",
+            "machineIdentityDigest": "sha256:495a4ddc3bce845eb8cfbb5a04ed0f51a3ef38d6dd49e389f6623e1ea0d52813",
+            "state": "started",
+            "region": "fra"
+          }
+        ],
+        "safeReadbacksDigest": "sha256:da3c7be4499a9055c335f5c11bd40ff686c247ae0f021ce12de79edfcf6b14d5",
+        "releaseIdentityDigest": "sha256:7e0462139ff86f5bf18f969b90b48ed9eef7dbd2ced0abb2e95b299207b56a10",
+        "observedAt": "2026-09-04T22:29:16Z",
+        "authorizationDigest": "sha256:d1144b49c451b8bd0630973d2a45642f356c70770a8b4f92e1d5a535f5f733c8"
+      },
+      "backendReleaseEvidenceDigest": "sha256:3775edb66efd460ef5af99354103d0dca45f8e7c80cbe9d5d59094e60059b756"
+    }
   },
-  "blockers": [
-    "chainDeploymentEvidence",
-    "profileEvidence",
-    "releaseManifestEvidence",
-    "sourceClosureEvidence",
-    "finalityEvidence",
-    "backendReleaseEvidence"
-  ]
+  "blockers": []
 }
