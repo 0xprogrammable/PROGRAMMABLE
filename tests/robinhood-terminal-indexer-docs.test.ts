@@ -5,6 +5,8 @@ import { resolve } from "node:path";
 import { toEventSelector, type AbiEvent } from "viem";
 import { describe, expect, it } from "vitest";
 
+import nextConfig from "../next.config";
+
 const fixturePath = resolve(
   process.cwd(),
   "public/fixtures/robinhood-terminal-indexer-v1.json",
@@ -44,7 +46,14 @@ const sitemapSource = readFileSync(
 );
 const vercelConfig = JSON.parse(
   readFileSync(resolve(process.cwd(), "vercel.json"), "utf8"),
-) as { rewrites: Array<{ source: string; destination: string }> };
+) as {
+  redirects: Array<{
+    source: string;
+    destination: string;
+    permanent: boolean;
+  }>;
+  rewrites: Array<{ source: string; destination: string }>;
+};
 
 type TerminalFixture = {
   integrationBoundary: {
@@ -165,26 +174,30 @@ function sortJsonKeys(value: unknown): unknown {
 }
 
 describe("Robinhood terminal and indexer documentation", () => {
-  it("keeps the canonical guide out of the GitBook catch-all", () => {
-    const exactRewriteIndex = vercelConfig.rewrites.findIndex(
-      ({ source }) => source === "/docs/developers/robinhood-terminal-indexer",
-    );
-    const gitBookCatchAllIndex = vercelConfig.rewrites.findIndex(
-      ({ source }) =>
-        source ===
-        "/docs/:match((?!developers/robinhood-terminal-indexer$).*)",
-    );
+  it("serves the canonical guide before the GitBook fallback", async () => {
+    const rewrites = await nextConfig.rewrites?.();
 
-    expect(exactRewriteIndex).toBeGreaterThanOrEqual(0);
-    expect(gitBookCatchAllIndex).toBeGreaterThan(exactRewriteIndex);
-    expect(vercelConfig.rewrites[exactRewriteIndex]).toEqual({
+    expect(vercelConfig.rewrites).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: expect.stringMatching(/^\/docs/) }),
+      ]),
+    );
+    expect(rewrites).toEqual({
+      fallback: [
+        {
+          source: "/docs",
+          destination: "https://proxy.gitbook.site/sites/site_V93gQ",
+        },
+        {
+          source: "/docs/:match*",
+          destination: "https://proxy.gitbook.site/sites/site_V93gQ/:match*",
+        },
+      ],
+    });
+    expect(vercelConfig.redirects).toContainEqual({
       source: "/docs/developers/robinhood-terminal-indexer",
       destination: "/developer-reference/robinhood-terminal-indexer",
-    });
-    expect(vercelConfig.rewrites[gitBookCatchAllIndex]).toEqual({
-      source:
-        "/docs/:match((?!developers/robinhood-terminal-indexer$).*)",
-      destination: "https://proxy.gitbook.site/sites/site_V93gQ/:match*",
+      permanent: false,
     });
     expect(aliasSource).toContain(
       'from "@/app/docs/developers/robinhood-terminal-indexer/page"',

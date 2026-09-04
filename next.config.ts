@@ -104,6 +104,20 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async rewrites() {
+    return {
+      fallback: [
+        {
+          source: "/docs",
+          destination: "https://proxy.gitbook.site/sites/site_V93gQ",
+        },
+        {
+          source: "/docs/:match*",
+          destination: "https://proxy.gitbook.site/sites/site_V93gQ/:match*",
+        },
+      ],
+    };
+  },
 };
 
 export default nextConfig;

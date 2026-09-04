@@ -15,6 +15,11 @@
   ],
   "redirects": [
     {
+      "source": "/docs/developers/robinhood-terminal-indexer",
+      "destination": "/developer-reference/robinhood-terminal-indexer",
+      "permanent": false
+    },
+    {
       "source": "/markets",
       "destination": "/explore",
       "permanent": false
@@ -49,18 +54,6 @@
     {
       "source": "/api/prediction/:match*",
       "destination": "/api/retired-prediction"
-    },
-    {
-      "source": "/docs/developers/robinhood-terminal-indexer",
-      "destination": "/developer-reference/robinhood-terminal-indexer"
-    },
-    {
-      "source": "/docs",
-      "destination": "https://proxy.gitbook.site/sites/site_V93gQ"
-    },
-    {
-      "source": "/docs/:match((?!developers/robinhood-terminal-indexer$).*)",
-      "destination": "https://proxy.gitbook.site/sites/site_V93gQ/:match*"
     }
   ],
   "crons": [
