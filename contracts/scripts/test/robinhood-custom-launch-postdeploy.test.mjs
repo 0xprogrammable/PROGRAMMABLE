@@ -143,7 +143,11 @@ const FRESH_ROBINHOOD_RPC_COMMITMENTS = Object.freeze([
     rpcUrl: FRESH_PROVIDER_RPC_URLS.robinhood[1],
   }),
 ]);
-const template = JSON.parse(await readFile(path.join(repositoryRoot, bindingPath), "utf8"));
+const committedTemplate = JSON.parse(await readFile(
+  path.join(repositoryRoot, bindingPath),
+  "utf8",
+));
+const template = blockedBindingBaseline(committedTemplate);
 const postdeploymentSchemaNames = [
   "cli-release-binding", "stage-bundle", "backend-promotion-input",
   "backend-promotion-public-input", "backend-capture-authorization",
@@ -2494,6 +2498,11 @@ async function fixtureRepository() {
     await mkdir(path.dirname(destination), { recursive: true });
     await cp(path.join(repositoryRoot, relativePath), destination);
   }
+  await writeFile(
+    path.join(rootPath, bindingPath),
+    `${JSON.stringify(template, null, 2)}\n`,
+    "utf8",
+  );
   runGit(rootPath, ["init", "-b", "temporary-local-branch"]);
   runGit(rootPath, ["add", "-A"]);
   runGit(rootPath, [
@@ -2510,6 +2519,29 @@ async function fixtureRepository() {
     revision,
     tree: runGit(rootPath, ["rev-parse", "HEAD^{tree}"]),
   };
+}
+
+function blockedBindingBaseline(value) {
+  const binding = structuredClone(value);
+  binding.chain.chainDeploymentDescriptorDigest = null;
+  binding.evidence = {
+    chainDeployment: null,
+    profile: null,
+    manifest: null,
+    source: null,
+    finality: null,
+    backend: null,
+  };
+  binding.blockers = [
+    "chainDeploymentEvidence",
+    "profileEvidence",
+    "releaseManifestEvidence",
+    "sourceClosureEvidence",
+    "finalityEvidence",
+    "backendReleaseEvidence",
+  ];
+  binding.releaseReady = false;
+  return binding;
 }
 
 async function buildInput(fixture, options = {}) {

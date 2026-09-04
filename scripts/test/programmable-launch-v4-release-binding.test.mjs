@@ -9,6 +9,10 @@ import test from "node:test";
 import Ajv2020 from "ajv/dist/2020.js";
 
 import {
+  withIsolatedProtectedCheckout,
+} from "./fixtures/isolated-protected-checkout.mjs";
+
+import {
   V4_RELEASE_BINDING_SCHEMA,
   auditV4ReleaseCommitChain,
   auditV4ReleaseBindingTransition,
@@ -74,8 +78,9 @@ const expectedPolicySource = {
   },
 };
 
-test("committed V4 binding pins policy bytes and remains blocked on six evidence objects", () => {
-  const result = auditV4ReleaseBinding({ repositoryRoot });
+test("blocked V4 binding baseline pins policy bytes and all six evidence gates", () => {
+  const bindingBytes = Buffer.from(`${JSON.stringify(blockedBindingBaseline(), null, 2)}\n`);
+  const result = auditV4ReleaseBinding({ repositoryRoot, bindingBytes });
   assert.equal(result.binding.schemaVersion, V4_RELEASE_BINDING_SCHEMA);
   assert.equal(result.releaseReady, false);
   assert.deepEqual(result.blockers, expectedBlockers);
@@ -89,9 +94,26 @@ test("committed V4 binding pins policy bytes and remains blocked on six evidence
     backend: null,
   });
   assert.throws(
-    () => requireV4ReleaseReady({ repositoryRoot }),
+    () => requireV4ReleaseReady({ repositoryRoot, bindingBytes }),
     /blocked: chainDeploymentEvidence/u,
   );
+});
+
+test("committed V4 binding passes the semantic audit for its declared state", async () => {
+  const committedBytes = await readFile(path.join(releaseDirectory, "cli-release-binding.json"));
+  await withIsolatedProtectedCheckout({ repositoryRoot }, async ({ isolatedRoot }) => {
+    const isolatedBytes = await readFile(path.join(
+      isolatedRoot,
+      "docs/operations/releases/custom-launch-v4/cli-release-binding.json",
+    ));
+    assert.deepEqual(isolatedBytes, committedBytes,
+      "isolated audit must consume the exact committed release binding bytes");
+    const result = auditV4ReleaseBinding({ repositoryRoot: isolatedRoot });
+    assert.equal(result.bindingSha256, digest(committedBytes));
+    assert.equal(result.releaseReady, committedBinding.releaseReady);
+    assert.deepEqual(result.blockers, committedBinding.blockers);
+    assert.deepEqual(result.binding, committedBinding);
+  });
 });
 
 test("committed V4 binding validates against its local closed JSON Schema", () => {
@@ -543,7 +565,7 @@ async function materializeFixture({ complete = false } = {}) {
   await mkdir(path.join(root, "docs", "operations", "releases", "custom-launch-v4"), {
     recursive: true,
   });
-  const binding = structuredClone(committedBinding);
+  const binding = blockedBindingBaseline();
   for (const { path: relative } of binding.machineContracts) {
     await cp(path.join(repositoryRoot, relative), path.join(root, relative));
   }
@@ -552,6 +574,22 @@ async function materializeFixture({ complete = false } = {}) {
     ? await addCompleteEvidence(root, binding)
     : null;
   return { root, binding, commitChain };
+}
+
+function blockedBindingBaseline() {
+  const binding = structuredClone(committedBinding);
+  binding.chain.chainDeploymentDescriptorDigest = null;
+  binding.evidence = {
+    chainDeployment: null,
+    profile: null,
+    manifest: null,
+    source: null,
+    finality: null,
+    backend: null,
+  };
+  binding.blockers = [...expectedBlockers];
+  binding.releaseReady = false;
+  return binding;
 }
 
 async function addCompleteEvidence(root, binding) {

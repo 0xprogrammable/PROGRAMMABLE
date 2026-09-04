@@ -360,6 +360,13 @@ export function validateReviewedReleaseCoordinate(value, bindingResult) {
   return value;
 }
 
+export function requireReviewedReleaseCoordinateReady(coordinate, bindingResult) {
+  requireValue(bindingResult.releaseReady === true, "V4_RELEASE_BINDING_NOT_READY");
+  requireValue(coordinate.releaseReady === true,
+    "REVIEWED_RELEASE_COORDINATE_BLOCKED");
+  return coordinate;
+}
+
 export function assertReleaseMatchesReviewedCoordinate(release, coordinate) {
   requireValue(coordinate.releaseReady === true,
     "REVIEWED_RELEASE_COORDINATE_BLOCKED");
@@ -397,9 +404,7 @@ async function loadReviewedReleaseCoordinate() {
   );
   requireValue(prettyCanonicalJsonBytes(coordinate).equals(bytes),
     "REVIEWED_RELEASE_COORDINATE_NOT_CANONICAL");
-  requireValue(binding.releaseReady === true, "V4_RELEASE_BINDING_NOT_READY");
-  requireValue(coordinate.releaseReady === true,
-    "REVIEWED_RELEASE_COORDINATE_BLOCKED");
+  requireReviewedReleaseCoordinateReady(coordinate, binding);
   return Object.freeze({
     coordinate: Object.freeze(structuredClone(coordinate)),
     coordinateSha256: sha256(bytes),

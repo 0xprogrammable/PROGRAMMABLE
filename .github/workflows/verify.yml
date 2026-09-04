@@ -211,6 +211,8 @@ jobs:
       - name: Check out repository
         if: needs.scope.outputs.interface == 'true'
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js
         if: needs.scope.outputs.interface == 'true'
@@ -239,6 +241,16 @@ jobs:
           PROGRAMMABLE_CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           PROGRAMMABLE_CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: npm run verify:interface:ci
+
+      - name: Require complete Git history for the V4 release audit
+        if: needs.scope.outputs.interface == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
+            git fetch --unshallow --no-tags origin
+          fi
+          test "$(git rev-parse --is-shallow-repository)" = false
 
       - name: Verify V4 clean-room no-broadcast release gate
         if: needs.scope.outputs.interface == 'true'
