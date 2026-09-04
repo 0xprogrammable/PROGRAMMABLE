@@ -273,10 +273,16 @@ jobs:
         run: |
           set -euo pipefail
           coordinates="$PHASE_A_DIR/production-verify-coordinates.json"
-          echo "run_id=$(jq -er '.runId | select(test(\"^[1-9][0-9]*$\"))' "$coordinates")" >> "$GITHUB_OUTPUT"
-          echo "run_attempt=$(jq -er '.runAttempt | select(test(\"^[1-9][0-9]*$\"))' "$coordinates")" >> "$GITHUB_OUTPUT"
-          echo "artifact_id=$(jq -er '.artifactId | select(test(\"^[1-9][0-9]*$\"))' "$coordinates")" >> "$GITHUB_OUTPUT"
-          echo "artifact_digest=$(jq -er '.artifactDigest | select(test(\"^sha256:[0-9a-f]{64}$\"))' "$coordinates")" >> "$GITHUB_OUTPUT"
+          run_id="$(jq -er '.runId | select(test("^[1-9][0-9]*$"))' "$coordinates")"
+          run_attempt="$(jq -er '.runAttempt | select(test("^[1-9][0-9]*$"))' "$coordinates")"
+          artifact_id="$(jq -er '.artifactId | select(test("^[1-9][0-9]*$"))' "$coordinates")"
+          artifact_digest="$(jq -er '.artifactDigest | select(test("^sha256:[0-9a-f]{64}$"))' "$coordinates")"
+          {
+            printf 'run_id=%s\n' "$run_id"
+            printf 'run_attempt=%s\n' "$run_attempt"
+            printf 'artifact_id=%s\n' "$artifact_id"
+            printf 'artifact_digest=%s\n' "$artifact_digest"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Emit canonical protected backend authorization
         id: authorize-backend
