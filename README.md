@@ -155,7 +155,7 @@ publication, wallet spending or production activation.
 | Custom Launch V3 OpenAPI     | [preparatory profile 3.4 contract; live/default remains discovery-bound profile 3.3](https://programmable.market/openapi/custom-launch-v3.json) |
 | Custom Launch V4 OpenAPI     | [Robinhood public self-serve release candidate](https://programmable.market/openapi/custom-launch-v4.json) |
 | Custom Launch V4 schema      | [Robinhood pack configuration](https://programmable.market/schemas/custom-launch/v4/pack-config.json) |
-| Robinhood terminal integration | [chain-bound Router, finalized feed and fail-closed fixture](https://programmable.market/docs/developers/robinhood-terminal-indexer) |
+| Robinhood terminal integration | [chain-bound Router, finalized feed and fail-closed fixture](https://programmable.market/developer-reference/robinhood-terminal-indexer) |
 | Read-only developer reference | [programmable.market/docs/developers](https://programmable.market/docs/developers)                       |
 | Read-only service status     | [developers.programmable.family/api/v2/status](https://developers.programmable.family/api/v2/status)     |
 | Deployment manifest          | [developers.programmable.family/api/v2/manifest](https://developers.programmable.family/api/v2/manifest) |

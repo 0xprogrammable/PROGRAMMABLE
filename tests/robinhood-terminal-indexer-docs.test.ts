@@ -4,10 +4,8 @@ import { resolve } from "node:path";
 
 import { toEventSelector, type AbiEvent } from "viem";
 import { describe, expect, it } from "vitest";
-import { NextRequest } from "next/server";
 
 import nextConfig from "../next.config";
-import { config as proxyConfig, proxy } from "../proxy";
 
 const fixturePath = resolve(
   process.cwd(),
@@ -176,7 +174,7 @@ function sortJsonKeys(value: unknown): unknown {
 }
 
 describe("Robinhood terminal and indexer documentation", () => {
-  it("serves the canonical guide before the GitBook fallback", async () => {
+  it("publishes the canonical guide independently of the GitBook fallback", async () => {
     const rewrites = await nextConfig.rewrites?.();
 
     expect(vercelConfig.rewrites).not.toEqual(
@@ -185,12 +183,6 @@ describe("Robinhood terminal and indexer documentation", () => {
       ]),
     );
     expect(rewrites).toEqual({
-      beforeFiles: [
-        {
-          source: "/docs/developers/robinhood-terminal-indexer",
-          destination: "/developer-reference/robinhood-terminal-indexer",
-        },
-      ],
       fallback: [
         {
           source: "/docs",
@@ -202,31 +194,19 @@ describe("Robinhood terminal and indexer documentation", () => {
         },
       ],
     });
-    expect(vercelConfig.redirects).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          source: "/docs/developers/robinhood-terminal-indexer",
-        }),
-      ]),
-    );
-    expect(proxyConfig.matcher).toContain(
-      "/docs/developers/robinhood-terminal-indexer",
-    );
-    const response = proxy(
-      new NextRequest(
-        "https://programmable.market/docs/developers/robinhood-terminal-indexer",
-      ),
-    );
-    expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe(
-      "https://programmable.market/developer-reference/robinhood-terminal-indexer",
-    );
-    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(vercelConfig.redirects).toContainEqual({
+      source: "/docs/developers/robinhood-terminal-indexer",
+      destination: "/developer-reference/robinhood-terminal-indexer",
+      permanent: false,
+    });
     expect(aliasSource).toContain(
       'from "@/app/docs/developers/robinhood-terminal-indexer/page"',
     );
+    expect(pageSource).toContain(
+      'canonical: "/developer-reference/robinhood-terminal-indexer"',
+    );
     expect(sitemapSource).toContain(
-      '"/docs/developers/robinhood-terminal-indexer"',
+      '"/developer-reference/robinhood-terminal-indexer"',
     );
     expect(gitBookSummary).toContain(
       "(developers/robinhood-terminal-indexer.md)",

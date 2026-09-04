@@ -492,7 +492,7 @@ export function programmableWellKnownDocumentV1(
           guideUrl:
             "https://programmable.market/docs/developers/custom-launch#robinhood-v4",
           terminalIndexerGuideUrl:
-            "https://programmable.market/docs/developers/robinhood-terminal-indexer",
+            "https://programmable.market/developer-reference/robinhood-terminal-indexer",
           terminalIndexerFixtureUrl:
             "https://programmable.market/fixtures/robinhood-terminal-indexer-v1.json",
           launchStampRouterAbiUrl:

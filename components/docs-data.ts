@@ -25,7 +25,7 @@ const tokenModelPaths = [
 
 const developerReferencePaths = [
   "/docs/developers/custom-launch",
-  "/docs/developers/robinhood-terminal-indexer",
+  "/developer-reference/robinhood-terminal-indexer",
   "/docs/developers/verify",
   "/docs/developers/indexing",
   "/docs/developers/machine-readable",
@@ -132,7 +132,7 @@ export const docsNavigation: readonly DocsNavigationGroup[] = [
       },
       {
         depth: 1,
-        href: "/docs/developers/robinhood-terminal-indexer",
+        href: "/developer-reference/robinhood-terminal-indexer",
         label: "Robinhood terminal integration",
       },
       {
@@ -277,7 +277,7 @@ export const docsSearchItems: DocsSearchItem[] = [
     title: "Robinhood terminal and indexer integration",
     description:
       "Bind to chain 4663, index finalized Router stamps and preserve explicit fee, market and security result states.",
-    href: "/docs/developers/robinhood-terminal-indexer",
+    href: "/developer-reference/robinhood-terminal-indexer",
     keywords: [
       "Robinhood Chain",
       "chain 4663",

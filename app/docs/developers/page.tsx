@@ -94,7 +94,7 @@ export default function DeveloperDocsPage() {
           </li>
           <li id="robinhood-v4">
             <h3>
-              <Link href="/docs/developers/robinhood-terminal-indexer">
+              <Link href="/developer-reference/robinhood-terminal-indexer">
                 Integrate Robinhood terminals and indexers
               </Link>
             </h3>
@@ -107,7 +107,7 @@ export default function DeveloperDocsPage() {
             </p>
             <Link
               className={styles.textLink}
-              href="/docs/developers/robinhood-terminal-indexer"
+              href="/developer-reference/robinhood-terminal-indexer"
             >
               Read the Robinhood terminal integration contract
             </Link>
@@ -309,7 +309,7 @@ export default function DeveloperDocsPage() {
             </span>
           </li>
           <li>
-            <Link href="/docs/developers/robinhood-terminal-indexer">
+            <Link href="/developer-reference/robinhood-terminal-indexer">
               Robinhood terminal and indexer integration
             </Link>
             <span>
