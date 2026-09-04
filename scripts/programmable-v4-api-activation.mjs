@@ -34,7 +34,7 @@ function inputs(root) {
   const coordinateBytes = regular(path.join(root, REVIEWED_RELEASE_COORDINATE_PATH));
   return { bindingBytes, coordinateBytes, binding: parse(bindingBytes), coordinate: parse(coordinateBytes) };
 }
-export function assertProducerMetadata(run, artifact, evidence, artifactRef) {
+export function assertRunMetadata(run, evidence) {
   const producer = evidence.producer;
   const expected = { id: Number(producer.runId), run_attempt: 1, event: "workflow_dispatch", head_branch: "production", head_sha: producer.sourceSha, status: "completed", conclusion: "success" };
   for (const [key, value] of Object.entries(expected)) assert.equal(run[key], value, `V4 activation run ${key} differs`);
@@ -45,6 +45,11 @@ export function assertProducerMetadata(run, artifact, evidence, artifactRef) {
   for (const key of ["actor", "triggering_actor"]) {
     assert.equal(run[key]?.login, "hazarxyz"); assert.equal(run[key]?.id, 258789013);
   }
+  return run;
+}
+export function assertProducerMetadata(run, artifact, evidence, artifactRef) {
+  assertRunMetadata(run, evidence);
+  const producer = evidence.producer;
   assert.equal(String(artifact.id), artifactRef.id);
   assert.equal(artifact.digest, artifactRef.digest);
   assert.equal(artifact.name, `programmable-launch-v4-clean-room-evidence-attestation-${producer.runId}-1`);
@@ -89,14 +94,19 @@ export function createActivationRecord(bindingBytes, coordinateBytes, evidenceBy
   assert.equal(assertActivationRecord(record, binding, coordinate), true);
   return record;
 }
-function verifyBoundEvidence(root, record, data, evidenceBytes, bundleBytes) {
+function verifyBoundEvidence(root, record, data, evidenceBytes, bundleBytes, verifyArchiveMetadata = false) {
   const clean = record.proof.cleanRoom;
   assert.deepEqual(record, createActivationRecord(data.bindingBytes, data.coordinateBytes, evidenceBytes, bundleBytes, clean.artifact));
   const evidence = clean.evidence;
   const producer = evidence.producer;
   const run = gh(`repos/${REPOSITORY}/actions/runs/${producer.runId}`, root);
-  const artifact = gh(`repos/${REPOSITORY}/actions/artifacts/${clean.artifact.id}`, root);
-  assertProducerMetadata(run, artifact, evidence, clean.artifact);
+  assertRunMetadata(run, evidence);
+  if (verifyArchiveMetadata) {
+    const artifact = gh(`repos/${REPOSITORY}/actions/artifacts/${clean.artifact.id}`, root);
+    assertProducerMetadata(run, artifact, evidence, clean.artifact);
+  }
+  // Subsequent audits authenticate the preserved signed subject and exact producer run.
+  // Expiring GitHub's ZIP retention cannot invalidate those committed proof bytes.
   const git = args => command("git", ["-C", root, ...args], root);
   assert.equal(git(["remote", "get-url", "origin"]).toString().trim(), `https://github.com/${REPOSITORY}`);
   git(["merge-base", "--is-ancestor", producer.sourceSha, "HEAD"]);
@@ -148,7 +158,7 @@ function generate(options) {
   const data = inputs(root);
   const record = createActivationRecord(data.bindingBytes, data.coordinateBytes, evidenceBytes, bundleBytes, { id: options["artifact-id"], digest: options["artifact-digest"] });
   assert.equal(record.proof.cleanRoom.evidence.producer.runId, options["run-id"]);
-  const result = verifyBoundEvidence(root, record, data, evidenceBytes, bundleBytes);
+  const result = verifyBoundEvidence(root, record, data, evidenceBytes, bundleBytes, true);
   const out = path.resolve(options["output-directory"]);
   const parent = realpathSync(path.dirname(out));
   requireValue(parent !== root && !parent.startsWith(`${root}${path.sep}`), "V4 activation outputs must be outside the repository");
