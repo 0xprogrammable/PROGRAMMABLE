@@ -5,81 +5,31 @@ import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import {
-  PROJECTOR_WAKE_ROUTE,
-  QUICKNODE_STREAM_SECRET_ENV_NAME,
-} from "./read-model-projector-wake-canary.mjs";
-import {
-  PRODUCTION_RPC_ENV,
-  runtimeProductionProviderBindingsFromUrls,
-} from "./read-model-provider-binding.mjs";
+  VERCEL_SENSITIVE_PRODUCTION_METADATA_SCHEMA,
+  isExactSafeVercelEnvironmentMetadataEntry,
+} from "../bind-vercel-sensitive-production-metadata.mjs";
 
-export { PROJECTOR_WAKE_ROUTE, QUICKNODE_STREAM_SECRET_ENV_NAME };
-
-export const BITQUERY_MARKET_SECRET_ENV_NAME = "BITQUERY_OAUTH_TOKEN";
+export const RESET_POLICY_MODE = "index-reset";
 
 export const RELEASE_GATED_FLAG_NAMES = Object.freeze([
   "INDEXED_EXPLORE_LIST_READS_ENABLED",
   "INDEXED_EXPLORE_TOKEN_READS_ENABLED",
   "INDEXED_EXPLORE_CHART_READS_ENABLED",
   "INDEXED_CREATOR_PROFILE_READS_ENABLED",
-  "INDEXED_CLASSIC_V3_PROFILE_READS_ENABLED",
-  "INDEXED_LAUNCH_LOOKUP_ENABLED",
-  "INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED",
   "INDEXED_READ_SHADOW_COMPARE_ENABLED",
 ]);
-const PUBLIC_INDEXED_ROUTE_FLAG_NAMES = Object.freeze(
-  RELEASE_GATED_FLAG_NAMES.filter(
-    (name) => name !== "INDEXED_READ_SHADOW_COMPARE_ENABLED",
-  ),
-);
 
 export const WORKER_ACTIVATION_FLAG_NAMES = Object.freeze([
   "PROGRAMMABLE_PROJECTOR_ACTIVE",
   "PROGRAMMABLE_MARKET_PROJECTOR_ACTIVE",
 ]);
 
-export const REQUIRED_SERVER_SECRET_ENV_NAMES = Object.freeze([
-  QUICKNODE_STREAM_SECRET_ENV_NAME,
-  BITQUERY_MARKET_SECRET_ENV_NAME,
-]);
-
-export const REQUIRED_NON_SECRET_RUNTIME_ENV_NAMES = Object.freeze([
-  "PROGRAMMABLE_ENVIO_GRAPHQL_URL",
-  "PROGRAMMABLE_PROJECTOR_BINDING_MODE",
-  "PROGRAMMABLE_PROJECTOR_ENVIO_REDACTED_IDENTITY",
-  "PROGRAMMABLE_PROJECTOR_ENVIO_MIRROR_COMMIT",
-  "PROGRAMMABLE_SOURCE_PROJECTOR_VERSION",
-  "PROGRAMMABLE_UNISWAP_GRAPH_BASE_URL",
-  "PROGRAMMABLE_UNISWAP_GRAPH_REDACTED_IDENTITY",
-  "PROGRAMMABLE_UNISWAP_GRAPH_DEPLOYMENT_COMMITMENT",
-  "PROGRAMMABLE_UNISWAP_GRAPH_SCHEMA_COMMITMENT",
-]);
+// The Explore index is intentionally reset. No provider credential or provider
+// binding is part of this release policy.
+export const REQUIRED_SERVER_SECRET_ENV_NAMES = Object.freeze([]);
+export const REQUIRED_NON_SECRET_RUNTIME_ENV_NAMES = Object.freeze([]);
 
 const CANONICAL_PRODUCTION_ORIGIN = "https://programmable.market";
-const EXPECTED_SOURCE_PROJECTOR_VERSION = "projector-v1";
-const EXPECTED_PROJECTOR_BINDING_MODE = "release";
-const EXPECTED_PROJECTOR_ENVIO_MIRROR_COMMIT =
-  "0a064ec0a32a0e48bf6751fa18f025504267c6b7";
-const EXPECTED_UNISWAP_GRAPH_BASE_URL = "https://gateway.thegraph.com";
-const EXPECTED_UNISWAP_GRAPH_REDACTED_IDENTITY = "uniswap-v4-official";
-const EXPECTED_UNISWAP_GRAPH_DEPLOYMENT_COMMITMENT =
-  "0x44c8d7127503563653f7f53ea339caa383453e00224a6c33cf95fc29f5c3e35c";
-const EXPECTED_UNISWAP_GRAPH_SCHEMA_COMMITMENT =
-  "0xd0d2087059ca0a7c1e7c633999ff75ea34fcc00d42cee8985a79d0ef76e6813c";
-
-const COMMITMENT_NAMES = Object.freeze([
-  PRODUCTION_RPC_ENV.primaryCommitment,
-  PRODUCTION_RPC_ENV.secondaryCommitment,
-]);
-const HEX_BYTES32 = /^0x[0-9a-f]{64}$/u;
-const RUNTIME_RPC_URL_NAMES = Object.freeze([
-  PRODUCTION_RPC_ENV.primaryUrl,
-  PRODUCTION_RPC_ENV.secondaryUrl,
-]);
-const RUNTIME_RPC_BINDING_NAMES = Object.freeze(
-  Object.values(PRODUCTION_RPC_ENV),
-);
-const VERCEL_SENSITIVE_PLACEHOLDER = /^\[[A-Za-z]{1,32}\]$/u;
 
 function decodeDotenvValue(value, name) {
   const trimmed = value.trim();
@@ -111,94 +61,25 @@ function readSelectedDotenvValues(contents, selectedNames) {
   return Object.fromEntries(selectedNames.map((name) => [name, values.get(name)]));
 }
 
-export function materializeVercelSensitiveRuntimePlaceholders(
-  contents,
-  metadataContents,
-) {
-  const sensitiveRuntimeNames = [
-    ...RUNTIME_RPC_URL_NAMES,
-    ...REQUIRED_SERVER_SECRET_ENV_NAMES,
-  ];
-  const runtimeValues = readSelectedDotenvValues(
-    contents,
-    sensitiveRuntimeNames,
-  );
-  const emptyNames = sensitiveRuntimeNames.filter(
-    (name) => runtimeValues[name] === "",
-  );
-  const namesRequiringMetadata = [
-    ...new Set([BITQUERY_MARKET_SECRET_ENV_NAME, ...emptyNames]),
-  ];
-  let metadata;
-  try {
-    metadata = JSON.parse(metadataContents);
-  } catch {
-    throw new Error("Vercel sensitive environment metadata is invalid");
-  }
-  if (
-    metadata === null ||
-    typeof metadata !== "object" ||
-    Array.isArray(metadata) ||
-    !Array.isArray(metadata.envs)
-  ) {
-    throw new Error("Vercel sensitive environment metadata is invalid");
-  }
-  for (const name of namesRequiringMetadata) {
-    const matches = metadata.envs.filter(
-      (entry) => entry !== null && typeof entry === "object" && entry.key === name,
-    );
-    if (
-      matches.length !== 1 ||
-      matches[0].type !== "sensitive" ||
-      !Array.isArray(matches[0].target) ||
-      matches[0].target.length !== 1 ||
-      matches[0].target[0] !== "production" ||
-      Object.hasOwn(matches[0], "value")
-    ) {
-      throw new Error(`${name} is not exact sensitive production metadata`);
-    }
-  }
-  const materializedNames = new Set(
-    namesRequiringMetadata.filter(
-      (name) => runtimeValues[name] === "" || runtimeValues[name] === undefined,
-    ),
-  );
-  const materialized = contents
-    .split(/\r?\n/u)
-    .map((line) => {
-      const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/u.exec(line);
-      return match && materializedNames.has(match[1])
-        ? `${match[1]}="[Sensitive]"`
-        : line;
-    })
-    .join("\n");
-  const missingNames = [...materializedNames].filter(
-    (name) => runtimeValues[name] === undefined,
-  );
-  if (missingNames.length === 0) return materialized;
-  const separator = materialized === "" || materialized.endsWith("\n") ? "" : "\n";
-  return `${materialized}${separator}${missingNames
-    .map((name) => `${name}="[Sensitive]"`)
-    .join("\n")}`;
-}
-
 export function readReleaseGatedFlags(contents) {
   return readSelectedDotenvValues(contents, RELEASE_GATED_FLAG_NAMES);
 }
 
-function normalizedFlags(raw, names, missingIsFalse) {
+function exactBooleanFlags(raw, names, { missingIsFalse }) {
   const values = {};
   const invalidNames = [];
   for (const name of names) {
     const value = raw[name];
     if ((value === undefined || value === "") && missingIsFalse) {
       values[name] = false;
-    } else if (value === "true" || value === "false") {
-      values[name] = value === "true";
-    } else {
-      values[name] = value !== "false";
-      invalidNames.push(name);
+      continue;
     }
+    if (value === "true" || value === "false") {
+      values[name] = value === "true";
+      continue;
+    }
+    values[name] = false;
+    invalidNames.push(name);
   }
   return Object.freeze({
     values: Object.freeze(values),
@@ -206,209 +87,95 @@ function normalizedFlags(raw, names, missingIsFalse) {
   });
 }
 
-function parseReleaseExpectations(rootDirectory) {
-  const manifestPath = resolve(
-    rootDirectory,
-    "config/data-pipeline-release.v1.json",
+export function readReleasePolicyExpectations() {
+  return Object.freeze({ mode: RESET_POLICY_MODE });
+}
+
+export function validateBoundVercelProductionMetadata(
+  contents,
+  expectedVercelProjectId,
+) {
+  if (!/^prj_[A-Za-z0-9]{8,128}$/u.test(expectedVercelProjectId ?? "")) {
+    throw new Error("expected Vercel project ID is invalid");
+  }
+  let metadata;
+  try {
+    metadata = JSON.parse(contents);
+  } catch {
+    throw new Error("bound Vercel production metadata is invalid");
+  }
+  const record = exactObjectKeys(
+    metadata,
+    ["schemaVersion", "vercelProjectId", "target", "envs"],
+    "bound Vercel production metadata",
   );
-  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  const deploymentLabel = manifest?.envio?.deploymentLabel;
-  const graphqlEndpoint = manifest?.envio?.graphqlEndpoint;
   if (
-    typeof deploymentLabel !== "string" ||
-    !/^[a-z0-9][a-z0-9._-]{0,95}$/u.test(deploymentLabel) ||
-    typeof graphqlEndpoint !== "string" ||
-    !/^https:\/\/indexer\.hyperindex\.xyz\/[a-z0-9]{7}\/(?:v1)\/graphql$/u.test(
-      graphqlEndpoint,
+    record.schemaVersion !== VERCEL_SENSITIVE_PRODUCTION_METADATA_SCHEMA ||
+    record.vercelProjectId !== expectedVercelProjectId ||
+    record.target !== "production" ||
+    !Array.isArray(record.envs) ||
+    record.envs.length > 512 ||
+    record.envs.some(
+      (entry) => !isExactSafeVercelEnvironmentMetadataEntry(entry),
     )
   ) {
-    throw new Error("data-pipeline release has an invalid Envio binding");
+    throw new Error("bound Vercel production metadata is invalid");
   }
   return Object.freeze({
-    PROGRAMMABLE_ENVIO_GRAPHQL_URL: graphqlEndpoint,
-    PROGRAMMABLE_PROJECTOR_BINDING_MODE: EXPECTED_PROJECTOR_BINDING_MODE,
-    PROGRAMMABLE_PROJECTOR_ENVIO_REDACTED_IDENTITY: `envio:${deploymentLabel}`,
-    PROGRAMMABLE_PROJECTOR_ENVIO_MIRROR_COMMIT:
-      EXPECTED_PROJECTOR_ENVIO_MIRROR_COMMIT,
-    PROGRAMMABLE_SOURCE_PROJECTOR_VERSION:
-      EXPECTED_SOURCE_PROJECTOR_VERSION,
-    PROGRAMMABLE_UNISWAP_GRAPH_BASE_URL:
-      EXPECTED_UNISWAP_GRAPH_BASE_URL,
-    PROGRAMMABLE_UNISWAP_GRAPH_REDACTED_IDENTITY:
-      EXPECTED_UNISWAP_GRAPH_REDACTED_IDENTITY,
-    PROGRAMMABLE_UNISWAP_GRAPH_DEPLOYMENT_COMMITMENT:
-      EXPECTED_UNISWAP_GRAPH_DEPLOYMENT_COMMITMENT,
-    PROGRAMMABLE_UNISWAP_GRAPH_SCHEMA_COMMITMENT:
-      EXPECTED_UNISWAP_GRAPH_SCHEMA_COMMITMENT,
-  });
-}
-
-export function readReleasePolicyExpectations(
-  rootDirectory = process.cwd(),
-) {
-  return parseReleaseExpectations(rootDirectory);
-}
-
-function validateNonSecretRuntimeEnvironment(contents, expectations) {
-  if (!expectations) {
-    return Object.freeze({ ready: true, invalidNames: Object.freeze([]) });
-  }
-  const configured = readSelectedDotenvValues(
-    contents,
-    REQUIRED_NON_SECRET_RUNTIME_ENV_NAMES,
-  );
-  const invalidNames = REQUIRED_NON_SECRET_RUNTIME_ENV_NAMES.filter(
-    (name) =>
-      typeof configured[name] !== "string" ||
-      configured[name] === "" ||
-      configured[name] !== expectations[name],
-  );
-  return Object.freeze({
-    ready: invalidNames.length === 0,
-    invalidNames: Object.freeze(invalidNames),
-  });
-}
-
-function validateRequiredServerSecrets(contents, wakeCanaryRequired) {
-  const requiredNames = wakeCanaryRequired
-    ? REQUIRED_SERVER_SECRET_ENV_NAMES
-    : [BITQUERY_MARKET_SECRET_ENV_NAME];
-  const configured = readSelectedDotenvValues(
-    contents,
-    requiredNames,
-  );
-  const invalidNames = requiredNames.filter((name) => {
-    const value = configured[name];
-    if (typeof value !== "string" || value === "") return true;
-    if (VERCEL_SENSITIVE_PLACEHOLDER.test(value)) return false;
-    const length = Buffer.byteLength(value, "utf8");
-    return length < 32 || length > 1_024;
-  });
-  return Object.freeze({
-    ready: invalidNames.length === 0,
-    invalidNames: Object.freeze(invalidNames),
+    schemaVersion: record.schemaVersion,
+    vercelProjectId: record.vercelProjectId,
+    target: record.target,
+    environmentRecordCount: record.envs.length,
   });
 }
 
 export function evaluateReadModelDeployPolicy(
   contents,
-  environment = {},
-  expectations,
+  _environment = {},
+  expectations = readReleasePolicyExpectations(),
 ) {
-  const indexedFlags = normalizedFlags(
+  void _environment;
+  const indexedFlags = exactBooleanFlags(
     readReleaseGatedFlags(contents),
     RELEASE_GATED_FLAG_NAMES,
-    false,
+    { missingIsFalse: false },
   );
-  const workerFlags = normalizedFlags(
+  const workerFlags = exactBooleanFlags(
     readSelectedDotenvValues(contents, WORKER_ACTIVATION_FLAG_NAMES),
     WORKER_ACTIVATION_FLAG_NAMES,
-    true,
+    { missingIsFalse: true },
   );
-  const nonLegacyFlags = [
+  const activeFlagNames = Object.freeze([
     ...RELEASE_GATED_FLAG_NAMES.filter((name) => indexedFlags.values[name]),
     ...WORKER_ACTIVATION_FLAG_NAMES.filter((name) => workerFlags.values[name]),
-  ];
+  ]);
   const invalidFlagNames = Object.freeze([
     ...indexedFlags.invalidNames,
     ...workerFlags.invalidNames,
   ]);
-  const evidenceRequired = nonLegacyFlags.length > 0;
-  const environmentPreflight = validateNonSecretRuntimeEnvironment(
-    contents,
-    evidenceRequired ? expectations : undefined,
-  );
-  const wakeCanaryRequired = WORKER_ACTIVATION_FLAG_NAMES.some(
-    (name) => workerFlags.values[name],
-  );
-  const secretEnvironmentPreflight = validateRequiredServerSecrets(
-    contents,
-    wakeCanaryRequired,
-  );
-  const invalidCommitments = COMMITMENT_NAMES.filter(
-    (name) => !HEX_BYTES32.test(environment[name] ?? ""),
-  );
-  let runtimeCommitmentsMatch = false;
-  let runtimeProviderBinding = "unverified";
-  if (invalidCommitments.length === 0) {
-    try {
-      const runtimeEnvironment = readSelectedDotenvValues(
-        contents,
-        RUNTIME_RPC_BINDING_NAMES,
-      );
-      const configuredRuntimeValues = RUNTIME_RPC_URL_NAMES.map(
-        (name) => runtimeEnvironment[name],
-      );
-      const sensitiveValuesDeferred =
-        configuredRuntimeValues.length === 2 &&
-        configuredRuntimeValues.every((value) =>
-          VERCEL_SENSITIVE_PLACEHOLDER.test(value ?? ""),
-        );
-      if (sensitiveValuesDeferred) {
-        // Vercel deliberately replaces Sensitive environment values during
-        // `vercel pull`. The staged runtime capture recomputes both endpoint
-        // commitments from the real URLs and the release gate compares them
-        // with the pinned GitHub environment variables before promotion.
-        runtimeCommitmentsMatch =
-          runtimeEnvironment[PRODUCTION_RPC_ENV.primaryProvider] === "drpc" &&
-          runtimeEnvironment[PRODUCTION_RPC_ENV.secondaryProvider] === "quicknode" &&
-          runtimeEnvironment[PRODUCTION_RPC_ENV.primaryCommitment] ===
-            environment[PRODUCTION_RPC_ENV.primaryCommitment] &&
-          runtimeEnvironment[PRODUCTION_RPC_ENV.secondaryCommitment] ===
-            environment[PRODUCTION_RPC_ENV.secondaryCommitment];
-        runtimeProviderBinding = "deferred-stage";
-      } else {
-        const runtimeBindings = runtimeProductionProviderBindingsFromUrls(
-          runtimeEnvironment,
-        );
-        runtimeCommitmentsMatch = runtimeBindings.every(
-          (binding) =>
-            binding.endpointCommitment ===
-            environment[
-              binding.role === "primary"
-                ? PRODUCTION_RPC_ENV.primaryCommitment
-                : PRODUCTION_RPC_ENV.secondaryCommitment
-            ],
-        );
-        runtimeProviderBinding = runtimeCommitmentsMatch
-          ? "verified"
-          : "unverified";
-      }
-    } catch {
-      runtimeCommitmentsMatch = false;
-      runtimeProviderBinding = "unverified";
-    }
-  }
+  const expectationsReady =
+    expectations === undefined || expectations?.mode === RESET_POLICY_MODE;
+  const policyReady =
+    expectationsReady &&
+    invalidFlagNames.length === 0 &&
+    activeFlagNames.length === 0;
+
   return Object.freeze({
-    mode: evidenceRequired ? "indexed-or-shadow" : "direct-rpc",
-    evidenceRequired,
-    nonLegacyFlags,
+    mode: RESET_POLICY_MODE,
+    evidenceRequired: false,
+    providerCredentialsRequired: false,
+    activeFlagNames,
+    nonLegacyFlags: activeFlagNames,
     indexedFlags: indexedFlags.values,
     workerActivationFlags: workerFlags.values,
-    policyReady:
-      invalidFlagNames.length === 0 &&
-      environmentPreflight.ready &&
-      secretEnvironmentPreflight.ready &&
-      invalidCommitments.length === 0 &&
-      runtimeCommitmentsMatch,
+    policyReady,
     invalidFlagNames,
-    invalidNonSecretEnvironmentNames: environmentPreflight.invalidNames,
-    invalidProductionRpcRuntimeEnvironmentNames:
-      runtimeCommitmentsMatch ? Object.freeze([]) : RUNTIME_RPC_BINDING_NAMES,
-    wakeRoute: PROJECTOR_WAKE_ROUTE,
-    wakeCanaryRequired,
-    streamSecretReady: secretEnvironmentPreflight.ready,
-    invalidServerSecretEnvironmentNames:
-      secretEnvironmentPreflight.invalidNames,
-    commitmentsReady:
-      invalidCommitments.length === 0 && runtimeCommitmentsMatch,
-    runtimeProviderBinding,
-    invalidCommitmentNames:
-      invalidCommitments.length > 0
-        ? invalidCommitments
-        : runtimeCommitmentsMatch
-          ? []
-          : ["runtime-provider-commitment-mismatch"],
+    invalidNonSecretEnvironmentNames: Object.freeze([]),
+    invalidProductionRpcRuntimeEnvironmentNames: Object.freeze([]),
+    invalidServerSecretEnvironmentNames: Object.freeze([]),
+    commitmentsReady: true,
+    runtimeProviderBinding: "not-required",
+    invalidCommitmentNames: Object.freeze([]),
   });
 }
 
@@ -525,12 +292,12 @@ export function validateStagedReleaseAttestation(value, expectations = {}) {
     WORKER_ACTIVATION_FLAG_NAMES,
     "staged release worker flags",
   );
-  const nonLegacy =
+  if (
+    attestation.policyMode !== RESET_POLICY_MODE ||
     Object.values(indexedFlags).some(Boolean) ||
-    Object.values(workerActivationFlags).some(Boolean);
-  const expectedMode = nonLegacy ? "indexed-or-shadow" : "direct-rpc";
-  if (attestation.policyMode !== expectedMode) {
-    throw new Error("staged release attestation mode is invalid");
+    Object.values(workerActivationFlags).some(Boolean)
+  ) {
+    throw new Error("staged release attestation reset mode is invalid");
   }
   const timestampMs = Date.parse(attestation.timestamp ?? "");
   const nowMs = expectations.nowMs ?? Date.now();
@@ -559,23 +326,10 @@ export function validateStagedReleaseAttestation(value, expectations = {}) {
     }
   }
   if (
-    expectations.requireWorkersActive === true &&
-    Object.values(workerActivationFlags).some((active) => active !== true)
-  ) {
-    throw new Error("staged release attestation workers are not active");
-  }
-  if (
     expectations.requireIndexedFlagsFalse === true &&
     Object.values(indexedFlags).some(Boolean)
   ) {
     throw new Error("staged release attestation exposes indexed reads");
-  }
-  if (
-    expectations.requireIndexedRoutesActive === true &&
-    (PUBLIC_INDEXED_ROUTE_FLAG_NAMES.some((name) => indexedFlags[name] !== true) ||
-      indexedFlags.INDEXED_READ_SHADOW_COMPARE_ENABLED !== false)
-  ) {
-    throw new Error("staged release attestation does not activate exact indexed routes");
   }
   return Object.freeze({
     ...attestation,
@@ -586,8 +340,8 @@ export function validateStagedReleaseAttestation(value, expectations = {}) {
 }
 
 export function createStagedReleaseAttestation(input) {
-  if (!input.policy?.policyReady || !input.policy?.commitmentsReady) {
-    throw new Error("release policy must pass before attestation");
+  if (!input.policy?.policyReady || input.policy?.mode !== RESET_POLICY_MODE) {
+    throw new Error("index reset release policy must pass before attestation");
   }
   if (!/^[0-9a-f]{40}$/u.test(input.verifiedSha ?? "")) {
     throw new Error("verified SHA must be an exact Git commit");
@@ -632,7 +386,7 @@ export function createStagedReleaseAttestation(input) {
     stagedDeploymentId: input.stagedDeploymentId,
     stagedDeploymentUrl: stagedTarget.origin,
     productionOrigin: CANONICAL_PRODUCTION_ORIGIN,
-    policyMode: input.policy.mode,
+    policyMode: RESET_POLICY_MODE,
     indexedFlags: input.policy.indexedFlags,
     workerActivationFlags: input.policy.workerActivationFlags,
     timestamp: timestamp.toISOString(),
@@ -655,48 +409,30 @@ function argumentsFrom(argv) {
     }
     result[name.slice(2)] = value;
   }
-  if (!result["env-file"]) throw new Error("--env-file is required");
+  for (const name of ["env-file", "sensitive-env-metadata"]) {
+    if (!result[name]) throw new Error(`--${name} is required`);
+  }
   return result;
 }
 
 function main() {
   const args = argumentsFrom(process.argv.slice(2));
-  const expectations = readReleasePolicyExpectations(process.cwd());
-  const rawEnvironmentContents = readFileSync(
-    resolve(args["env-file"]),
-    "utf8",
+  const metadata = validateBoundVercelProductionMetadata(
+    readFileSync(resolve(args["sensitive-env-metadata"]), "utf8"),
+    process.env.VERCEL_PROJECT_ID,
   );
-  const environmentContents = args["sensitive-env-metadata"]
-    ? materializeVercelSensitiveRuntimePlaceholders(
-        rawEnvironmentContents,
-        readFileSync(resolve(args["sensitive-env-metadata"]), "utf8"),
-      )
-    : rawEnvironmentContents;
   const result = evaluateReadModelDeployPolicy(
-    environmentContents,
-    process.env,
-    expectations,
+    readFileSync(resolve(args["env-file"]), "utf8"),
   );
   if (!result.policyReady) {
+    const rejectedNames = [
+      ...result.invalidFlagNames,
+      ...result.activeFlagNames,
+    ];
     throw new Error(
-      [
-        ...result.invalidFlagNames,
-        ...result.invalidNonSecretEnvironmentNames,
-        ...result.invalidProductionRpcRuntimeEnvironmentNames,
-        ...result.invalidServerSecretEnvironmentNames,
-      ].length > 0
-        ? `release environment preflight failed: ${[
-            ...result.invalidFlagNames,
-            ...result.invalidNonSecretEnvironmentNames,
-            ...result.invalidProductionRpcRuntimeEnvironmentNames,
-            ...result.invalidServerSecretEnvironmentNames,
-          ].join(", ")}`
-        : "release environment preflight failed",
-    );
-  }
-  if (!result.commitmentsReady) {
-    throw new Error(
-      `indexed/shadow release requires pinned commitments: ${result.invalidCommitmentNames.join(", ")}`,
+      rejectedNames.length > 0
+        ? `index reset environment preflight failed: ${rejectedNames.join(", ")}`
+        : "index reset environment preflight failed",
     );
   }
   let attestation;
@@ -733,9 +469,8 @@ function main() {
       resolve(args["github-output"]),
       [
         `mode=${result.mode}`,
-        `evidence_required=${result.evidenceRequired}`,
-        `wake_route=${result.wakeRoute}`,
-        `wake_canary_required=${result.wakeCanaryRequired}`,
+        "evidence_required=false",
+        "provider_credentials_required=false",
         ...(attestation
           ? [
               `attestation_path=${resolve(args["attestation-output"])}`,
@@ -750,19 +485,13 @@ function main() {
   process.stdout.write(
     `${JSON.stringify({
       mode: result.mode,
-      evidenceRequired: result.evidenceRequired,
-      exactFalseFlags:
-        RELEASE_GATED_FLAG_NAMES.filter(
-          (name) => result.indexedFlags[name] === false,
-        ).length,
-      gatedFlags: result.nonLegacyFlags,
+      evidenceRequired: false,
+      providerCredentialsRequired: false,
+      environmentMetadataBound: true,
+      environmentRecordCount: metadata.environmentRecordCount,
+      exactFalseFlags: RELEASE_GATED_FLAG_NAMES.length,
       workerActivationFlags: result.workerActivationFlags,
       policyReady: result.policyReady,
-      commitmentsReady: result.commitmentsReady,
-      runtimeProviderBinding: result.runtimeProviderBinding,
-      wakeRoute: result.wakeRoute,
-      wakeCanaryRequired: result.wakeCanaryRequired,
-      streamSecretReady: result.streamSecretReady,
       ...(attestation
         ? { attestationSha256: attestation.sha256 }
         : {}),
