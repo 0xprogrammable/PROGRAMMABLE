@@ -100,6 +100,7 @@ import {
   SIGSTORE_BUNDLE_V03_MEDIA_TYPE,
 } from "../robinhood-backend-promotion-v1.mjs";
 import {
+  canonicalRobinhoodBackendVerifierInstant,
   canonicalRobinhoodVerifierInstant,
   runRobinhoodPostdeploymentCli,
 } from "../finalize-robinhood-custom-launch-deployment.mjs";
@@ -977,6 +978,15 @@ test("focused backend evidence import verifies fresh exact public bytes without 
     await mkdir(path.dirname(backendPath), { recursive: true });
     await writeFile(backendPath, backend.inputBytes);
     await writeFile(attestationPath, backend.attestationBundleBytes);
+    const backendVerifiedAt = canonicalRobinhoodBackendVerifierInstant(
+      () => new Date("2026-08-29T12:01:00.987Z"),
+    );
+    assert.equal(backendVerifiedAt, "2026-08-29T12:01:00Z");
+    const backendCaptureAuthorization = buildRobinhoodBackendCaptureAuthorization({
+      ...structuredClone(backend.captureAuthorization),
+      verifiedAt: backendVerifiedAt,
+      verificationDigest: null,
+    });
     let verificationCalls = 0;
     const dependencies = {
       backendDependencies: backend.dependencies,
@@ -984,7 +994,7 @@ test("focused backend evidence import verifies fresh exact public bytes without 
         verificationCalls += 1;
         assert.equal(inputFile.bytes.equals(backend.inputBytes), true);
         assert.equal(attestationBundleFile.bytes.equals(backend.attestationBundleBytes), true);
-        return backend.captureAuthorization;
+        return backendCaptureAuthorization;
       },
     };
     const result = await runRobinhoodPostdeploymentCli([

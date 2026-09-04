@@ -102,6 +102,13 @@ export function canonicalRobinhoodVerifierInstant(now = () => new Date(), label 
   return new Date(Math.floor(instant.getTime() / 1_000) * 1_000).toISOString();
 }
 
+export function canonicalRobinhoodBackendVerifierInstant(
+  now = () => new Date(),
+  label = "backend verifier clock",
+) {
+  return canonicalRobinhoodVerifierInstant(now, label).replace(/\.000Z$/u, "Z");
+}
+
 function usage() {
   return [
     "Usage:",
@@ -767,7 +774,7 @@ async function verifySigstoreBackendCaptureAttestation({
       || Buffer.byteLength(result.stderr) > 16 * 1024 * 1024) {
       throw new TypeError("Cosign backend verification diagnostics exceeded their bound");
     }
-    const verifiedAt = canonicalRobinhoodVerifierInstant(now, "backend verifier clock");
+    const verifiedAt = canonicalRobinhoodBackendVerifierInstant(now, "backend verifier clock");
     return {
       authorization: buildRobinhoodBackendCaptureAuthorization({
         schemaVersion: ROBINHOOD_BACKEND_CAPTURE_AUTHORIZATION_SCHEMA,
