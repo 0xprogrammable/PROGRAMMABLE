@@ -26,6 +26,7 @@ import {
   IMMUTABLE_RELEASE_PREFLIGHT_TRUST_POLICY,
   verifyImmutableReleaseOwnerPreflight,
 } from "../verify-immutable-release-owner-preflight.mjs";
+import { assertOwnerBoundProgrammableLaunchTagRuleset } from "../verify-programmable-launch-tag-ruleset.mjs";
 
 const SSH_KEYGEN = "/usr/bin/ssh-keygen";
 const REVISION = "1".repeat(40);
@@ -99,6 +100,16 @@ function endpointBody(enforcedByOwner = false) {
   );
 }
 
+function tagRuleset() {
+  return {
+    id: 21679403, name: "Protect Programmable Launch CLI release tags", target: "tag",
+    enforcement: "active", bypass_actors: [],
+    conditions: { ref_name: { include: ["refs/tags/programmable-launch-v*"], exclude: [] } },
+    rules: [{ type: "update" }, { type: "deletion" }],
+    updated_at: "2026-08-27T20:27:05.716Z",
+  };
+}
+
 function record({
   revision = REVISION,
   bodyBytes = endpointBody(false),
@@ -112,6 +123,7 @@ function record({
     date,
     enforcedByOwner,
     requestId,
+    tagRuleset: { bodyBytes: Buffer.from(JSON.stringify(tagRuleset())), date, requestId },
   });
 }
 
@@ -277,6 +289,58 @@ test("record and signature transports require canonical bounded base64", (t) => 
     }),
     /canonical base64/u,
   );
+});
+
+test("signed owner tag policy proves an omitted list only while live protection is unchanged", (t) => {
+  const trust = makeTrust(t);
+  const verified = verifyImmutableReleaseOwnerPreflight(verificationInput(trust));
+  const live = tagRuleset();
+  delete live.bypass_actors;
+  assert.doesNotThrow(() => assertOwnerBoundProgrammableLaunchTagRuleset(live, verified.tagRuleset));
+  assert.doesNotThrow(() => assertOwnerBoundProgrammableLaunchTagRuleset({
+    ...live, updated_at: "2026-08-27T22:27:05.716+02:00",
+  }, verified.tagRuleset));
+  for (const changed of [
+    { ...live, updated_at: "2026-08-29T12:00:00Z" },
+    { ...live, updated_at: undefined },
+    { ...live, enforcement: "disabled" },
+    { ...live, rules: [{ type: "update" }] },
+    { ...live, bypass_actors: null },
+    { ...live, bypass_actors: [{ actor_type: "OrganizationAdmin" }] },
+  ]) assert.throws(() => assertOwnerBoundProgrammableLaunchTagRuleset(changed, verified.tagRuleset));
+  assert.throws(() => assertOwnerBoundProgrammableLaunchTagRuleset(live, live));
+});
+
+test("owner tag proof rejects signed missing permissions, bypass actors, stale provenance and substitution", (t) => {
+  const trust = makeTrust(t);
+  const base = record();
+  for (const mutate of [
+    value => { delete value.tagRuleset; },
+    value => { value.schemaVersion = "programmable.github-immutable-release-owner-preflight.v2"; },
+    value => { value.tagRuleset.url += "0"; },
+    value => { value.tagRuleset.response.bodySha256 = `sha256:${"0".repeat(64)}`; },
+    value => { value.tagRuleset.response.date = "Sat, 29 Aug 2026 11:59:00 GMT"; },
+    value => { value.tagRuleset.response.requestId = "missing"; },
+    value => { value.tagRuleset.response.status = 404; },
+    ...[undefined, [{ actor_type: "OrganizationAdmin" }]].map(actors => value => {
+      const rules = tagRuleset();
+      if (actors === undefined) delete rules.bypass_actors;
+      else rules.bypass_actors = actors;
+      const bytes = Buffer.from(JSON.stringify(rules));
+      value.tagRuleset.response.bodyBase64 = bytes.toString("base64");
+      value.tagRuleset.response.bodySha256 = sha256(bytes);
+    }),
+  ]) {
+    const value = structuredClone(base);
+    mutate(value);
+    assert.throws(() => verifyImmutableReleaseOwnerPreflight(verificationInput(trust, value)));
+  }
+  const signed = verificationInput(trust, base);
+  const changed = structuredClone(base);
+  changed.tagRuleset.response.requestId = "ABCD:EF01:2345:6789:EEEE";
+  assert.throws(() => verifyImmutableReleaseOwnerPreflight({
+    ...signed, recordBase64: canonicalImmutableReleaseOwnerPreflightBytes(changed).toString("base64"),
+  }), /signature/u);
 });
 
 test("the signature covers exact canonical JSON plus one LF", (t) => {
@@ -477,6 +541,7 @@ function captureRunner({
       return Buffer.from(JSON.stringify(ref));
     }
     if (endpoint.endsWith("/immutable-releases")) return includedResponse(body);
+    if (endpoint.endsWith("/rulesets/21679403")) return includedResponse(JSON.stringify(tagRuleset()));
     assert.fail(`unexpected endpoint ${endpoint}`);
   };
 }
@@ -527,7 +592,7 @@ test("local capture refuses Actions and validates gh owner, production ref, and 
     runCommand: captureRunner(),
     trustPolicy: trust.policy,
   });
-  assert.equal(captured.schemaVersion, "programmable.github-immutable-release-owner-preflight-capture.v2");
+  assert.equal(captured.schemaVersion, "programmable.github-immutable-release-owner-preflight-capture.v3");
   assert.equal(captured.signer, trust.policy.principal);
   assert.doesNotMatch(JSON.stringify(captured), /PRIVATE KEY|id_ed25519/u);
   assert.doesNotThrow(() => verifyImmutableReleaseOwnerPreflight({

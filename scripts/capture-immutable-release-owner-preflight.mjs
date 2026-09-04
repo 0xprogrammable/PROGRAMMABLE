@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { TextDecoder } from "node:util";
 import { canonicalizeJson, parseStrictJson } from "../packages/launch/src/canonical-json.mjs";
+import { assertProgrammableLaunchTagRuleset } from "./verify-programmable-launch-tag-ruleset.mjs";
 import {
   canonicalImmutableReleaseOwnerPreflightBytes,
   IMMUTABLE_RELEASE_PREFLIGHT_ALLOWED_SIGNERS_PATH,
@@ -100,7 +101,7 @@ function headerSeparator(bytes) {
   throw new TypeError("GitHub immutable-release response headers are missing");
 }
 
-export function parseIncludedGitHubResponse(bytes) {
+export function parseIncludedGitHubResponse(bytes, { tagRuleset = false } = {}) {
   if (!Buffer.isBuffer(bytes) || bytes.length === 0
     || bytes.length > MAXIMUM_ENDPOINT_RESPONSE_BYTES) {
     throw new TypeError("GitHub immutable-release response is invalid");
@@ -139,8 +140,12 @@ export function parseIncludedGitHubResponse(bytes) {
   }
   const body = parseStrictJson(decodeUtf8(bodyBytes, "GitHub immutable-release response body"), {
     maximumBytes: 4_096,
-    maximumDepth: 4,
+    maximumDepth: 8,
   });
+  if (tagRuleset) {
+    assertProgrammableLaunchTagRuleset(body);
+    return Object.freeze({ bodyBytes: Buffer.from(bodyBytes), date, requestId });
+  }
   if (body === null || typeof body !== "object" || Array.isArray(body)
     || Object.keys(body).sort().join(",") !== "enabled,enforced_by_owner"
     || body.enabled !== true || typeof body.enforced_by_owner !== "boolean") {
@@ -160,6 +165,7 @@ export function buildImmutableReleaseOwnerPreflightRecord({
   date,
   enforcedByOwner,
   requestId,
+  tagRuleset,
 }) {
   const dateMilliseconds = Date.parse(date);
   if (typeof revision !== "string" || !COMMIT.test(revision)
@@ -190,6 +196,16 @@ export function buildImmutableReleaseOwnerPreflightRecord({
     },
     revision,
     schemaVersion: IMMUTABLE_RELEASE_PREFLIGHT_SCHEMA,
+    tagRuleset: {
+      url: `https://api.github.com/repos/${REPOSITORY}/rulesets/21679403`,
+      response: {
+        bodyBase64: tagRuleset.bodyBytes.toString("base64"),
+        bodySha256: sha256(tagRuleset.bodyBytes),
+        date: tagRuleset.date,
+        requestId: tagRuleset.requestId,
+        status: 200,
+      },
+    },
     url: `https://api.github.com/repos/${REPOSITORY}/immutable-releases`,
   });
 }
@@ -255,12 +271,16 @@ export function captureImmutableReleaseOwnerPreflight({
     { maximumBytes: MAXIMUM_ENDPOINT_RESPONSE_BYTES },
   );
   const endpoint = parseIncludedGitHubResponse(included);
+  const tagRuleset = parseIncludedGitHubResponse(runCommand(GH,
+    ghArguments(`/repos/${REPOSITORY}/rulesets/21679403`, { include: true }),
+    { maximumBytes: MAXIMUM_ENDPOINT_RESPONSE_BYTES }), { tagRuleset: true });
   const record = buildImmutableReleaseOwnerPreflightRecord({
     revision,
     bodyBytes: endpoint.bodyBytes,
     date: endpoint.date,
     enforcedByOwner: endpoint.enforcedByOwner,
     requestId: endpoint.requestId,
+    tagRuleset,
   });
   const recordBytes = canonicalImmutableReleaseOwnerPreflightBytes(record);
   const signatureBytes = runCommand(SSH_KEYGEN, [
@@ -293,7 +313,7 @@ export function captureImmutableReleaseOwnerPreflight({
     namespace: trustPolicy.namespace,
     recordBase64,
     recordSha256: sha256(recordBytes),
-    schemaVersion: "programmable.github-immutable-release-owner-preflight-capture.v2",
+    schemaVersion: "programmable.github-immutable-release-owner-preflight-capture.v3",
     signatureBase64,
     signer: trustPolicy.principal,
   });

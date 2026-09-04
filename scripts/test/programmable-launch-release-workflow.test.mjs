@@ -186,7 +186,7 @@ function failures(value) {
     "--environment \"production\"",
     "--actor-id \"$GITHUB_ACTOR_ID\"",
     "--actor-login \"$GITHUB_ACTOR\"",
-    "programmable.github-immutable-release-owner-preflight.v2",
+    "programmable.github-immutable-release-owner-preflight.v3",
     "258789013+hazarxyz@users.noreply.github.com",
     "SHA256:RTXVJ3XspKUc+Qmj/daOWwU2WyT+qbRBtsJJwNpItdI",
     "immutable-release-preflight@programmable.xyz",
@@ -216,9 +216,13 @@ function failures(value) {
     'test -n "$IMMUTABLE_RELEASES_PREFLIGHT_SIGNATURE_BASE64"',
     "--allowed-signers \"$GITHUB_WORKSPACE/.github/release-trust/programmable-launch-immutable-release-owner.allowed_signers\"",
   ]) {
-    if (value.split(item).length - 1 !== 2) {
-      missing.push(`${item} must appear in both immutable preflight checks`);
+    const expectedCount = item.startsWith("PROGRAMMABLE_") ? 3 : 2;
+    if (value.split(item).length - 1 !== expectedCount) {
+      missing.push(`${item} must appear in all required owner preflight checks`);
     }
+  }
+  if (value.split('node scripts/verify-programmable-launch-tag-ruleset.mjs "$rulesets" --owner-preflight').length - 1 !== 2) {
+    missing.push("owner-bound tag protection must be verified before build and publication");
   }
   return missing;
 }
@@ -357,6 +361,7 @@ test("release workflow contract mutations fail closed", () => {
     ),
     source.replaceAll('--actor-id "$GITHUB_ACTOR_ID"', '--actor-id "0"'),
     source.replaceAll('--actor-login "$GITHUB_ACTOR"', '--actor-login "someone-else"'),
+    source.replaceAll("--owner-preflight", ""),
     source.replaceAll('--repository-id "1314365508"', '--repository-id "0"'),
     replaceLast(
       source,
