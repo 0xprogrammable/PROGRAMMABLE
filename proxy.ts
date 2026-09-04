@@ -8,9 +8,15 @@ const MARKDOWN_DESTINATIONS = new Map([
   ["/docs/developers", "/docs/developers.md"],
 ]);
 
+const ROBINHOOD_TERMINAL_INDEXER_DOCS_PATH =
+  "/docs/developers/robinhood-terminal-indexer";
+const ROBINHOOD_TERMINAL_INDEXER_PAGE_PATH =
+  "/developer-reference/robinhood-terminal-indexer";
+
 function isRetiredPredictionApi(pathname: string): boolean {
-  return pathname === "/api/prediction" ||
-    pathname.startsWith("/api/prediction/");
+  return (
+    pathname === "/api/prediction" || pathname.startsWith("/api/prediction/")
+  );
 }
 
 function retiredPredictionApiResponse(): NextResponse {
@@ -65,6 +71,15 @@ export function proxy(request: NextRequest) {
     return withAcceptVariation(NextResponse.next());
   }
 
+  if (request.nextUrl.pathname === ROBINHOOD_TERMINAL_INDEXER_DOCS_PATH) {
+    const response = NextResponse.redirect(
+      new URL(ROBINHOOD_TERMINAL_INDEXER_PAGE_PATH, request.url),
+      307,
+    );
+    response.headers.set("Cache-Control", "no-store");
+    return withAcceptVariation(response);
+  }
+
   const representation = negotiatePageRepresentation(
     request.headers.get("Accept"),
   );
@@ -96,5 +111,10 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/docs/developers", "/api/prediction/:path*"],
+  matcher: [
+    "/",
+    "/docs/developers",
+    "/docs/developers/robinhood-terminal-indexer",
+    "/api/prediction/:path*",
+  ],
 };

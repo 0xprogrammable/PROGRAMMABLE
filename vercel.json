@@ -15,11 +15,6 @@
   ],
   "redirects": [
     {
-      "source": "/docs/developers/robinhood-terminal-indexer",
-      "destination": "/developer-reference/robinhood-terminal-indexer",
-      "permanent": false
-    },
-    {
       "source": "/markets",
       "destination": "/explore",
       "permanent": false
