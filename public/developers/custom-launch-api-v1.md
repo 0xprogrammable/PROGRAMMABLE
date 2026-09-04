@@ -4,12 +4,15 @@ V3.3 is public and live: general custom-hook launch creation, list and single-re
 `https://api.programmable.market` for wallet keys, partner roots and bounded partner subkeys. V2 and V1 history remain
 available for existing requests, and their schemas remain published. Fresh authenticated `POST /v2/custom-launches`
 and `POST /v1/custom-launches` are permanently read only with non-retryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and
-`409 CUSTOM_LAUNCH_V1_READ_ONLY`. Only V3.3 accepts new submissions. Legacy Registry and GitHub submission intake is
+`409 CUSTOM_LAUNCH_V1_READ_ONLY`. On Ethereum, only V3.3 accepts new submissions. Legacy Registry and GitHub submission intake is
 closed.
 
-The public installable CLI is `@programmable/launch` `3.3.9` for the live Ethereum V3 contract. Robinhood V4 has a
-deployed Router and backend routes. The repository's `4.0.0` package remains an unpublished, non-installable source
-candidate and does not change this snapshot's `publicWrites: false` or `releaseReady: false`.
+The public Ethereum V3 CLI is `@programmable/launch` `3.3.9`. For Robinhood V4, read the live
+[discovery manifest](https://programmable.market/.well-known/programmable.json). Use CLI `4.0.0` only when both
+`customLaunchApi.versions.v4` and `chains[]` for `chainId: 4663` report `publicAuthorization: true`,
+`publicWrites: true` and `releaseReady: true`. If either entry is false, incomplete or missing, stop before
+authenticated preflight or submission. Verify the immutable official GitHub Release, exact source commit, release
+manifest and tarball checksum from `customLaunchApi.versions.v4.cli.release` before installing. A repository source candidate is not an installable release.
 
 V2 detail reads are observation-only while an existing request is `prepared` or `simulating`: GET does not advance
 simulation or authorization and cannot expose a new `walletTransaction`. Existing `authorized` and `submitted`
@@ -25,15 +28,21 @@ Human guide: <https://programmable.market/docs/developers/custom-launch>
 
 Readiness: <https://api.programmable.market/readyz>
 
-## Robinhood Chain V4 deployed release candidate
+## Robinhood Chain V4
 
-Robinhood Chain Mainnet is `chainId: 4663` and `eip155:4663`. The Router and backend routes are deployed. This
-release snapshot is `pending-public-discovery-promotion`; public writes, public authorization and release readiness
-remain false. Deployed runtime is not activated public discovery. The authenticated API server selects the
-`robinhood-launch-readiness` or `robinhood-production-launch` policy profile from the chain binding. A caller cannot
-select either profile.
+Robinhood Chain Mainnet is `chainId: 4663` and `eip155:4663`. Its public self-serve availability is derived from
+verified release evidence in the live discovery manifest. While `pending-public-discovery-promotion` or any of
+`publicAuthorization: false`, `publicWrites: false` and `releaseReady: false` is reported, stop before submission.
+When both discovery entries pass all three gates, follow the published V4 CLI release coordinates and fetch current
+capabilities and readiness. The authenticated API server selects `robinhood-launch-readiness` or
+`robinhood-production-launch` from the chain binding; callers cannot select a policy profile.
 
-Release-candidate pointers:
+Create one platform API key at <https://programmable.market/developers/api-keys> and provide it through
+`PROGRAMMABLE_API_KEY`. Select Ethereum V3 or Robinhood V4 using that chain's discovery contract and the grants
+reported for the key. The key authorizes API requests; the user separately reviews and signs their onchain launch
+transaction and pays gas.
+
+V4 contract pointers:
 
 - `GET /v4/chains/4663/capabilities`
 - `POST /v4/chains/4663/custom-launches/preflight`
@@ -65,7 +74,7 @@ Foundation source commitment:
 deployed address. Sourcify v2 provider-native `match` is required; exact source authority is the separate protected-build/finalized-bytecode binding. Robinhood Blockscout is optional, unproven and degraded; it cannot
 support an exact-source claim or block or revise finality.
 
-The release candidate carries non-null V4 `deploymentEvidence` for its deployed roots. Production clients must still
+Activated discovery carries non-null V4 `deploymentEvidence` for its deployed roots. Production clients must
 fetch and match the exact deployment ID and descriptor digest, foundation source commitment, finality-policy digest,
 finalized block, pinned finalized-evidence reference, and address/runtime-hash/start-block tuples for the Programmable
 Router, GraphFactory, PermitAuthority Safe and relevant Uniswap roots. Partial or stale evidence cannot activate or

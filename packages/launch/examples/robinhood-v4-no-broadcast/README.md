@@ -13,13 +13,27 @@ admission, wallet approval, onchain deployment, or public availability.
 
 ## Prepare
 
-Use Node.js 24.14 and an exact reviewed checkout containing this clean-room example. Package version `4.0.0` remains
-an unpublished, non-installable pre-release source candidate. The Robinhood V4 Router and backend routes are deployed,
-but this release snapshot is `pending-public-discovery-promotion` with `releaseReady: false`. Copy the project from
-that checkout, then install its exact compiler lock:
+Use Node.js 24.14. For local preparation, use an exact reviewed checkout containing this example. For public use,
+first follow the [V4 release checks](../../README.md#robinhood-chain-v4-release-checks) and use the extracted,
+verified `@programmable/launch` `4.0.0` release package. A version number or local package is not release evidence.
+
+**Blocked:** If either `customLaunchApi.versions.v4` or the matching `chains` entry in
+[live discovery](https://programmable.market/.well-known/programmable.json) has `publicAuthorization: false`,
+`publicWrites: false` or `releaseReady: false`, or required release evidence is missing, stop before authenticated
+preflight or submission. `pending-public-discovery-promotion` permits no public-launch claim; an unpublished
+pre-release source candidate supports local preparation only.
+
+**Activated:** Only when both discovery entries have `publicAuthorization: true`, `publicWrites: true` and
+`releaseReady: true`, verify the advertised published immutable GitHub Release `programmable-launch-v4.0.0` in
+`programmablehq/PROGRAMMABLE`, its release manifest, exact source commit and tarball checksum against the downloaded package. If any check fails,
+stop. This conditional procedure does not assert today's release state; this example still never submits,
+signs or broadcasts.
+
+Set `PACKAGE_ROOT` to that verified package directory, or the reviewed checkout's `packages/launch` directory for
+local preparation, then copy the project and install its exact compiler lock:
 
 ```sh
-PACKAGE_ROOT="/absolute/path/to/exact-reviewed-checkout/packages/launch"
+PACKAGE_ROOT="/absolute/path/to/package-root"
 cp -R "$PACKAGE_ROOT/examples/robinhood-v4-no-broadcast/project" ./robinhood-v4-clean-room
 cd ./robinhood-v4-clean-room
 npm ci --ignore-scripts --no-audit --no-fund

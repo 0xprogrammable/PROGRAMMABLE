@@ -1,3 +1,4 @@
+import { V4_API_DISCOVERY } from "../lib/custom-launch/v4-api-discovery";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -76,7 +77,7 @@ describe("Custom Launch API documentation", () => {
     }
   });
 
-  it("keeps the deployed Robinhood V4 release candidate distinct from public activation", () => {
+  it("requires verified discovery before Robinhood V4 public activation", () => {
     const v4Sources = [
       gitBookGuide,
       websiteGuide,
@@ -92,7 +93,7 @@ describe("Custom Launch API documentation", () => {
     for (const source of v4Sources) {
       expect(source).toContain("4.0.0");
       expect(source).toMatch(
-        /(?:source|release)[ -]candidate/iu,
+        /(?:source|release)[\s-]candidate|immutable.*release/iu,
       );
       expect(source).toContain("3.3.9");
       expect(source).toContain("publicWrites");
@@ -124,16 +125,16 @@ describe("Custom Launch API documentation", () => {
       .toEqual(statuses);
     expect(programmablePublicOpenApi["x-programmable-availability"].v4)
       .toMatchObject({
-        status: "release-candidate",
+        status: V4_API_DISCOVERY.status,
         runtimeStatus: "routes-deployed",
-        activationStage: "pending-public-discovery-promotion",
+        activationStage: V4_API_DISCOVERY.activationStage,
         targetLaunchPath: "public-self-serve",
         profileVersion: "4.0.0",
-        released: false,
-        installable: false,
-        releaseReady: false,
-        publicAuthorization: false,
-        publicWrites: false,
+        released: V4_API_DISCOVERY.cliReleased,
+        installable: V4_API_DISCOVERY.cliInstallable,
+        releaseReady: V4_API_DISCOVERY.releaseReady,
+        publicAuthorization: V4_API_DISCOVERY.publicAuthorization,
+        publicWrites: V4_API_DISCOVERY.publicWrites,
       });
     expect(officialLinks).toContain(
       "https://github.com/programmablehq/PROGRAMMABLE/tree/53926119030772040eca34b4796a36353c9da2d2/packages/launch",
@@ -145,9 +146,9 @@ describe("Custom Launch API documentation", () => {
       "## Install the current public Ethereum V3 release",
     );
     expect(cliGuide).toContain(
-      "No `programmable-launch-v4.0.0` GitHub Release",
+      "**Blocked:**",
     );
-    expect(cliGuide).toMatch(/unpublished pre-release source\s+candidate/iu);
+    expect(cliGuide).toContain("**Activated:**");
     expect(cliGuide).not.toContain(
       "releases/download/programmable-launch-v4.0.0",
     );

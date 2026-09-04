@@ -43,15 +43,18 @@ Classic is the direct launch model for a fixed supply token, a permanently locke
 rewards. Custom is the deterministic bundle model for products that need their own hook, application logic or
 execution graph. Public V3.3 general-hook creation and wallet-owned lifecycle reads are live on Ethereum Mainnet. V2
 and V1 history and schemas remain readable, while fresh authenticated POSTs are permanently read-only with
-non-retryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY` responses. Only V3.3 accepts new
+non-retryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY` responses. On Ethereum, only V3.3 accepts new
 submissions. CLI `3.3.9` is the current installable release and defaults to live profile `3.3.0`. Explicit profile
 `3.4.0` output remains preparatory and is rejected by live capabilities until the backend activates that profile.
 Each release defines its funding and signing path. User-funded flows keep the connected wallet in control of its own
 transaction.
 
-Robinhood Chain V4 Router and backend are deployed and ready and target a public self-serve launch path. This source
-snapshot remains `pending-public-discovery-promotion`: deployed runtime is not public launch authorization. Require
-live `publicWrites: true`, `publicAuthorization: true` and `releaseReady: true` discovery before creating. The required
+Robinhood Chain V4 targets a public self-serve launch path. Read the live
+[discovery manifest](https://programmable.market/.well-known/programmable.json) and require `publicWrites: true`,
+`publicAuthorization: true` and `releaseReady: true` in both the V4 and chain 4663 entries. Stop while any gate is
+false or missing. Verify the immutable CLI 4.0.0 release coordinates published in discovery before creating a request.
+Use one platform API key for its granted chains; users separately review and sign their onchain transaction and pay gas.
+The required
 default policy for new Robinhood V4 API Custom launches is 20 bps to the published recipient; it is not proof of
 canonical onchain fee enforcement, a charged fee or platform revenue, and fee-path absence is not itself a write blocker.
 
@@ -153,7 +156,7 @@ publication, wallet spending or production activation.
 | Custom Launch V1 OpenAPI     | [live reads and write fence](https://programmable.market/openapi/custom-launch-v1.json)                    |
 | Custom Launch V2 OpenAPI     | [V2 reads, schemas and write fence](https://programmable.market/openapi/custom-launch-v2.json)             |
 | Custom Launch V3 OpenAPI     | [preparatory profile 3.4 contract; live/default remains discovery-bound profile 3.3](https://programmable.market/openapi/custom-launch-v3.json) |
-| Custom Launch V4 OpenAPI     | [Robinhood public self-serve release candidate](https://programmable.market/openapi/custom-launch-v4.json) |
+| Custom Launch V4 OpenAPI     | [Robinhood public self-serve contract](https://programmable.market/openapi/custom-launch-v4.json) |
 | Custom Launch V4 schema      | [Robinhood pack configuration](https://programmable.market/schemas/custom-launch/v4/pack-config.json) |
 | Robinhood terminal integration | [chain-bound Router, finalized feed and fail-closed fixture](https://programmable.market/developer-reference/robinhood-terminal-indexer) |
 | Read-only developer reference | [programmable.market/docs/developers](https://programmable.market/docs/developers)                       |

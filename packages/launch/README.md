@@ -6,9 +6,8 @@ Release and installability are version-specific.
 
 ## Install the current public Ethereum V3 release
 
-The commands below intentionally install the published CLI `3.3.9`. No `programmable-launch-v4.0.0` GitHub Release
-asset exists. Robinhood V4 has a deployed Router and backend routes, but this release snapshot remains
-`pending-public-discovery-promotion` with `releaseReady: false`.
+The commands below intentionally install the published CLI `3.3.9` for Ethereum. For Robinhood V4, follow the
+separate public-release checks below; this Ethereum installer does not establish V4 availability.
 
 ```sh
 programmable_cli_dir="$(mktemp -d)"
@@ -47,19 +46,35 @@ The V3 general hook profile is the public production profile. Package installati
 the exact Router transaction, then the connected controller reviews and signs it separately. The human guide is
 <https://programmable.market/docs/developers/custom-launch>.
 
-## Robinhood Chain V4 source candidate
+## Robinhood Chain V4 release checks
 
-Package version `4.0.0` in this repository, including local `npm pack` output, is an unpublished pre-release source
-candidate for Robinhood Chain Mainnet (`chainId: 4663`, `eip155:4663`). The Router and backend routes are deployed,
-but the CLI package is not publicly installable and the lane must not be described as publicly activated. This release
-snapshot reports `status: release-candidate`, `runtimeStatus: routes-deployed`,
-`activationStage: pending-public-discovery-promotion`, `publicWrites: false` and
-`publicAuthorization: false`; `releaseReady` remains false. The installable production CLI is still `3.3.9` for
-Ethereum V3.
+Package version `4.0.0` targets Robinhood Chain Mainnet (`chainId: 4663`, `eip155:4663`). Its version number, a
+checkout or local `npm pack` output does not prove publication or public activation. Fetch
+[live discovery](https://programmable.market/.well-known/programmable.json) and read `customLaunchApi.versions.v4`
+and the matching `chains` entry before installing a V4 release or making an authenticated request.
+
+**Blocked:** If either discovery entry has `publicAuthorization: false`, `publicWrites: false` or
+`releaseReady: false`, or any required field or release evidence is missing, stop before authenticated preflight
+or submission. `pending-public-discovery-promotion` and deployed Router/backend routes do not authorize public
+use. Without a verified published release, treat the package as an unpublished pre-release source candidate;
+local preparation is not a public release or permission to submit.
+
+**Activated:** Only when both discovery entries have `publicAuthorization: true`, `publicWrites: true` and
+`releaseReady: true`, verify the advertised published immutable GitHub Release `programmable-launch-v4.0.0` in
+`programmablehq/PROGRAMMABLE`. Require the release manifest and tarball checksum to match the advertised version,
+exact source commit and downloaded `programmable-launch-4.0.0.tgz` bytes. Install only that verified tarball and
+require `programmable-launch --version` to print `4.0.0`. If any check fails, stop; a published artifact alone is
+not public activation. This conditional procedure does not assert today's release state.
+
+Before authenticated preflight or submission, also fetch the public
+[V4 capabilities](https://api.programmable.market/v4/chains/4663/capabilities) and
+[V4 readiness](https://api.programmable.market/v4/chains/4663/readiness). Require ready status, chain `4663`, profile
+`4.0.0` and the exact advertised profile, deployment and finality bindings. Follow the
+[raw V4 guide](https://programmable.market/developers/custom-launch-api-v1.md) and the V4 schemas below.
 
 V4 requires an explicit API version and chain. The CLI default remains Ethereum V3, preserving V1, V2 and V3
-behavior. The V4 source candidate can prepare and validate exact bytes, submit only when the server eventually
-authorizes public writes, poll the chain-scoped resource and display the exact wallet transaction. It never signs or
+behavior. The V4 CLI can prepare and validate exact bytes, submit only after the public-release checks and server
+authorization pass, poll the chain-scoped resource and display the exact wallet transaction. It never signs or
 broadcasts:
 
 ```sh
@@ -77,7 +92,7 @@ wallet-handoff states, not proof of a signature or broadcast. `sequencer_soft_co
 
 Source verification begins after finality and remains independent. `finalized` does not imply an exact source match,
 and provider failure does not revise finality. Indexing, trading readiness, Explore visibility, third-party listing and
-publication also remain separate states. The release-candidate [V4 OpenAPI](https://programmable.market/openapi/custom-launch-v4.json),
+publication also remain separate states. The [V4 OpenAPI](https://programmable.market/openapi/custom-launch-v4.json),
 [pack-config schema](https://programmable.market/schemas/custom-launch/v4/pack-config.json) and
 [source-verification schema](https://programmable.market/schemas/custom-launch/v4/source-verification-status.json)
 are integration pointers, not deployment or public-availability evidence.

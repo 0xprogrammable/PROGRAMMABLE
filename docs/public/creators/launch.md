@@ -4,18 +4,13 @@ description: Package, submit and track one deterministic Custom project
 
 # Launch a project
 
-Public V3.3 general-hook creation and lifecycle reads are live on Ethereum Mainnet. V2 and V1 history and schemas remain readable, while fresh authenticated POSTs return nonretryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Only V3.3 accepts new submissions. Legacy Registry and GitHub submission intake is closed.
+Public V3.3 general-hook creation and lifecycle reads are live on Ethereum Mainnet. V2 and V1 history and schemas remain readable, while fresh authenticated POSTs return nonretryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY`. On Ethereum, only V3.3 accepts new submissions. Legacy Registry and GitHub submission intake is closed.
 
-Robinhood Chain V4 Router and backend are deployed and ready and target a public self-serve launch path. This source
-snapshot remains `pending-public-discovery-promotion`; deployed runtime is not activated public discovery. Require live
-`publicWrites: true`, `publicAuthorization: true` and `releaseReady: true` discovery before submitting or sending
-funds. Ordinary wallet-bound API keys carry `custom-launch:create` and `custom-launch:read` without a per-user
-allowlist; after live activation those scopes can authorize the chain-bound V4 route for `4663`. Chain `4663` is
-selected by the V4 route and request context, while any server-side allowed-chain restriction is API authorization,
-not wallet or signing authority. When live, authentication uses only `$PROGRAMMABLE_API_KEY`, while the controller
-wallet reviews and signs separately. The server selects the canonical chain-bound admission policy; a project or
-client cannot choose it.
-
+Robinhood Chain V4 targets a public self-serve launch path. Read the live
+[discovery manifest](https://programmable.market/.well-known/programmable.json) and require `publicWrites: true`,
+`publicAuthorization: true` and `releaseReady: true` in both the V4 and chain 4663 entries. Stop while any gate is
+false or missing. Verify the immutable CLI 4.0.0 release coordinates published in discovery before creating a request.
+Use one platform API key for its granted chains; users separately review and sign their onchain transaction and pay gas.
 The required policy and default configuration applies only to new Robinhood V4 API Custom launches: `20 bps` (`0.20%`, `2,000 ppm`)
 to `0xD88539d3c4C460136a733A3Fd60cf6BF269079da`. Existing launches and Ethereum are unchanged. This is not live fee
 behavior, canonical onchain enforcement, charged-fee or revenue evidence. Basis, fee currency,

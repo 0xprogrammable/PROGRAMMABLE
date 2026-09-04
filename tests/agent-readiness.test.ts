@@ -1,3 +1,4 @@
+import { V4_API_DISCOVERY } from "../lib/custom-launch/v4-api-discovery";
 import { readFileSync } from "node:fs";
 
 import { NextRequest } from "next/server";
@@ -177,7 +178,9 @@ describe("agent-readable public surface", () => {
     ).toEqual(["get"]);
     expect(programmablePublicOpenApi["x-programmable-api-scopes"]).toMatchObject({
       "custom-launch:create": {
-        state: "v1-v2-write-fenced-v3.3-live-v4-pending-public-discovery-promotion",
+        state: V4_API_DISCOVERY.releaseReady
+          ? "v1-v2-write-fenced-v3.3-live-v4-public-api-wallet-handoff"
+          : "v1-v2-write-fenced-v3.3-live-v4-pending-public-discovery-promotion",
       },
       "fees:claim": { state: "reserved-disabled" },
       "buybacks:manage": { state: "reserved-disabled" },

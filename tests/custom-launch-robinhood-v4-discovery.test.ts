@@ -1,3 +1,4 @@
+import { V4_API_DISCOVERY } from "../lib/custom-launch/v4-api-discovery";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -17,20 +18,22 @@ const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 describe("Robinhood Chain V4 public self-serve release discovery", () => {
-  it("publishes one pending-promotion chain-bound V4 contract", () => {
+  it("publishes one evidence-bound chain-specific V4 contract", () => {
     const document = programmableWellKnownDocumentV1(
       PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1,
     );
     const v4 = document.customLaunchApi.versions.v4;
 
     expect(v4).toEqual({
-      status: "release-candidate",
+      status: V4_API_DISCOVERY.status,
       runtimeStatus: "routes-deployed",
-      activationStage: "pending-public-discovery-promotion",
+      activationStage: V4_API_DISCOVERY.activationStage,
+      activationScope: V4_API_DISCOVERY.activationScope,
+      publication: V4_API_DISCOVERY.publication,
       targetLaunchPath: "public-self-serve",
-      publicAuthorization: false,
-      publicWrites: false,
-      releaseReady: false,
+      publicAuthorization: V4_API_DISCOVERY.publicAuthorization,
+      publicWrites: V4_API_DISCOVERY.publicWrites,
+      releaseReady: V4_API_DISCOVERY.releaseReady,
       apiVersion: "4",
       profileVersion: "4.0.0",
       chainId: 4663,
@@ -48,7 +51,7 @@ describe("Robinhood Chain V4 public self-serve release discovery", () => {
       sourceVerificationSchemaUrl:
         "https://programmable.market/schemas/custom-launch/v4/source-verification-status.json",
       guideUrl:
-        "https://programmable.market/docs/developers/custom-launch#robinhood-v4",
+        "https://programmable.market/developers/custom-launch-api-v1.md",
       terminalIndexerGuideUrl:
         "https://programmable.market/developer-reference/robinhood-terminal-indexer",
       terminalIndexerFixtureUrl:
@@ -66,9 +69,10 @@ describe("Robinhood Chain V4 public self-serve release discovery", () => {
       launchPolicyRepository: "https://github.com/programmablehq/Launch-Policy",
       cli: {
         sourceCandidateVersion: "4.0.0",
-        sourceCandidate: true,
-        released: false,
-        installable: false,
+        sourceCandidate: !V4_API_DISCOVERY.cliReleased,
+        released: V4_API_DISCOVERY.cliReleased,
+        installable: V4_API_DISCOVERY.cliInstallable,
+        release: V4_API_DISCOVERY.cliRelease,
         liveEthereumVersion: "3.3.9",
         signsWalletTransactions: false,
         broadcastsWalletTransactions: false,
@@ -108,24 +112,24 @@ describe("Robinhood Chain V4 public self-serve release discovery", () => {
         finalityIndependent: true,
       },
       deploymentEvidence: {
-        status: "generator-promotion-pending",
+        status: V4_API_DISCOVERY.releaseReady ? "verified-release" : "generator-promotion-pending",
         liveAuthorityPath: "/v4/chains/4663/readiness",
-        chainDeploymentDescriptorDigest: null,
-        chainDeploymentId: null,
-        finalityPolicyDigest: null,
-        finalizedBlock: null,
-        finalizedEvidenceRef: null,
-        foundationSourceCommitment: null,
+        chainDeploymentDescriptorDigest: V4_API_DISCOVERY.chainDeploymentDescriptorDigest,
+        chainDeploymentId: V4_API_DISCOVERY.deployment?.chainDeploymentId ?? null,
+        finalityPolicyDigest: V4_API_DISCOVERY.deployment?.finality.policyDigest ?? null,
+        finalizedBlock: V4_API_DISCOVERY.deployment?.deploymentEvidence.blockNumber ?? null,
+        finalizedEvidenceRef: V4_API_DISCOVERY.deployment?.deploymentEvidence.evidenceDigest ?? null,
+        foundationSourceCommitment: V4_API_DISCOVERY.deployment?.foundationSourceCommitment ?? null,
         roots: {
-          graphFactory: null,
-          permit2: null,
-          permitAuthoritySafe: null,
-          poolManager: null,
-          positionManager: null,
-          programmableLaunchStampRouter: null,
-          stateView: null,
-          universalRouter: null,
-          v4Quoter: null,
+          graphFactory: V4_API_DISCOVERY.deployment?.contracts.graphFactory.address ?? null,
+          permit2: V4_API_DISCOVERY.deployment?.contracts.permit2.address ?? null,
+          permitAuthoritySafe: V4_API_DISCOVERY.deployment?.contracts.permitAuthority.address ?? null,
+          poolManager: V4_API_DISCOVERY.deployment?.contracts.poolManager.address ?? null,
+          positionManager: V4_API_DISCOVERY.deployment?.contracts.positionManager.address ?? null,
+          programmableLaunchStampRouter: V4_API_DISCOVERY.deployment?.contracts.programmableLaunchStampRouter.address ?? null,
+          stateView: V4_API_DISCOVERY.deployment?.contracts.stateView.address ?? null,
+          universalRouter: V4_API_DISCOVERY.deployment?.contracts.universalRouter.address ?? null,
+          v4Quoter: V4_API_DISCOVERY.deployment?.contracts.v4Quoter.address ?? null,
         },
       },
       authentication: "bearer-api-key",
@@ -176,38 +180,39 @@ describe("Robinhood Chain V4 public self-serve release discovery", () => {
       genericBuybackManagement: "not-live",
       externalIndexingGuaranteed: false,
       legacyIntake: { registry: "closed", github: "closed" },
-      activationBlockers: [
-        "public-cli-release",
-        "generated-release-evidence",
-        "clean-room-end-to-end-proof",
-        "public-indexing-canary",
-      ],
+      activationBlockers: V4_API_DISCOVERY.activationBlockers,
     });
     expect(document.chains).toContainEqual({
       chainId: 4663,
       caip2: "eip155:4663",
       name: "Robinhood Chain Mainnet",
       explorerUrl: "https://robinhoodchain.blockscout.com",
-      status: "release-candidate",
+      status: V4_API_DISCOVERY.status,
       customLaunchApiVersion: "4",
       runtimeStatus: "routes-deployed",
-      activationStage: "pending-public-discovery-promotion",
+      activationStage: V4_API_DISCOVERY.activationStage,
+      activationScope: V4_API_DISCOVERY.activationScope,
+      publication: V4_API_DISCOVERY.publication,
       targetLaunchPath: "public-self-serve",
-      publicAuthorization: false,
-      publicWrites: false,
-      releaseReady: false,
+      publicAuthorization: V4_API_DISCOVERY.publicAuthorization,
+      publicWrites: V4_API_DISCOVERY.publicWrites,
+      releaseReady: V4_API_DISCOVERY.releaseReady,
       externalIndexingGuaranteed: false,
     });
     const { foundationSourceCommitment, ...withoutSourceCommitment } = v4;
     expect(foundationSourceCommitment).toBe(
       "0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730",
     );
-    expect(
-      JSON.stringify(withoutSourceCommitment).match(/0x[0-9a-f]{40}/giu),
-    ).toEqual(["0xD88539d3c4C460136a733A3Fd60cf6BF269079da"]);
+    if (!V4_API_DISCOVERY.releaseReady) {
+      expect(JSON.stringify(withoutSourceCommitment).match(/0x[0-9a-f]{40}/giu))
+        .toEqual(["0xD88539d3c4C460136a733A3Fd60cf6BF269079da"]);
+    } else {
+      expect(v4.deploymentEvidence.roots.programmableLaunchStampRouter)
+        .toBe(V4_API_DISCOVERY.deployment?.contracts.programmableLaunchStampRouter.address);
+    }
   });
 
-  it("serializes the same release candidate through public well-known discovery", async () => {
+  it("serializes the same release projection through public well-known discovery", async () => {
     const response = createProgrammableWellKnownHandlerV1({})(
       new Request("https://programmable.market/.well-known/programmable.json"),
     );
@@ -215,13 +220,15 @@ describe("Robinhood Chain V4 public self-serve release discovery", () => {
 
     expect(response.status).toBe(200);
     expect(document.customLaunchApi.versions.v4).toMatchObject({
-      status: "release-candidate",
+      status: V4_API_DISCOVERY.status,
       runtimeStatus: "routes-deployed",
-      activationStage: "pending-public-discovery-promotion",
+      activationStage: V4_API_DISCOVERY.activationStage,
+      activationScope: V4_API_DISCOVERY.activationScope,
+      publication: V4_API_DISCOVERY.publication,
       targetLaunchPath: "public-self-serve",
-      publicAuthorization: false,
-      publicWrites: false,
-      releaseReady: false,
+      publicAuthorization: V4_API_DISCOVERY.publicAuthorization,
+      publicWrites: V4_API_DISCOVERY.publicWrites,
+      releaseReady: V4_API_DISCOVERY.releaseReady,
       apiVersion: "4",
       profileVersion: "4.0.0",
       clientSelectableProfile: false,
@@ -243,8 +250,9 @@ describe("Robinhood Chain V4 public self-serve release discovery", () => {
       externalIndexingGuaranteed: false,
       cli: {
         sourceCandidateVersion: "4.0.0",
-        released: false,
-        installable: false,
+        released: V4_API_DISCOVERY.cliReleased,
+        installable: V4_API_DISCOVERY.cliInstallable,
+        release: V4_API_DISCOVERY.cliRelease,
         liveEthereumVersion: "3.3.9",
         signsWalletTransactions: false,
         broadcastsWalletTransactions: false,
@@ -267,17 +275,17 @@ describe("Robinhood Chain V4 public self-serve release discovery", () => {
         finalityIndependent: true,
       },
       deploymentEvidence: {
-        chainDeploymentDescriptorDigest: null,
-        chainDeploymentId: null,
-        finalityPolicyDigest: null,
-        finalizedBlock: null,
-        finalizedEvidenceRef: null,
-        foundationSourceCommitment: null,
+        chainDeploymentDescriptorDigest: V4_API_DISCOVERY.chainDeploymentDescriptorDigest,
+        chainDeploymentId: V4_API_DISCOVERY.deployment?.chainDeploymentId ?? null,
+        finalityPolicyDigest: V4_API_DISCOVERY.deployment?.finality.policyDigest ?? null,
+        finalizedBlock: V4_API_DISCOVERY.deployment?.deploymentEvidence.blockNumber ?? null,
+        finalizedEvidenceRef: V4_API_DISCOVERY.deployment?.deploymentEvidence.evidenceDigest ?? null,
+        foundationSourceCommitment: V4_API_DISCOVERY.deployment?.foundationSourceCommitment ?? null,
       },
     });
   });
 
-  it("keeps public guides aligned with the pending-promotion boundary", () => {
+  it("keeps public guides aligned with the conditional public-release boundary", () => {
     const developerGuide = read("docs/public/developers/custom-launch.md");
     const rawGuide = read("public/developers/custom-launch-api-v1.md");
     const websiteGuide = read("app/docs/developers/custom-launch/page.tsx");
@@ -364,16 +372,19 @@ describe("Robinhood Chain V4 public self-serve release discovery", () => {
 
     expect(programmablePublicOpenApi["x-programmable-availability"].v4)
       .toMatchObject({
-        status: "release-candidate",
+        status: V4_API_DISCOVERY.status,
         runtimeStatus: "routes-deployed",
-        activationStage: "pending-public-discovery-promotion",
+        activationStage: V4_API_DISCOVERY.activationStage,
+      activationScope: V4_API_DISCOVERY.activationScope,
+      publication: V4_API_DISCOVERY.publication,
         targetLaunchPath: "public-self-serve",
         profileVersion: "4.0.0",
-        released: false,
-        installable: false,
-        releaseReady: false,
-        publicAuthorization: false,
-        publicWrites: false,
+        released: V4_API_DISCOVERY.cliReleased,
+        installable: V4_API_DISCOVERY.cliInstallable,
+        release: V4_API_DISCOVERY.cliRelease,
+        releaseReady: V4_API_DISCOVERY.releaseReady,
+        publicAuthorization: V4_API_DISCOVERY.publicAuthorization,
+        publicWrites: V4_API_DISCOVERY.publicWrites,
         chainId: 4663,
         caip2: "eip155:4663",
         cliWalletAuthority: false,

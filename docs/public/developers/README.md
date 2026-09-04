@@ -6,9 +6,10 @@ description: Read only contracts and verification rules for detecting Programmab
 
 Programmable has two separate developer surfaces. The Developer API at `https://developers.programmable.family` is read only, requires no API key and never authorizes a transaction. At `https://api.programmable.market`, authenticated public V3.3 general-hook creation and lifecycle reads accept wallet keys, partner roots and bounded partner subkeys. V2 and V1 history and schemas remain readable, while fresh POSTs return non-retryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY`; only V3.3 accepts new submissions. CLI and preflight checks prepare and classify exact bytes, while the API server independently enforces objective static hard blocks and exact Router simulation. Missing behavior execution leaves routability, liquidity and fee claims unverified; an authenticated executed failure blocks wallet handoff.
 
-Robinhood Chain Mainnet (`eip155:4663`) has a deployed V4 Router and backend routes. This release snapshot is
-`pending-public-discovery-promotion`: public writes, authorization and release readiness remain false until
-promotion. Deployed runtime is not activated discovery. Integrations may prepare against the
+Robinhood Chain Mainnet (`eip155:4663`) uses V4. Require `publicWrites: true`, `publicAuthorization: true` and
+`releaseReady: true` in both the V4 and chain 4663 entries of live discovery before authenticated preflight or
+submission. Stop if a gate is false or missing. Verify the immutable 4.0.0 CLI release evidence linked by discovery.
+The V4 request contract is published through the
 [V4 OpenAPI](https://programmable.market/openapi/custom-launch-v4.json) and
 [pack-config schema](https://programmable.market/schemas/custom-launch/v4/pack-config.json), using only
 `$PROGRAMMABLE_API_KEY`. The server selects the chain-bound policy profile; clients cannot select or bypass it.
@@ -20,9 +21,8 @@ The foundation source closure is pinned to
 deployment evidence. Sourcify v2 provider-native `match` is required; exact source authority comes from the separate protected-build/finalized-bytecode binding. Robinhood Blockscout remains optional, unproven and
 degraded; it cannot support an exact-source claim or block or revise finality.
 
-CLI `3.3.9` remains the installable release for live Ethereum V3. Package `4.0.0` is an unpublished Robinhood V4
-source candidate even though the Router and backend routes are deployed; this snapshot keeps
-`publicWrites: false`, `publicAuthorization: false` and `releaseReady: false`. Guard V4 status reads with
+CLI `3.3.9` remains the installable release for live Ethereum V3. Use one platform API key for its granted chains;
+Robinhood V4 uses CLI `4.0.0` after the public discovery and immutable-release checks pass. Guard V4 status reads with
 `programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until authorized`, stop for the
 controller to review, sign and broadcast the exact transaction, then poll the same command with `--until finalized`.
 The CLI never signs or broadcasts. V4 resources use `received`, `validating`, `action_required`, `authorized`,

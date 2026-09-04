@@ -8,11 +8,14 @@ coverY: 0
 
 Programmable is a launch platform for Uniswap v4 products. Classic turns a focused set of choices into a fixed supply token, a permanently locked ETH pool and creator rewards. Custom is the deterministic bundle model for products that need their own hook, application logic or execution graph.
 
-Classic is available from Create. Public V3.3 general-hook creation and credential-principal lifecycle reads accept wallet keys, partner roots and bounded partner subkeys on Ethereum Mainnet. V2 and V1 history and schemas remain readable, while fresh authenticated POSTs return nonretryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY`. Only V3.3 accepts new submissions. Legacy Registry and GitHub submission intake is closed. In every active wallet flow, the controller wallet reviews and signs its own transaction on the required network.
+Classic is available from Create. Public V3.3 general-hook creation and credential-principal lifecycle reads accept wallet keys, partner roots and bounded partner subkeys on Ethereum Mainnet. V2 and V1 history and schemas remain readable, while fresh authenticated POSTs return nonretryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY`. On Ethereum, only V3.3 accepts new submissions. Legacy Registry and GitHub submission intake is closed. In every active wallet flow, the controller wallet reviews and signs its own transaction on the required network.
 
-Robinhood Chain V4 Router and backend are deployed and ready and target a public self-serve launch path. This source
-snapshot remains `pending-public-discovery-promotion`; deployed runtime is not activated discovery. Require live
-`publicWrites: true`, `publicAuthorization: true` and `releaseReady: true` discovery before creating. The required policy and default configuration for new Robinhood V4 API Custom launches is
+Robinhood Chain V4 targets a public self-serve launch path. Read the live
+[discovery manifest](https://programmable.market/.well-known/programmable.json) and require `publicWrites: true`,
+`publicAuthorization: true` and `releaseReady: true` in both the V4 and chain 4663 entries. Stop while any gate is
+false or missing. Verify the immutable CLI 4.0.0 release coordinates published in discovery before creating a request.
+Use one platform API key for its granted chains; users separately review and sign their onchain transaction and pay gas.
+The required policy and default configuration for new Robinhood V4 API Custom launches is
 `20 bps` (`0.20%`, `2,000 ppm`) to `0xD88539d3c4C460136a733A3Fd60cf6BF269079da`. Existing launches and Ethereum
 are unchanged. This is not canonical onchain fee enforcement, charged-fee or revenue evidence, and fee-path absence is
 not itself a write blocker. External indexing, finality, source verification, market support and fee behavior remain
