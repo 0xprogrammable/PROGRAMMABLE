@@ -273,6 +273,7 @@ regexes = [
 
 [[allowlists]]
 description = "Late migration pins exact public token, recipient, runtime and permit-domain identities"
+targetRules = ["generic-api-key"]
 condition = "AND"
 regexTarget = "match"
 paths = [
@@ -296,6 +297,7 @@ regexes = [
 
 [[allowlists]]
 description = "Permit mock implements the two public ERC20 interfaces"
+targetRules = ["generic-api-key"]
 condition = "AND"
 regexTarget = "match"
 paths = ['''contracts/test/late-migration/mocks/IntakeV3Mocks\.sol''']
