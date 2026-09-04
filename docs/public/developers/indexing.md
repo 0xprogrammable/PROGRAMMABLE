@@ -5,8 +5,8 @@ description: Index Programmable launches with finality, cursor completeness and 
 # Index Programmable launches
 
 An Ethereum indexer can use the normalized v2 feed or reproduce Router records directly. Robinhood Chain V4 uses the
-separate deployed release-candidate feed described below. In every case, finality, cursor traversal and unknown data
-need explicit handling.
+separate chain-bound feed described below. In every case, finality, cursor traversal and unknown data need explicit
+handling.
 
 The normalized launch feed returns versioned records for Classic and Registry-verified Custom launches. Consumers should follow every cursor until completion, remove duplicate launch ids and retain records when optional price, chart or liquidity data is unavailable. A missing chart or quote is not permission to discard a valid launch record.
 
@@ -16,17 +16,19 @@ Price and liquidity data should carry its own source, timestamp, status and qual
 
 The Ethereum public status endpoint reports feed freshness, chain head, scan coverage and current counts. Production consumers should alert on lag and incomplete traversal instead of treating service availability as freshness.
 
-## Integrate Robinhood V4 before public discovery promotion
+## Integrate Robinhood V4
 
-Robinhood Chain Mainnet (`chainId: 4663`, `eip155:4663`) has a deployed Router, backend routes and stable
-[V4 OpenAPI contract](https://programmable.market/openapi/custom-launch-v4.json). You can generate types, validate
-feed fixtures, map ABI topics and build cursor, quality and reorg handling now. This release snapshot remains
-`pending-public-discovery-promotion` with `publicWrites: false`, `publicAuthorization: false` and
-`releaseReady: false`; deployed runtime and an HTTP `200` do not activate writes. Read
+Robinhood Chain Mainnet uses `chainId: 4663` and `eip155:4663`. Download the exact bytes of the
+[V4 OpenAPI contract](https://programmable.market/openapi/custom-launch-v4.json), compute their SHA-256 digest and
+require equality with the top-level `openApiSha256` in a ready chain response before generating types or validating
+data. A missing or mismatched digest must fail closed. Then validate the fixture and map the published ABI topics.
+Resolve current activation from
 [Programmable discovery](https://programmable.market/.well-known/programmable.json),
-`GET /v4/chains/4663/capabilities` and `GET /v4/chains/4663/readiness` as separate live authorities. The fixture's
-empty response is a schema-valid parser vector, not a production observation. Always fetch the live feed. The public
-Developer API v2 remains an Ethereum-only surface.
+`GET /v4/chains/4663/capabilities` and `GET /v4/chains/4663/readiness`; those are separate live authorities. Treat
+creation as active only when discovery reports `publicWrites: true`, `publicAuthorization: true` and
+`releaseReady: true`, and readiness reports the matching ready release. A deployed route or HTTP `200` alone does not
+activate writes. The fixture's empty response is a schema-valid parser vector, not a production observation. Always
+fetch the live feed.
 
 For provenance discovery, read the public, keyless
 `GET /v4/chains/4663/finalized-custom-launches` feed. Validate every response and item against both chain identifiers,
@@ -66,11 +68,13 @@ then apply these rules:
   larger. A malformed eligible V3 candidate fails the entire endpoint request; consumers must not accept a row-wise
   quarantine or partial result.
 
-At this source snapshot, no per-launch protected exact-source composite is proven and persisted for public promotion,
-so this guide claims no existing public item. That is pending source-authority capture, persistence and promotion—not
-an RPC-provider outage. Sourcify's observation carries `releaseAuthority: false`; optional Robinhood Blockscout cannot
-satisfy or block the authority and cannot revise finality. Separately, the changed V4 OpenAPI bytes still leave the
-clean-room release binding at `V4_RELEASE_BINDING_NOT_READY` until refreshed release hashes close.
+Do not infer a public item from the empty fixture. An item exists only when the live feed returns it with the complete
+Router, finality and protected exact-source composite described here. A Sourcify observation with
+`releaseAuthority: false` is not publication authority; optional Robinhood Blockscout cannot satisfy or block that
+authority and cannot revise finality. The machine-contract hashes are already refreshed. Release readiness instead
+depends on six independent evidence gates: chain deployment, profile, release manifest, source closure, finality and
+backend release evidence. Resolve their current result from the live readiness authority rather than copied status
+text.
 
 The request accepts an optional `limit` from 1 to 25 and defaults to 10. The response returns an opaque `nextCursor`;
 pass each non-null value back unchanged as `cursor` and never decode or construct one. Declare traversal complete only

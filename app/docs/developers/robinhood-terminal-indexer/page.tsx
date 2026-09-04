@@ -21,8 +21,7 @@ const CAPABILITIES_URL = `${API_ORIGIN}/v4/chains/4663/capabilities`;
 const READINESS_URL = `${API_ORIGIN}/v4/chains/4663/readiness`;
 const FINALIZED_FEED_URL = `${API_ORIGIN}/v4/chains/4663/finalized-custom-launches`;
 const OPENAPI_URL = "/openapi/custom-launch-v4.json";
-const ABI_URL =
-  "/contracts/robinhood/ProgrammableLaunchStampRouterV1.abi.json";
+const ABI_URL = "/contracts/robinhood/ProgrammableLaunchStampRouterV1.abi.json";
 const FIXTURE_URL = "/fixtures/robinhood-terminal-indexer-v1.json";
 
 const ROUTER = "0x34965F2A2ee9254522232C32F02056E92BE0C98a";
@@ -56,8 +55,7 @@ const events = [
   },
   {
     name: "ProgrammableComponentStampedV1",
-    signature:
-      "ProgrammableComponentStampedV1(bytes32,address,uint8,bytes32)",
+    signature: "ProgrammableComponentStampedV1(bytes32,address,uint8,bytes32)",
     topic0:
       "0x8147265e7396d6400cee8d049456a1f7438fdfbe2a7c81c976d51ba67e52ff4b",
     indexed: "launchId, component, kind",
@@ -119,6 +117,26 @@ import {
  * Never replace that function with a kind-only launchStamp read.
  */
 const origin = "${API_ORIGIN}";
+const readinessResponse = await fetch("${READINESS_URL}", {
+  headers: { accept: "application/json" },
+});
+if (!readinessResponse.ok) throw new Error("UNAVAILABLE: release readiness");
+const readiness = await readinessResponse.json() as {
+  status?: string;
+  openApiSha256?: string;
+};
+if (readiness.status !== "ready") {
+  throw new Error("UNAVAILABLE: release readiness is not ready");
+}
+
+const openApiResponse = await fetch(new URL("${OPENAPI_URL}", "https://programmable.market"));
+if (!openApiResponse.ok) throw new Error("UNAVAILABLE: V4 OpenAPI");
+const openApiBytes = new Uint8Array(await openApiResponse.arrayBuffer());
+const openApiSha256 = "sha256:" + createHash("sha256").update(openApiBytes).digest("hex");
+if (readiness.openApiSha256 !== openApiSha256) {
+  throw new Error("UNAVAILABLE: V4 OpenAPI/readiness digest mismatch");
+}
+
 const abiUrl = new URL("${ABI_URL}", "https://programmable.market");
 const abiResponse = await fetch(abiUrl);
 if (!abiResponse.ok) throw new Error("UNAVAILABLE: Router ABI");
@@ -293,11 +311,11 @@ export default function RobinhoodTerminalIndexerPage() {
         <div className={styles.sectionIntro}>
           <h2>Resolve activation from the live authority</h2>
           <p>
-            This contract targets public self-serve Robinhood Custom launches.
-            The Router and backend are deployed and ready. At this source
-            snapshot, public activation is{" "}
-            <code>pending-public-discovery-promotion</code>. Documentation and a
-            reachable route do not prove that production writes are active.
+            This contract covers public self-serve Robinhood Custom launches.
+            Resolve current availability from the live discovery and readiness
+            authorities before every create or ingestion session. Documentation
+            and a reachable route do not prove that production writes are
+            active.
           </p>
         </div>
 
@@ -314,9 +332,10 @@ export default function RobinhoodTerminalIndexerPage() {
             <dd>Public self-serve, with separate controller-wallet review</dd>
           </div>
           <div>
-            <dt>Public activation at this source snapshot</dt>
+            <dt>Public activation authority</dt>
             <dd>
-              <code>pending-public-discovery-promotion</code>
+              Live discovery <code>customLaunchApi.versions.v4</code> plus the
+              chain-bound readiness response
             </dd>
           </div>
           <div>
@@ -330,29 +349,31 @@ export default function RobinhoodTerminalIndexerPage() {
           <div>
             <dt>Indexer read path</dt>
             <dd>
-              Route and contract prepared; no public item is claimed until live
-              feed, finality and authoritative exact-source eligibility verify
+              Require a schema-valid feed response with{" "}
+              <code>quality.status: ready</code>; verify finality and
+              authoritative exact-source eligibility independently for every
+              item
             </dd>
           </div>
           <div>
-            <dt>Current public-item evidence</dt>
+            <dt>Public-item authority</dt>
             <dd>
-              No per-launch protected exact-source composite is yet proven and
-              persisted for public promotion at this source snapshot
+              The live finalized feed only, followed by the Router, finality and
+              exact-source verification steps in this guide
             </dd>
           </div>
           <div>
-            <dt>Clean-room release binding</dt>
+            <dt>Release binding</dt>
             <dd>
-              <code>V4_RELEASE_BINDING_NOT_READY</code> until the changed
-              OpenAPI bytes are closed into refreshed release hashes
+              Require the source commit, source tree, policy and deployment
+              evidence returned by the live readiness authority
             </dd>
           </div>
           <div>
             <dt>Required fee policy</dt>
             <dd>
-              <code>20 bps</code> · <code>2,000 ppm</code> · recipient{" "}
-              <code>0xD88539d3c4C460136a733A3Fd60cf6BF269079da</code>
+              Resolve the complete current value from live discovery at{" "}
+              <code>customLaunchApi.versions.v4.platformFeePolicy</code>
             </dd>
           </div>
           <div>
@@ -364,10 +385,10 @@ export default function RobinhoodTerminalIndexerPage() {
           <div>
             <dt>Fixture feed example</dt>
             <dd>
-              <code>0</code> eligible V3-finalized, authoritatively source-verified
-              candidates / <code>0</code> published / <code>0</code> quarantined.
-              This is a schema-valid parser vector, not a production observation.
-              Always fetch the live feed.
+              <code>0</code> eligible V3-finalized, authoritatively
+              source-verified candidates / <code>0</code> published /{" "}
+              <code>0</code> quarantined. This is a schema-valid parser vector,
+              not a production observation. Always fetch the live feed.
             </dd>
           </div>
         </dl>
@@ -378,23 +399,24 @@ export default function RobinhoodTerminalIndexerPage() {
             Before creating, fetch{" "}
             <a href={WELL_KNOWN_URL}>the live discovery document</a> and the
             readiness authority. A <code>ready</code> runtime response proves
-            service composition, not write activation. The required 20 bps
-            default configuration is policy; it is not proof of canonical
+            service composition, not write activation. The current global fee
+            configuration comes from discovery; it is not proof of canonical
             onchain enforcement, a charged fee or platform revenue.
           </p>
         </aside>
 
         <aside className={styles.callout}>
-          <strong>This is not a provider-outage claim</strong>
+          <strong>Source-verification authority</strong>
           <p>
-            Sourcify&apos;s provider-native match is a non-authoritative observation
-            with <code>releaseAuthority: false</code>. Public finalized eligibility
-            additionally requires a protected source closure, reproducible hosted
-            build and compiler settings, finalized creation transaction, and exact
-            creation/runtime bytecode binding for every launch component. Robinhood
-            Blockscout is optional and cannot satisfy or block that authority or
-            revise finality. Until that per-launch evidence is captured, persisted
-            and promoted, do not infer a public feed item.
+            Sourcify&apos;s provider-native match is a non-authoritative
+            observation with <code>releaseAuthority: false</code>. Public
+            finalized eligibility additionally requires a protected source
+            closure, reproducible hosted build and compiler settings, finalized
+            creation transaction, and exact creation/runtime bytecode binding
+            for every launch component. Robinhood Blockscout is optional and
+            cannot satisfy or block that authority or revise finality. Until
+            that per-launch evidence is captured, persisted and promoted, do not
+            infer a public feed item.
           </p>
         </aside>
       </section>
@@ -403,10 +425,10 @@ export default function RobinhoodTerminalIndexerPage() {
         <div className={styles.sectionIntro}>
           <h2>Use one chain-bound identity and label</h2>
           <p>
-            Require the server-authored <code>platformId: programmable</code> and{" "}
-            <code>category: custom</code>, then independently verify their Router
-            launch kind <code>1</code> binding. Names, symbols, factories and hook
-            addresses are not provenance by themselves.
+            Require the server-authored <code>platformId: programmable</code>{" "}
+            and <code>category: custom</code>, then independently verify their
+            Router launch kind <code>1</code> binding. Names, symbols, factories
+            and hook addresses are not provenance by themselves.
           </p>
         </div>
 
@@ -436,9 +458,7 @@ export default function RobinhoodTerminalIndexerPage() {
           <div>
             <dt>Durable key</dt>
             <dd className={styles.breakableValue}>
-              <code>
-                (eip155:4663, Router address, onchain.routerLaunchId)
-              </code>
+              <code>(eip155:4663, Router address, onchain.routerLaunchId)</code>
             </dd>
           </div>
         </dl>
@@ -544,15 +564,15 @@ export default function RobinhoodTerminalIndexerPage() {
         <p className={styles.bodyCopy}>
           Download the <a href={ABI_URL}>complete Router ABI</a> and hash its
           exact served bytes before decoding. The hosted-file digest covers
-          exact bytes. The profile digest hashes one compact{" "}
-          <code>jq -cS</code> serialization plus its trailing LF; the two
-          digests are intentionally not interchangeable. The fixture records
-          both. At <code>onchain.l2Inclusion.blockNumber</code>, also
-          match the Router runtime and immutable <code>CHAIN_ID</code>, permit
-          authority, Graph Factory and PoolManager getters to the live
-          capabilities document. Confirm the L2 receipt block hash and event
-          positions first. Do not use the deprecated flat checkpoint projection
-          for these chain-4663 reads.
+          exact bytes. The profile digest hashes one compact <code>jq -cS</code>{" "}
+          serialization plus its trailing LF; the two digests are intentionally
+          not interchangeable. The fixture records both. At{" "}
+          <code>onchain.l2Inclusion.blockNumber</code>, also match the Router
+          runtime and immutable <code>CHAIN_ID</code>, permit authority, Graph
+          Factory and PoolManager getters to the live capabilities document.
+          Confirm the L2 receipt block hash and event positions first. Do not
+          use the deprecated flat checkpoint projection for these chain-4663
+          reads.
         </p>
       </section>
 
@@ -633,12 +653,15 @@ export default function RobinhoodTerminalIndexerPage() {
           <li>
             <a href={WELL_KNOWN_URL}>Public release and activation discovery</a>
             <span>
-              Resolve the current V4 write and authorization gates before create.
+              Resolve the current V4 write and authorization gates before
+              create.
             </span>
           </li>
           <li>
             <a href={CAPABILITIES_URL}>Capabilities and chain bindings</a>
-            <span>Resolve routes, contracts, profile and current safety flags.</span>
+            <span>
+              Resolve routes, contracts, profile and current safety flags.
+            </span>
           </li>
           <li>
             <a href={READINESS_URL}>Runtime release identity</a>
@@ -654,23 +677,34 @@ export default function RobinhoodTerminalIndexerPage() {
           </li>
           <li>
             <a href={OPENAPI_URL}>Robinhood V4 OpenAPI</a>
-            <span>Validate the full response envelope and nested evidence.</span>
+            <span>
+              Hash the exact bytes, require equality with readiness{" "}
+              <code>openApiSha256</code>, then validate the full response.
+            </span>
           </li>
           <li>
             <a download href={FIXTURE_URL}>
               Download the terminal integration fixture
             </a>
             <span>
-              Exact bindings, topics, lifecycle, activation gate, required fee
-              policy and a schema-valid empty-feed vector for fail-closed tests.
+              Exact bindings, topics, lifecycle, live-authority paths and a
+              schema-valid empty-feed vector for fail-closed tests. It carries
+              no production status or current fee values.
             </span>
           </li>
         </ul>
 
         <ol className={styles.steps}>
           <li>
-            Fetch <code>?limit=25</code>. Do not cache beyond the response&apos;s
-            HTTP policy without preserving an explicit observed time.
+            Before generating types or validating data, hash the exact hosted
+            OpenAPI bytes and require equality with the top-level{" "}
+            <code>openApiSha256</code> in a <code>ready</code> response. A
+            missing or mismatched digest is <code>UNAVAILABLE</code>.
+          </li>
+          <li>
+            Fetch <code>?limit=25</code>. Do not cache beyond the
+            response&apos;s HTTP policy without preserving an explicit observed
+            time.
           </li>
           <li>
             Require <code>chainId: &quot;4663&quot;</code> and{" "}
@@ -682,16 +716,16 @@ export default function RobinhoodTerminalIndexerPage() {
           </li>
           <li>
             Stop and return <code>UNAVAILABLE</code> when the endpoint request
-            fails. A malformed eligible V3 candidate must fail the whole request;
-            do not accept a row-wise quarantine or partial success.
+            fails. A malformed eligible V3 candidate must fail the whole
+            request; do not accept a row-wise quarantine or partial success.
           </li>
           <li>
-            Treat <code>sourceRowCount</code>, <code>publishedRowCount</code> and{" "}
-            <code>quarantinedRowCount</code> as global finalized-dataset totals,
-            not page lengths. A successful response must be <code>ready</code>,
-            with source equal to published and quarantined equal to zero. The
-            current <code>launches.length</code> may be smaller than published but
-            must never be larger.
+            Treat <code>sourceRowCount</code>, <code>publishedRowCount</code>{" "}
+            and <code>quarantinedRowCount</code> as global finalized-dataset
+            totals, not page lengths. A successful response must be{" "}
+            <code>ready</code>, with source equal to published and quarantined
+            equal to zero. The current <code>launches.length</code> may be
+            smaller than published but must never be larger.
           </li>
         </ol>
       </section>
@@ -700,9 +734,9 @@ export default function RobinhoodTerminalIndexerPage() {
         <div className={styles.sectionIntro}>
           <h2>Keep request status separate from finality</h2>
           <p>
-            Request history has a lifecycle <code>status</code>. A finalized-feed
-            item does not. Its route and schema establish the feed class; require{" "}
-            <code>onchain.terminal: true</code> and{" "}
+            Request history has a lifecycle <code>status</code>. A
+            finalized-feed item does not. Its route and schema establish the
+            feed class; require <code>onchain.terminal: true</code> and{" "}
             <code>onchain.checkpointType: ethereum_finalized</code>, plus
             non-null V3 <code>l2Inclusion</code>, <code>l1Posting</code> and{" "}
             <code>l1FinalizedCheckpoint</code> evidence on the item.
@@ -751,37 +785,38 @@ export default function RobinhoodTerminalIndexerPage() {
             Use <code>onchain.l2Inclusion</code> for the exact chain-4663
             transaction, block and Router event positions. Replay and match the
             receipt before reading the Router at that block; the route-event log
-            index must precede the launch-event log index in that receipt. Require
-            the top-level <code>onchain.transactionHash</code> to equal the nested
-            L2 transaction hash.
+            index must precede the launch-event log index in that receipt.
+            Require the top-level <code>onchain.transactionHash</code> to equal
+            the nested L2 transaction hash.
           </li>
           <li>
-            Use <code>onchain.l1Posting</code> only for the Ethereum batch-posting
-            event and <code>onchain.l1FinalizedCheckpoint</code> only for the
-            common finalized checkpoint. Require rollup{" "}
+            Use <code>onchain.l1Posting</code> only for the Ethereum
+            batch-posting event and <code>onchain.l1FinalizedCheckpoint</code>{" "}
+            only for the common finalized checkpoint. Require rollup{" "}
             <code>0x23A19d23e89166adedbDcB432518AB01e4272D94</code>,
             SequencerInbox{" "}
-            <code>0xBd0D173EEb87D57A09521c24388a12789F33ba96</code>,
-            and chain <code>eip155:1</code>. Its ordered provider readbacks are{" "}
+            <code>0xBd0D173EEb87D57A09521c24388a12789F33ba96</code>, and chain{" "}
+            <code>eip155:1</code>. Its ordered provider readbacks are{" "}
             <code>drpc / drpc.org</code> then{" "}
             <code>quicknode / quicknode.com</code>; bind them to the chain
             deployment&apos;s Ethereum-finality evidence and keep all L1
             coordinates separate from the L2 receipt.
           </li>
           <li>
-            The flat <code>onchain.blockNumber</code>, <code>blockHash</code> and{" "}
-            <code>logIndex</code> fields are a deprecated stage projection. They
-            are not a transaction locator; at the finalized stage the log index
-            belongs to <code>l1Posting</code>, not the finalized-checkpoint block.
-            Never combine them with the top-level L2 transaction hash.
+            The flat <code>onchain.blockNumber</code>, <code>blockHash</code>{" "}
+            and <code>logIndex</code> fields are a deprecated stage projection.
+            They are not a transaction locator; at the finalized stage the log
+            index belongs to <code>l1Posting</code>, not the
+            finalized-checkpoint block. Never combine them with the top-level L2
+            transaction hash.
           </li>
           <li>
             If any nested coordinate is missing or disagrees with its provider
-            readback, finality or provenance is <code>INDETERMINATE</code> on the
-            affected axis. Historical V2 evidence remains private authenticated
-            history and is never a finalized public-feed candidate. Only a
-            separate, fully revalidated canonical V3-finalized projection may
-            qualify on its own evidence.
+            readback, finality or provenance is <code>INDETERMINATE</code> on
+            the affected axis. Historical V2 evidence remains private
+            authenticated history and is never a finalized public-feed
+            candidate. Only a separate, fully revalidated canonical V3-finalized
+            projection may qualify on its own evidence.
           </li>
           <li>
             Require <code>sourceVerification.status: exact_match</code> and an{" "}
@@ -808,9 +843,9 @@ export default function RobinhoodTerminalIndexerPage() {
           <h2>Return explicit, independent result axes</h2>
           <p>
             Provenance, authoritative source verification, security, finality,
-            market support and fee behavior are separate facts. Feed availability
-            and write activation are separate again. One axis must never fill or
-            erase another.
+            market support and fee behavior are separate facts. Feed
+            availability and write activation are separate again. One axis must
+            never fill or erase another.
           </p>
         </div>
 
@@ -839,10 +874,10 @@ export default function RobinhoodTerminalIndexerPage() {
               <code>UNAVAILABLE</code>
             </dt>
             <dd>
-              Use on the affected availability, write-activation or fee axis.
-              It does not turn an independently proven stamp into unavailable
-              provenance. An explicit false create gate is{" "}
-              <code>INACTIVE</code>, not <code>UNAVAILABLE</code>.
+              Use on the affected availability, write-activation or fee axis. It
+              does not turn an independently proven stamp into unavailable
+              provenance. An explicit false create gate is <code>INACTIVE</code>
+              , not <code>UNAVAILABLE</code>.
             </dd>
           </div>
           <div>
@@ -852,8 +887,8 @@ export default function RobinhoodTerminalIndexerPage() {
             <dd>
               Use on provenance or finality when its runtime, ABI, provider,
               required V3 L2/L1 coordinate or finality evidence is missing or
-              disagrees. Do not use it as a synonym for{" "}
-              <code>NOT_STAMPED</code>.
+              disagrees. Do not use it as a synonym for <code>NOT_STAMPED</code>
+              .
             </dd>
           </div>
         </dl>
@@ -885,19 +920,20 @@ export default function RobinhoodTerminalIndexerPage() {
           <article>
             <h3>Platform fee</h3>
             <p className={styles.bodyCopy}>
-              The required policy and default configuration for new Robinhood
-              V4 API Custom launches is <code>20 bps</code> to{" "}
-              <code>0xD88539d3c4C460136a733A3Fd60cf6BF269079da</code>
-              . It does not change existing launches or Ethereum. Report actual
-              fee behavior as <code>UNAVAILABLE</code> unless separately proven:
-              basis, currency, accounting, rounding, accrual and claim mechanics
-              remain null, while canonical onchain enforcement and revenue are
-              not guaranteed. Do not copy this global new-launch default onto a
-              finalized feed row: per-launch applicability remains{" "}
-              <code>UNVERIFIED</code> unless the backend publishes an explicit
-              launch binding. Do not infer that a direct Router transaction or
-              any path outside the V4 API carries the policy. Fee-path absence is
-              not a write-activation blocker.
+              Do not hardcode a rate or recipient from this page or the fixture.
+              Resolve the current global requirement from live discovery at{" "}
+              <code>customLaunchApi.versions.v4.platformFeePolicy</code> and
+              preserve its rate, percentage, recipient, scope and enforcement
+              fields together. Report actual fee behavior as{" "}
+              <code>UNAVAILABLE</code> unless separately proven: basis,
+              currency, accounting, rounding, accrual and claim mechanics may
+              remain unknown, while canonical onchain enforcement and revenue
+              are not guaranteed. Do not copy the global policy onto a finalized
+              feed row: per-launch applicability remains <code>UNVERIFIED</code>{" "}
+              unless the backend publishes an explicit launch binding. Do not
+              infer that a direct Router transaction or any path outside the V4
+              API carries the policy. Fee-path absence is not a write-activation
+              blocker.
             </p>
           </article>
         </div>
@@ -942,10 +978,12 @@ export default function RobinhoodTerminalIndexerPage() {
         <aside className={styles.callout}>
           <strong>Production rule</strong>
           <p>
-            Validate the complete OpenAPI schema, not only the fields shown in
-            the short example. The current list and item schemas are closed:
-            reject unknown fields and regenerate your parser for a published
-            schema change. A missing required binding must fail closed.
+            First require the exact hosted OpenAPI byte digest to equal
+            readiness <code>openApiSha256</code>. Then validate the complete
+            schema, not only the fields shown in the short example. The current
+            list and item schemas are closed: reject unknown fields and
+            regenerate your parser for a published schema change. A missing
+            required binding must fail closed.
           </p>
         </aside>
       </section>
