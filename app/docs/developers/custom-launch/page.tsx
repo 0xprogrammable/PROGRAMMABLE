@@ -7,7 +7,7 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Custom Launch API · Programmable",
   description:
-    "Package, submit and track live Ethereum V3 launches, and inspect the deployed Robinhood Chain V4 release candidate.",
+    "Package, submit and track live Ethereum V3 launches, and use verified Robinhood Chain V4 release discovery.",
   alternates: { canonical: "/docs/developers/custom-launch" },
 };
 
@@ -214,10 +214,9 @@ export default function CustomLaunchApiDocsPage() {
         schemas remain readable, but new requests are permanently write fenced
         with nonretryable{" "}
         <code>CUSTOM_LAUNCH_V2_READ_ONLY</code> and{" "}
-        <code>CUSTOM_LAUNCH_V1_READ_ONLY</code>. Only V3.3 accepts new submissions.
-        Robinhood V4 version 4.0.0 is not a published CLI release. Its Router
-        and backend routes are deployed as a release candidate awaiting public
-        discovery promotion.
+        <code>CUSTOM_LAUNCH_V1_READ_ONLY</code>. On Ethereum, only V3.3 accepts new submissions.
+        For Robinhood V4, read the live discovery manifest and use version 4.0.0
+        only after its public release gates and immutable CLI evidence pass.
       </p>
 
       <section id="quickstart">
@@ -304,23 +303,25 @@ export default function CustomLaunchApiDocsPage() {
 
       <section id="robinhood-v4">
         <div className={styles.sectionIntro}>
-          <h2>Treat Robinhood V4 as a deployed release candidate</h2>
+          <h2>Check Robinhood V4 availability</h2>
           <p>
             Robinhood Chain Mainnet uses <code>chainId: 4663</code> and{" "}
-            <code>eip155:4663</code>. The Router and backend routes are
-            deployed, while this release snapshot remains{" "}
-            <code>pending-public-discovery-promotion</code> with{" "}
+            <code>eip155:4663</code>. Read both the V4 and chain entries in the{" "}
+            <a href="/.well-known/programmable.json">live discovery manifest</a>.
+            Stop before authenticated preflight or submission if either entry reports{" "}
             <code>publicWrites: false</code>,{" "}
-            <code>publicAuthorization: false</code> and{" "}
-            <code>releaseReady: false</code>. Deployed runtime is not activated
-            public discovery.
+            <code>publicAuthorization: false</code> or{" "}
+            <code>releaseReady: false</code>, or a required field is missing.
+            When all three gates are true in both entries, verify and install the
+            immutable CLI release published in discovery.
           </p>
         </div>
 
         <p className={styles.bodyCopy}>
           CLI <code>3.3.9</code> remains the installable release for live Ethereum
-          V3. Package version <code>4.0.0</code> in the reviewed source tree is a
-          Robinhood V4 candidate only. Its{" "}
+          V3. Robinhood V4 uses <code>4.0.0</code> after public activation.
+          Verify its release manifest, exact source commit and tarball checksum.
+          The{" "}
           <a href="/openapi/custom-launch-v4.json">V4 OpenAPI</a>,{" "}
           <a href="/schemas/custom-launch/v4/pack-config.json">
             pack-config schema
@@ -329,9 +330,9 @@ export default function CustomLaunchApiDocsPage() {
           <a href="/schemas/custom-launch/v4/source-verification-status.json">
             source-verification schema
           </a>{" "}
-          describe the release candidate. They are not proof of current public
-          activation, write authorization or CLI installability; re-read live
-          discovery before use.
+          describe the V4 request contract. Re-read live discovery and current
+          capabilities before use. Your platform API key authorizes requests;
+          your wallet separately signs the onchain transaction and pays gas.
         </p>
 
         <dl className={`${styles.resultList} ${styles.lifecycleList}`}>

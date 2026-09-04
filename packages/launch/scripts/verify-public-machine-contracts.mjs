@@ -1208,11 +1208,12 @@ assertV4ListEnvelope(
   "CustomLaunchFinalizedListV4",
 );
 
-const [packageManifestSource, shrinkwrapSource, licenseSource, readmeSource] = await Promise.all([
+const [packageManifestSource, shrinkwrapSource, licenseSource, readmeSource, v4ExampleReadmeSource] = await Promise.all([
   readFile(path.join(packageRoot, "package.json"), "utf8"),
   readFile(path.join(packageRoot, "npm-shrinkwrap.json"), "utf8"),
   readFile(path.join(packageRoot, "LICENSE"), "utf8"),
   readFile(path.join(packageRoot, "README.md"), "utf8"),
+  readFile(path.join(packageRoot, "examples/robinhood-v4-no-broadcast/README.md"), "utf8"),
 ]);
 const packageManifest = parseStrictJson(packageManifestSource);
 const shrinkwrap = parseStrictJson(shrinkwrapSource, { maximumBytes: 5_000_000 });
@@ -1245,26 +1246,8 @@ assert.match(
   /published CLI `3\.3\.9`/u,
   "packaged README must identify the exact published V3 CLI",
 );
-assert.match(
-  readmeSource,
-  /Package version `4\.0\.0`[\s\S]{0,180}unpublished pre-release source\s+candidate/u,
-  "packaged README must identify V4 as an unpublished pre-release source candidate",
-);
-assert.match(
-  readmeSource,
-  /Router and backend routes are deployed,[\s\S]{0,240}pending-public-discovery-promotion/u,
-  "packaged README must distinguish deployed V4 routes from pending public discovery promotion",
-);
-assert.match(
-  readmeSource,
-  /`releaseReady: false`/u,
-  "packaged README must retain the negative V4 release binding",
-);
-assert.doesNotMatch(
-  readmeSource,
-  /releases\/download\/programmable-launch-v4\.0\.0/u,
-  "packaged README must not invent a V4 release asset",
-);
+assertV4ReleaseInstructions(readmeSource, "packaged README");
+assertV4ReleaseInstructions(v4ExampleReadmeSource, "V4 example README");
 assert.doesNotMatch(
   readmeSource,
   /github\.com\/0xprogrammable(?:\/|$)/iu,
@@ -1275,6 +1258,45 @@ assert.match(
   /github\.com\/programmablehq\/PROGRAMMABLE\/releases\/download\/programmable-launch-v3\.3\.9/u,
   "packaged README must retain the canonical published V3 release URL",
 );
+
+export function assertV4ReleaseInstructions(source, label = "V4 release instructions") {
+  const sections = source.match(
+    /\*\*Blocked:\*\* ([\s\S]*?)\n\n\*\*Activated:\*\* ([\s\S]*?)(?:\n\n|$)/u,
+  );
+  assert.ok(sections, `${label} must separately explain blocked and conditional activation states`);
+  const [, blocked, activated] = sections;
+  assert.match(source, /customLaunchApi\.versions\.v4/u, `${label} must select V4 discovery`);
+  assert.match(source, /`chains`/u, `${label} must check chain discovery`);
+  assert.match(blocked, /^If either\b/u, `${label} must block if either discovery entry fails`);
+  assert.match(activated, /^Only when both discovery entries have\b/u,
+    `${label} must require both discovery entries before activation`);
+  for (const gate of ["publicAuthorization", "publicWrites", "releaseReady"]) {
+    assert.ok(blocked.includes(`\`${gate}: false\``), `${label} must block on ${gate}: false`);
+    assert.ok(activated.includes(`\`${gate}: true\``), `${label} must require ${gate}: true`);
+  }
+  assert.match(blocked, /missing/u, `${label} must block missing release evidence`);
+  assert.match(blocked, /stop before authenticated\s+preflight\s+or submission/u,
+    `${label} must stop before authenticated requests while blocked`);
+  assert.match(blocked, /pending-public-discovery-promotion/u,
+    `${label} must explain pending discovery without claiming it is permanent`);
+  for (const pattern of [
+    /published immutable GitHub Release `programmable-launch-v4\.0\.0`/u,
+    /`programmablehq\/PROGRAMMABLE`/u,
+    /release manifest/u,
+    /exact source commit/u,
+    /tarball checksum/u,
+    /If any check fails,\s*stop/u,
+    /conditional procedure does not assert today's release state/u,
+  ]) assert.match(activated, pattern, `${label} must bind activated use to verified release evidence`);
+  for (const [url] of source.matchAll(
+    /https:\/\/github\.com\/[^\s)<>]+\/releases\/download\/programmable-launch-v4\.0\.0\/[^\s)<>]+/gu,
+  )) {
+    assert.ok(activated.includes(url), `${label} must gate V4 download URLs inside conditional activation`);
+    assert.match(url,
+      /^https:\/\/github\.com\/programmablehq\/PROGRAMMABLE\/releases\/download\/programmable-launch-v4\.0\.0\/programmable-launch-4\.0\.0\.(?:tgz(?:\.sha256)?|release\.json|cdx\.json)$/u,
+      `${label} must use canonical exact-version V4 release assets`);
+  }
+}
 
 const forbiddenOriginFlag = "--api-origin";
 for (const relativePath of [

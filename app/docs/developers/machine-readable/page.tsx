@@ -11,7 +11,7 @@ import { DocsShell } from "@/components/docs-shell";
 export const metadata: Metadata = {
   title: "Machine-readable docs · Programmable",
   description:
-    "Live Ethereum V3 resources, the deployed Robinhood V4 release candidate, compatibility history, manifests and verification files.",
+    "Live Ethereum V3 resources, Robinhood V4 release discovery, compatibility history, manifests and verification files.",
   alternates: { canonical: "/docs/developers/machine-readable" },
 };
 
@@ -102,7 +102,7 @@ export default function MachineReadableDocsPage() {
               <code>/openapi/custom-launch-v4.json</code>
             </a>
             <span>
-              Deployed Robinhood Chain Mainnet V4 release-candidate contract.
+              Robinhood Chain Mainnet V4 contract.
               Public discovery promotion, writes and authorization remain
               inactive; this pointer is not activation evidence.
             </span>
@@ -132,7 +132,7 @@ export default function MachineReadableDocsPage() {
               <code>/schemas/custom-launch/v4/pack-config.json</code>
             </a>
             <span>
-              Source-candidate V4 pack-config schema for chain 4663. Check
+              V4 pack-config schema for chain 4663. Check
               discovery before any network action.
             </span>
           </li>
@@ -193,22 +193,23 @@ export default function MachineReadableDocsPage() {
 
       <section id="robinhood-v4">
         <div className={styles.sectionIntro}>
-          <h2>Read Robinhood V4 as a deployed release candidate</h2>
+          <h2>Read Robinhood V4 release discovery</h2>
           <p>
             CLI <code>3.3.9</code> remains the installable live Ethereum V3
-            release. The V4 Router and backend routes are deployed; package{" "}
-            <code>4.0.0</code> remains an unpublished source candidate.
+            release. For Robinhood V4, verify the immutable <code>4.0.0</code> release,
+            source commit, release manifest and tarball checksum from live discovery
+            before installing.
           </p>
         </div>
 
         <ul className={styles.checkList}>
           <li>
-            This release snapshot remains{" "}
-            <code>pending-public-discovery-promotion</code>, with{" "}
+            Stop before authenticated preflight or submission while either the V4 or
+            chain 4663 discovery entry reports{" "}
             <code>publicWrites: false</code>,{" "}
-            <code>publicAuthorization: false</code> and{" "}
-            <code>releaseReady: false</code>. Deployed runtime does not itself
-            activate public discovery.
+            <code>publicAuthorization: false</code> or{" "}
+            <code>releaseReady: false</code>, or a required field is missing.
+            Require all three gates to be true in both entries before proceeding.
           </li>
           <li>
             V4 uses <code>received</code>, <code>validating</code>,{" "}

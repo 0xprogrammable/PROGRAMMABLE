@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import yaml from "js-yaml";
 
 const workflow = readFileSync(new URL(
   "../../.github/workflows/programmable-launch-v4-clean-room.yml",
@@ -96,19 +97,61 @@ function contractFailures(workflowSource = workflow, runnerSource = runner) {
     "rawRequestRecorded: false",
     "rawTransactionRecorded: false",
     "transactionCalldataRecorded: false",
+    "https://api.programmable.market/v3/custom-launches",
+    "PLATFORM_KEY_DUAL_CHAIN_CHECK_FAILED",
+    "redirect: \"error\"",
     "producerProvenanceFromEnvironment",
     "buildCleanRoomRecoveryReceipt",
     "await writeFile(recoveryOutput, canonicalJsonBytes(recovery)",
     "await rm(stateDirectory, { recursive: true, force: true, maxRetries: 3 })",
   ];
-  return required.filter((text) => !implementation.includes(text));
+  const failures = required.filter((text) => !implementation.includes(text));
+  try {
+    const parsed = yaml.load(workflowSource);
+    const clean = parsed.jobs["clean-room"];
+    assert.deepEqual(clean.permissions, { actions: "read", attestations: "read", contents: "read" });
+    assert.equal(clean.environment, "production");
+    assert.equal(clean.steps.find(step => step.uses?.startsWith("actions/checkout@"))
+      .with["persist-credentials"], false);
+    assert.ok(clean.steps.find(step => step.name === "Set up exact npm").run.includes("npm@11.16.0"));
+    assert.equal(clean.outputs["evidence-artifact-id"], "${{ steps.upload-evidence.outputs.artifact-id }}");
+    for (const id of ["provenance", "evidence-provenance"]) {
+      const job = parsed.jobs[id];
+      assert.equal(job.environment, undefined);
+      assert.equal(JSON.stringify(job).includes("secrets."), false);
+      assert.deepEqual(job.permissions, { actions: "read", attestations: "write", contents: "read", "id-token": "write" });
+      assert.equal(job.steps.find(step => step.uses?.startsWith("actions/attest@"))
+        .with["create-storage-record"], true);
+    }
+    const success = parsed.jobs["evidence-provenance"];
+    assert.equal(success.if, "${{ needs.clean-room.result == 'success' }}");
+    assert.equal(success.needs, "clean-room");
+    const download = success.steps.find(step => step.uses?.startsWith("actions/download-artifact@"));
+    assert.equal(download.with["artifact-ids"], "${{ needs.clean-room.outputs.evidence-artifact-id }}");
+    assert.equal(download.with["digest-mismatch"], "error");
+    assert.equal(download.with["run-id"], undefined);
+    const validation = success.steps.find(step => step.name === "Reverify canonical successful evidence and exact producer binding").run;
+    assert.ok(validation.includes("await verifyEvidenceFile("));
+    assert.ok(validation.includes("assert.deepEqual(evidence.producer,"));
+    assert.ok(validation.includes("workflowSha: process.env.GITHUB_WORKFLOW_SHA"));
+    assert.ok(validation.includes("EVIDENCE_PRODUCER_BINDING_MISMATCH"));
+  } catch (error) { failures.push(`workflow job boundary: ${error.message}`); }
+  return failures;
 }
 
 test("V4 clean-room workflow closes release, credential, replay, and no-broadcast gates", () => {
   assert.deepEqual(contractFailures(), []);
   assert.equal(packageJson.scripts["release:custom-launch:v4:clean-room:test"],
     "node --test scripts/test/programmable-launch-v4-clean-room.test.mjs scripts/test/programmable-launch-v4-clean-room-workflow.test.mjs");
-  const provenanceJob = workflow.slice(workflow.indexOf("\n  provenance:"));
+  const provenanceJob = workflow.slice(workflow.indexOf("\n  provenance:"), workflow.indexOf("\n  evidence-provenance:"));
+  const evidenceJob = workflow.slice(workflow.indexOf("\n  evidence-provenance:"));
+  assert.equal(evidenceJob.includes("secrets."), false);
+  assert.equal(evidenceJob.includes("environment: production"), false);
+  assert.match(evidenceJob, /needs.clean-room.result == 'success'/u);
+  assert.match(evidenceJob, /verifyEvidenceFile/u);
+  assert.match(evidenceJob, /EVIDENCE_PRODUCER_BINDING_MISMATCH/u);
+  assert.match(evidenceJob, /artifact-ids: \$\{\{ needs.clean-room.outputs.evidence-artifact-id \}\}/u);
+  assert.match(evidenceJob, /evidence-attestation-\$\{\{ github.run_id \}\}-\$\{\{ github.run_attempt \}\}/u);
   const cleanRoomJob = workflow.slice(0, workflow.indexOf("\n  provenance:"));
   assert.equal(cleanRoomJob.includes("actions/attest@"), false);
   assert.equal(cleanRoomJob.includes("attestations: write"), false);
@@ -155,6 +198,10 @@ test("workflow contract mutations fail closed", () => {
     workflow.replace("Reconfirm protected production tip immediately before credential use", "Skip tip"),
     workflow.replace("verify-recovery", "echo recovery"),
     workflow.replace("create-storage-record: true", "create-storage-record: false"),
+    workflow.replace("needs.clean-room.result == 'success'", "always()"),
+    workflow.replace("digest-mismatch: error", "digest-mismatch: warn"),
+    workflow.replace("assert.deepEqual(evidence.producer,", "assert.ok(true, //"),
+    workflow.replace("artifact-ids: ${{ needs.clean-room.outputs.evidence-artifact-id }}", "name: any-evidence"),
   ];
   for (const [index, changed] of mutations.entries()) {
     assert.notDeepEqual(contractFailures(changed, runner), [], `workflow mutation ${index} escaped`);

@@ -197,14 +197,10 @@ test("public V4 example source contains no fabricated nonzero deployment address
     "utf8",
   );
   assert.match(readme, /never hard-codes Programmable deployment\s+addresses/u);
-  assert.match(
-    readme,
-    /Package version `4\.0\.0` remains\s+an unpublished, non-installable pre-release source candidate/u,
-  );
-  assert.match(readme, /`pending-public-discovery-promotion` with `releaseReady: false`/u);
-  assert.doesNotMatch(readme, /verified `@programmable\/launch` 4\.0\.0 release artifact/u);
-  assert.doesNotMatch(
-    readme,
-    /releases\/download\/programmable-launch-v4\.0\.0/u,
-  );
+  assert.match(readme, /For local preparation, use an exact reviewed checkout/u);
+  assert.match(readme, /verified `@programmable\/launch` `4\.0\.0` release package/u);
+  assert.match(readme, /\*\*Blocked:\*\*[\s\S]*`releaseReady: false`/u);
+  assert.match(readme, /\*\*Activated:\*\* Only when both discovery entries/u);
+  assert.match(readme, /`releaseReady: true`[\s\S]*published immutable GitHub Release/u);
+  assert.match(readme, /this example still never submits,\s+signs or broadcasts/u);
 });
