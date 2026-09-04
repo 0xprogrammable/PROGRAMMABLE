@@ -3353,18 +3353,6 @@ function ExploreCardSkeleton() {
               data-skeleton="true"
             />
           </div>
-          <div className={styles.runnerData}>
-            <span>
-              <span
-                className={`${styles.skeletonLine} ${styles.skeletonLabel}`}
-                data-skeleton="true"
-              />
-              <span
-                className={`${styles.skeletonLine} ${styles.skeletonValue}`}
-                data-skeleton="true"
-              />
-            </span>
-          </div>
         </div>
       </div>
       <div className={styles.runnerMeta}>
