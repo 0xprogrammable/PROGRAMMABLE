@@ -374,7 +374,7 @@ jobs:
       - name: Verify contracts
         if: needs.scope.outputs.contracts == 'true'
         env:
-          LATE_MIGRATION_FORK_RPC_URL: https://eth.drpc.org
+          LATE_MIGRATION_FORK_RPC_URL: https://eth-mainnet.public.blastapi.io
         run: npm run contracts:verify:ci
 
       - name: Check official Uniswap deployments

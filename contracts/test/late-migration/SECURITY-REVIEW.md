@@ -31,7 +31,7 @@ A supplied signature with token nonce `n` is accepted while the token nonce is `
 From `contracts/`:
 
 ```sh
-FOUNDRY_PROFILE=late-migration LATE_MIGRATION_FORK_RPC_URL=https://eth.drpc.org forge test --match-path 'test/late-migration/*'
+FOUNDRY_PROFILE=late-migration LATE_MIGRATION_FORK_RPC_URL=https://eth-mainnet.public.blastapi.io forge test --match-path 'test/late-migration/*'
 FOUNDRY_PROFILE=late-migration slither . --exclude-dependencies --filter-paths 'test|lib' --json ../work/contract-security/slither.json
 FOUNDRY_PROFILE=late-migration slither . --ignore-compile --exclude-dependencies --filter-paths 'test|lib' --print inheritance-graph,function-summary,vars-and-auth --json ../work/contract-security/slither-printers.json
 ```
