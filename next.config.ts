@@ -106,6 +106,12 @@ const nextConfig: NextConfig = {
   },
   async rewrites() {
     return {
+      beforeFiles: [
+        {
+          source: "/docs/developers/robinhood-terminal-indexer",
+          destination: "/developer-reference/robinhood-terminal-indexer",
+        },
+      ],
       fallback: [
         {
           source: "/docs",
