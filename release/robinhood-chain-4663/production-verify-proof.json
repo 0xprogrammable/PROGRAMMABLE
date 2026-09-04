@@ -6,27 +6,27 @@
   },
   "source": {
     "ref": "refs/heads/production",
-    "commitSha": "0acbfae6de4e5b7d33b0dfe7ec0e786d7e9eb8c3",
-    "treeSha": "a4d6ad16c5f8989959514db3f909681bc8784123"
+    "commitSha": "cbcabd3cfc166124485c6f7e7c3951810cf60dc1",
+    "treeSha": "971fef2085ed6dae93b48e19d44d68a5427dcdc6"
   },
   "scope": {
     "contracts": true,
-    "custom_v2": false,
-    "database": false,
-    "dependencies": false,
-    "indexer": false,
+    "custom_v2": true,
+    "database": true,
+    "dependencies": true,
+    "indexer": true,
     "interface": true,
-    "read_model": false
+    "read_model": true
   },
   "workflow": {
     "path": ".github/workflows/verify.yml",
     "ref": "programmablehq/programmable/.github/workflows/verify.yml@refs/heads/production",
-    "sourceCommitSha": "0acbfae6de4e5b7d33b0dfe7ec0e786d7e9eb8c3",
-    "fileSha256": "sha256:181257de9959fc55d670fdd48fe7cebedf30905228a03fdbccb72f3127838238"
+    "sourceCommitSha": "cbcabd3cfc166124485c6f7e7c3951810cf60dc1",
+    "fileSha256": "sha256:51987b34404a95b48d8d855acd0393747eef1ac2eab50d2b01b58db865486961"
   },
   "run": {
-    "id": 33362900756,
-    "attempt": 1,
+    "id": 33839208790,
+    "attempt": 3,
     "event": "push",
     "verificationMode": "change"
   },
@@ -40,20 +40,20 @@
     {
       "id": "custom-v2",
       "name": "Custom V2",
-      "required": false,
-      "conclusion": "skipped"
+      "required": true,
+      "conclusion": "success"
     },
     {
       "id": "indexer",
       "name": "Realtime indexer",
-      "required": false,
-      "conclusion": "skipped"
+      "required": true,
+      "conclusion": "success"
     },
     {
       "id": "database-pglite",
       "name": "Database (PGlite)",
-      "required": false,
-      "conclusion": "skipped"
+      "required": true,
+      "conclusion": "success"
     },
     {
       "id": "interface",

@@ -400,22 +400,22 @@
   "sourceClosure": {
     "repository": "programmablehq/PROGRAMMABLE",
     "branch": "production",
-    "revision": "0acbfae6de4e5b7d33b0dfe7ec0e786d7e9eb8c3",
-    "tree": "a4d6ad16c5f8989959514db3f909681bc8784123"
+    "revision": "cbcabd3cfc166124485c6f7e7c3951810cf60dc1",
+    "tree": "971fef2085ed6dae93b48e19d44d68a5427dcdc6"
   },
   "capture": {
     "schemaVersion": "programmable.robinhood-custom-launch.production-capture.v3",
-    "captureId": "5071e61ff015891d0b5100dd64746443a5179f6b41b234f4f7139e99e1091412",
-    "observedAt": "2026-08-31T06:23:29.745Z",
-    "expiresAt": "2026-08-31T06:38:29.745Z",
+    "captureId": "1314c97940c65955ae59ce3c4ae08610e563dc7735d29b855d967551e8aa3f57",
+    "observedAt": "2026-09-04T12:24:55.123Z",
+    "expiresAt": "2026-09-04T12:39:55.123Z",
     "profileDigest": "sha256:a3149f6a013eae1ca0fd932e0da0ddb8b8796d880ef53800830bfaaf49fe56c4",
     "sourceOrigin": {
       "repository": "programmablehq/PROGRAMMABLE",
       "repositoryId": "1314365508",
       "protectedRef": "refs/heads/production",
-      "revision": "0acbfae6de4e5b7d33b0dfe7ec0e786d7e9eb8c3",
-      "tree": "a4d6ad16c5f8989959514db3f909681bc8784123",
-      "sourceClosureDigest": "sha256:120a05b1e6b41c16fa4ae31f628cc17722e159fe53e7f2a4b701cb748684a30e"
+      "revision": "cbcabd3cfc166124485c6f7e7c3951810cf60dc1",
+      "tree": "971fef2085ed6dae93b48e19d44d68a5427dcdc6",
+      "sourceClosureDigest": "sha256:7a7f0d3fd4945051fd17700482ec1b519b44a54a35ee60f342cb4d21f9018172"
     },
     "l2ProviderEndpointCommitments": [
       "sha256:9b9a97c8ce3cd6a6f416d311ca5cbff1634c7616305aee648e0d568cab727d65",
@@ -428,7 +428,7 @@
           "providerId": "quicknode",
           "trustDomain": "quicknode.com",
           "authentication": "provider-credential",
-          "observedAt": "2026-08-31T06:23:29.745Z"
+          "observedAt": "2026-09-04T12:24:55.123Z"
         },
         "entries": [
           {
@@ -1702,7 +1702,7 @@
           "providerId": "alchemy",
           "trustDomain": "alchemy.com",
           "authentication": "provider-credential",
-          "observedAt": "2026-08-31T06:23:29.745Z"
+          "observedAt": "2026-09-04T12:24:55.123Z"
         },
         "entries": [
           {
@@ -2978,7 +2978,7 @@
           "providerId": "drpc",
           "trustDomain": "drpc.org",
           "authentication": "provider-credential",
-          "observedAt": "2026-08-31T06:23:29.745Z"
+          "observedAt": "2026-09-04T12:24:55.123Z"
         },
         "entries": [
           {
@@ -3089,10 +3089,10 @@
             ],
             "requestId": 5,
             "requestSha256": "sha256:237faada73d373f4592cc1693560d49dc5c1d395afe679782e6670206218ace8",
-            "normalizedResultSha256": "sha256:1afbe307d94ede7caac0879481607e170f35f60de4af89e8b5b9430fdf6b1725",
+            "normalizedResultSha256": "sha256:ec555a864667a997191c3b4451525c159f1844ab2deb250d038d56f679e1fd40",
             "result": {
-              "number": "0x18acbda",
-              "hash": "0x7854d8de2dd7c060180f2a2b2232854a74f360fe4bbe0ca2d22f392295c4c622",
+              "number": "0x18b42e8",
+              "hash": "0x1d2e1666a9447fa06ae6e516e51ed5df2ca3bfe54e59d6bfb3e3592b8b5fabf5",
               "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
             }
           },
@@ -3105,15 +3105,15 @@
             ],
             "requestId": 6,
             "requestSha256": "sha256:55f7b0988704c2aa0792aebd23334ab3a3e2bff44b52788a8e08b3791098ed37",
-            "normalizedResultSha256": "sha256:1afbe307d94ede7caac0879481607e170f35f60de4af89e8b5b9430fdf6b1725",
+            "normalizedResultSha256": "sha256:ec555a864667a997191c3b4451525c159f1844ab2deb250d038d56f679e1fd40",
             "result": {
-              "number": "0x18acbda",
-              "hash": "0x7854d8de2dd7c060180f2a2b2232854a74f360fe4bbe0ca2d22f392295c4c622",
+              "number": "0x18b42e8",
+              "hash": "0x1d2e1666a9447fa06ae6e516e51ed5df2ca3bfe54e59d6bfb3e3592b8b5fabf5",
               "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
             }
           }
         ],
-        "inventoryDigest": "sha256:f7619c8cb8927199703934391a950db9128ce3b40fc745403283b5780800161b"
+        "inventoryDigest": "sha256:e9aa18e3aff11edcff9896714f7397133e483cf4dc88662d8581a5ca4a9e32f5"
       },
       {
         "identity": {
@@ -3121,7 +3121,7 @@
           "providerId": "quicknode",
           "trustDomain": "quicknode.com",
           "authentication": "provider-credential",
-          "observedAt": "2026-08-31T06:23:29.745Z"
+          "observedAt": "2026-09-04T12:24:55.123Z"
         },
         "entries": [
           {
@@ -3232,10 +3232,10 @@
             ],
             "requestId": 5,
             "requestSha256": "sha256:237faada73d373f4592cc1693560d49dc5c1d395afe679782e6670206218ace8",
-            "normalizedResultSha256": "sha256:1afbe307d94ede7caac0879481607e170f35f60de4af89e8b5b9430fdf6b1725",
+            "normalizedResultSha256": "sha256:ec555a864667a997191c3b4451525c159f1844ab2deb250d038d56f679e1fd40",
             "result": {
-              "number": "0x18acbda",
-              "hash": "0x7854d8de2dd7c060180f2a2b2232854a74f360fe4bbe0ca2d22f392295c4c622",
+              "number": "0x18b42e8",
+              "hash": "0x1d2e1666a9447fa06ae6e516e51ed5df2ca3bfe54e59d6bfb3e3592b8b5fabf5",
               "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
             }
           },
@@ -3248,15 +3248,15 @@
             ],
             "requestId": 6,
             "requestSha256": "sha256:55f7b0988704c2aa0792aebd23334ab3a3e2bff44b52788a8e08b3791098ed37",
-            "normalizedResultSha256": "sha256:1afbe307d94ede7caac0879481607e170f35f60de4af89e8b5b9430fdf6b1725",
+            "normalizedResultSha256": "sha256:ec555a864667a997191c3b4451525c159f1844ab2deb250d038d56f679e1fd40",
             "result": {
-              "number": "0x18acbda",
-              "hash": "0x7854d8de2dd7c060180f2a2b2232854a74f360fe4bbe0ca2d22f392295c4c622",
+              "number": "0x18b42e8",
+              "hash": "0x1d2e1666a9447fa06ae6e516e51ed5df2ca3bfe54e59d6bfb3e3592b8b5fabf5",
               "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
             }
           }
         ],
-        "inventoryDigest": "sha256:f7619c8cb8927199703934391a950db9128ce3b40fc745403283b5780800161b"
+        "inventoryDigest": "sha256:e9aa18e3aff11edcff9896714f7397133e483cf4dc88662d8581a5ca4a9e32f5"
       }
     ],
     "sourcifyResponses": [
@@ -3270,7 +3270,7 @@
         "runtimeMatch": "match",
         "providerClassification": "PARTIAL_NO_CBOR_EXACT_BYTES",
         "providerReleaseAuthority": false,
-        "observedAt": "2026-08-31T06:23:29.745Z",
+        "observedAt": "2026-09-04T12:24:55.123Z",
         "providerMatchId": "46927733",
         "providerVerifiedAt": "2026-08-31T03:18:54Z",
         "providerCompiler": {
@@ -3292,7 +3292,7 @@
         "urlPath": "/server/v2/contract/4663/0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd?fields=all",
         "httpStatus": 200,
         "contentType": "application/json",
-        "normalizedVerificationDigest": "sha256:3d7189b414856b5aafe598eba1a52949ee031f62373827921b5ebcd7dbb62807"
+        "normalizedVerificationDigest": "sha256:91bd638be57e282d249fde1222708cd5e918d887882b3860ee1f96ad0dcdf196"
       },
       {
         "contract": "programmableLaunchStampRouter",
@@ -3304,7 +3304,7 @@
         "runtimeMatch": "match",
         "providerClassification": "PARTIAL_NO_CBOR_EXACT_BYTES",
         "providerReleaseAuthority": false,
-        "observedAt": "2026-08-31T06:23:29.745Z",
+        "observedAt": "2026-09-04T12:24:55.123Z",
         "providerMatchId": "46927732",
         "providerVerifiedAt": "2026-08-31T03:18:54Z",
         "providerCompiler": {
@@ -3326,10 +3326,10 @@
         "urlPath": "/server/v2/contract/4663/0x34965F2A2ee9254522232C32F02056E92BE0C98a?fields=all",
         "httpStatus": 200,
         "contentType": "application/json",
-        "normalizedVerificationDigest": "sha256:66646a1c4dc5e163d398fb1ad4d1b888ebd7afd22339ce967770488212009924"
+        "normalizedVerificationDigest": "sha256:5dc6d1a193dac2e96e7a42830499b0aa09b29f1bb6fe643d78ea4f9466476978"
       }
     ],
-    "captureInventoryDigest": "sha256:2fb8bba8fc4d7d04091a9e96648ef0167ed0b2405335019f0b9b8bf2508b3157",
-    "captureClosureDigest": "sha256:62b08c130a54993bdcd8169d18b40c7888f45a8bcbfc0216bf72b5f78bbfab00"
+    "captureInventoryDigest": "sha256:7f13c337d576d5820bcdd537a72799a49df2858f13a73b72cbca25d48a8a0a17",
+    "captureClosureDigest": "sha256:86f769caeccef49275ae0972007316f0b10953d2b0baa3a6fb313029fe87a25c"
   }
 }
