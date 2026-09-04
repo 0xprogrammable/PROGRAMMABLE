@@ -49,7 +49,7 @@ describe("topbar and Explore hero polish", () => {
     const navigationCss = read("components/site-navigation.module.css");
 
     expect(navigation).toContain(
-      "https://dexscreener.com/ethereum/0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0",
+      "https://dexscreener.com/robinhood/0x3df16f271060e4941c0386047def159f42e629dc0455db623c5b363eeacbcc1d",
     );
     expect(navigation).toContain(
       'src="/brand/platforms/dexscreener-mark-warm-ivory-v1.png"',

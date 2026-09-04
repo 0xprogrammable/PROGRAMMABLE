@@ -28,7 +28,7 @@ description: Official Programmable product, source, community and analytics link
 | X                       | [x.com/ProgrammableHQ](https://x.com/ProgrammableHQ)                                                               |
 | Discord                 | [discord.com/invite/programmable](https://discord.com/invite/programmable)                                         |
 | Dune                    | [Programmable analytics](https://dune.com/0xprogrammable6098/programmable-analytics)                               |
-| V4 token                | [Dexscreener](https://dexscreener.com/ethereum/0xd9ca22573437a06a12d5c757b151aa1a76265c1dfdde4b76507233d7ad2b6df0) |
+| V4 token                | [Dexscreener](https://dexscreener.com/robinhood/0x3df16f271060e4941c0386047def159f42e629dc0455db623c5b363eeacbcc1d) |
 
 Use `api.programmable.market` for authenticated public V3 general-hook creation and exact-credential-principal lifecycle reads with wallet keys, partner roots or bounded partner subkeys. The
 default profile is revision 3 with `profileVersion: 3.3.0`; it requires and binds canonical project metadata, including
