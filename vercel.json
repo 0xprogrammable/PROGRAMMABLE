@@ -59,7 +59,7 @@
       "destination": "https://proxy.gitbook.site/sites/site_V93gQ"
     },
     {
-      "source": "/docs/:match*",
+      "source": "/docs/:match((?!developers/robinhood-terminal-indexer$).*)",
       "destination": "https://proxy.gitbook.site/sites/site_V93gQ/:match*"
     }
   ],
