@@ -270,3 +270,33 @@ regexes = [
   '''(?i)0xb382f738a99820276fd66efb94b75eca104c2b4d''',
   '''(?i)0x554847de232eb1242cae2befefb8882eb05947e2b103220baaebb3e2ab59b132''',
 ]
+
+[[allowlists]]
+description = "Late migration pins exact public token, recipient, runtime and permit-domain identities"
+condition = "AND"
+regexTarget = "match"
+paths = [
+  '''config/late-migration-intake-activation\.v1\.json''',
+  '''contracts/scripts/late-migration-deployment-preflight-core\.mjs''',
+  '''contracts/src/late-migration/ProgrammableLateMigrationIntakeV3\.sol''',
+  '''contracts/test/late-migration/ProgrammableLateMigrationFrozenArtifact\.t\.sol''',
+  '''contracts/test/late-migration/ProgrammableLateMigrationIntakeV3\.t\.sol''',
+  '''contracts/test/late-migration/ProgrammableLateMigrationIntakeV3Fork\.t\.sol''',
+  '''contracts/test/late-migration/ProgrammableLateMigrationIntakeV3Invariant\.t\.sol''',
+  '''lib/server/late-migration-intake-production-v1\.ts''',
+  '''lib/server/late-migration-intake-v1\.ts''',
+]
+regexes = [
+  '''(?i)0x7987f03462200b3d8a072e02c89a8a41dcb124ee''',
+  '''(?i)0x2bb333d48dfaf1596d9036671d2e43168994249e''',
+  '''(?i)0xc60ba256b44334a0cd2c7242e98b88f031abb006''',
+  '''(?i)0x4fe466386aeebe507f6bcfc58e046a0632e4687699fa5bd28c4b7ec6333141ad''',
+  '''(?i)0xe2ac19a052ba41dccaaa930f489a94353d986c7769e416830273d9362ad26a47''',
+]
+
+[[allowlists]]
+description = "Permit mock implements the two public ERC20 interfaces"
+condition = "AND"
+regexTarget = "match"
+paths = ['''contracts/test/late-migration/mocks/IntakeV3Mocks\.sol''']
+regexes = ['''^PinnedPermitTokenMockV3 is IERC20, IERC20Permit\s+$''']
