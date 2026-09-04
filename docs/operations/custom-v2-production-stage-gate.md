@@ -78,8 +78,9 @@ The workflow performs this sequence:
 
 1. Resolve, download, attest, and verify the exact v3 production Verify proof.
 2. Revalidate the same proof after production-environment approval.
-3. Pull the Production configuration, derive the GMGN requirement from the
-   reviewed value-free sensitive metadata, and run the read-model deploy policy.
+3. Pull the Production configuration, bind reviewed value-free sensitive
+   metadata, and run the read-model deploy policy. Provider-key presence does
+   not create a GMGN release requirement.
 4. Stage one source build with `vercel deploy --prod --skip-domain --archive=tgz`.
    The command pins the exact commit and sets
    `PROGRAMMABLE_REAL_BLOCK_SLA_FORCE_PROVIDER_RETRY_ONCE=true` only on that
@@ -100,25 +101,18 @@ The workflow performs this sequence:
    URL before the handoff.
 
 The staged public smoke records both `gmgn_requests_per_second` and
-`gmgn_account_gate_mode`. When Production metadata makes GMGN required, it
-fails closed unless the health response proves exactly 20 requests per second
-and `providers[0].accountGateMode=multiflight-v1`. The
-`legacy-singleflight-v1` mode from a database through migration `0006` is a
-rolling-availability prefix only; Stage never applies database migrations,
-including `0007` or `0008`, and that mode cannot authorize promotion at Pro
-throughput. Market-cap pagination additionally requires the current `0008`
-Explore authority readiness before the staged smoke can accept a cross-page
-ranking commitment.
+`gmgn_account_gate_mode` as non-secret diagnostics. Neither value, GMGN
+availability, nor canonical GMGN qualification authorizes or blocks the
+website release. Stage never applies database migrations, including `0007` or
+`0008`. Market-cap pagination still validates the public API's internal
+identity, accounting, freshness and cross-page commitment contracts.
 
-The required market-cap checks treat a fresh, non-empty global GMGN rank as
-provider liveness even when every observed address is foreign to the exact
-Programmable catalog. Promotion additionally requires at least one canonical
-GMGN qualification from either that rank or the same authority build's bounded
-`token_info` lane. The latter admits only the exact Ethereum token identity,
-canonical supply and minimum-liquidity policy. The ranking contract still
+The optional strict provider diagnostic may still test a fresh, non-empty
+global GMGN rank and canonical `token_info` qualification, but the production
+Stage workflow does not enable that mode. The regular ranking contract still
 requires exact observed/matched/foreign accounting, a current commitment,
-Dexscreener qualification only for the GMGN-unqualified canonical remainder,
-and the original canonical launch order for the stable tail.
+bounded fallback accounting, and the original canonical launch order for the
+stable tail.
 
 Trending pagination records
 `discovery_consistency=ranking-identity+monotonic-current-freshness`. The
@@ -155,16 +149,14 @@ The Custom V2 probe verifies:
 The production workflow's staged public read-model smoke remains required for
 every non-Custom release and for changes that combine Custom V2 with
 `interface` or `read_model`. It verifies the canonical Envio and Router launch
-identities, GMGN as the bounded primary for visible token market/detail reads
-and token-address chart history, fresh liquidity-qualified GMGN market-cap
-ranking as a canonical-only prefix, then bounded canonical-supply hydration and
-strict GMGN `token_info` FDV ranking for eligible rank-unobserved entries.
-Dexscreener remains the visible market fallback and ranks only the GMGN-null,
-timed-out, deferred, or unqualified remainder. GMGN search relevance may add or
-reorder only Ethereum tokens already present in the canonical Programmable
-catalog; local exact and substring matches remain in stable launch order, and
-provider wallet or foreign-token rows are never admitted. Bitquery remains the
-exact-pool chart fallback. The market-cap response reports every provider tier,
+identities and the bounded public market/detail/chart API contracts without
+requiring GMGN liveness or qualification. If GMGN data is present, its identity,
+freshness and accounting must still be coherent. Dexscreener remains a bounded
+visible-market fallback, and Bitquery remains the exact-pool chart fallback.
+Provider search results may add or reorder only Ethereum tokens already present
+in the canonical Programmable catalog; local exact and substring matches remain
+in stable launch order, and provider wallet or foreign-token rows are never
+admitted. The market-cap response reports every provider tier,
 the stable launch-order tail, and a full-order commitment; it does not claim a
 global cross-provider numeric sort or full GMGN coverage. Chart responses must report
 their selected provider, series scope (`token` or `pool`), and pool attribution

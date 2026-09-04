@@ -479,17 +479,17 @@ test("every staged candidate proves the Envio catalog before public data smoke",
   assert.doesNotMatch(probe, /CRON_SECRET|\/api\/ops\/index-v2/u);
   assert.doesNotMatch(probe, /\n        if:/u);
 
-  const gmgnRequirement = stepBlock(
+  const metadataBinding = stepBlock(
     deploy,
-    "Resolve staged GMGN market requirement",
+    "Bind staged production environment metadata",
   );
   assert.notEqual(deploy.indexOf("Pull production configuration"), -1);
   assert.ok(
     deploy.indexOf("Pull production configuration") <
-      deploy.indexOf("Resolve staged GMGN market requirement"),
+      deploy.indexOf("Bind staged production environment metadata"),
   );
   assert.ok(
-    deploy.indexOf("Resolve staged GMGN market requirement") <
+    deploy.indexOf("Bind staged production environment metadata") <
       deploy.indexOf("Smoke staged static identity and Dex public APIs"),
   );
   assert.match(
@@ -498,32 +498,29 @@ test("every staged candidate proves the Envio catalog before public data smoke",
   );
   assert.doesNotMatch(deploy, /\bprj_[A-Za-z0-9]{8,128}\b/u);
   assert.match(
-    gmgnRequirement,
+    metadataBinding,
     /vercel env ls production --format json --token="\$VERCEL_TOKEN" \|\n\s+node scripts\/bind-vercel-sensitive-production-metadata\.mjs \\\n\s+--metadata-file "\$metadata_file" \\\n\s+--vercel-project-id "\$VERCEL_PROJECT_ID"/u,
   );
   assert.match(
-    gmgnRequirement,
+    metadataBinding,
     /node scripts\/bind-vercel-sensitive-production-metadata\.mjs/u,
   );
-  assert.match(
-    gmgnRequirement,
-    /node scripts\/resolve-gmgn-production-requirement\.mjs/u,
-  );
-  assert.match(gmgnRequirement, /--metadata-file "\$metadata_file"/u);
+  assert.match(metadataBinding, /--metadata-file "\$metadata_file"/u);
   assert.doesNotMatch(
-    gmgnRequirement,
+    metadataBinding,
     /\.vercel\/\.env\.production\.local|process\.env\.GMGN_API_KEY|set -x|console\.log/u,
   );
-  assert.doesNotMatch(gmgnRequirement, /vercel env ls production[^\n]*>[^|]/u);
-  assert.match(gmgnRequirement, /set -euo pipefail/u);
-  assert.match(gmgnRequirement, /readonly require_gmgn_market/u);
-  assert.equal(gmgnRequirement.match(/require_gmgn_market=/gu)?.length, 2);
-  assert.doesNotMatch(gmgnRequirement, /continue-on-error:/u);
-  assert.match(
-    gmgnRequirement,
-    /echo "require_gmgn_market=\$require_gmgn_market" >> "\$GITHUB_OUTPUT"/u,
+  assert.doesNotMatch(metadataBinding, /vercel env ls production[^\n]*>[^|]/u);
+  assert.match(metadataBinding, /set -euo pipefail/u);
+  assert.doesNotMatch(metadataBinding, /continue-on-error:/u);
+  assert.doesNotMatch(
+    metadataBinding,
+    /resolve-gmgn-production-requirement|require_gmgn_market|requireGmgnMarket|GITHUB_OUTPUT/u,
   );
-  assert.match(gmgnRequirement, /requireGmgnMarket/u);
+  assert.doesNotMatch(
+    deploy,
+    /Resolve staged GMGN market requirement|gmgn-market-requirement|PROGRAMMABLE_REQUIRE_GMGN_MARKET|GMGN_MARKET_REQUIRED/u,
+  );
 
   const smoke = stepBlock(
     deploy,
@@ -536,10 +533,7 @@ test("every staged candidate proves the Envio catalog before public data smoke",
     /node scripts\/smoke-static-dexscreener-public-apis\.mjs/u,
   );
   assert.match(smoke, /PROGRAMMABLE_REQUIRE_SHARD_ROUTER_TRADE: "true"/u);
-  assert.match(
-    smoke,
-    /PROGRAMMABLE_REQUIRE_GMGN_MARKET: \$\{\{ steps\.gmgn-market-requirement\.outputs\.require_gmgn_market \}\}/u,
-  );
+  assert.doesNotMatch(smoke, /PROGRAMMABLE_REQUIRE_GMGN_MARKET/u);
   assert.equal(
     smoke.match(/smoke-static-dexscreener-public-apis\.mjs/gu)?.length,
     1,
@@ -582,17 +576,12 @@ test("every staged candidate proves the Envio catalog before public data smoke",
   }
   assert.match(
     handoff,
-    /GMGN_MARKET_REQUIRED: \$\{\{ steps\.gmgn-market-requirement\.outputs\.require_gmgn_market \}\}/u,
-  );
-  assert.match(
-    handoff,
     /GMGN_ACCOUNT_GATE_MODE: \$\{\{ steps\.public-provider-smoke\.outputs\.gmgn_account_gate_mode \}\}/u,
   );
   assert.match(
     handoff,
     /GMGN_REQUESTS_PER_SECOND: \$\{\{ steps\.public-provider-smoke\.outputs\.gmgn_requests_per_second \}\}/u,
   );
-  assert.match(handoff, /GMGN market required by staged public smoke:/u);
   assert.match(handoff, /GMGN account gate mode:/u);
   assert.match(handoff, /Effective GMGN requests per second:/u);
   assert.match(
@@ -657,6 +646,7 @@ test("every staged candidate proves the Envio catalog before public data smoke",
     "Refresh and prove exact staged durable read model",
     "Smoke staged public market APIs",
     "Gate exact staged operational health",
+    "Resolve staged GMGN market requirement",
   ]) {
     assert.equal(deploy.includes("      - name: " + retired), false);
   }

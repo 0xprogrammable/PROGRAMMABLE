@@ -313,8 +313,7 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
 
-      - name: Resolve staged GMGN market requirement
-        id: gmgn-market-requirement
+      - name: Bind staged production environment metadata
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
@@ -325,19 +324,6 @@ jobs:
             node scripts/bind-vercel-sensitive-production-metadata.mjs \
               --metadata-file "$metadata_file" \
               --vercel-project-id "$VERCEL_PROJECT_ID"
-          require_gmgn_market="$(
-            node scripts/resolve-gmgn-production-requirement.mjs \
-              --metadata-file "$metadata_file" \
-              --vercel-project-id "$VERCEL_PROJECT_ID"
-          )"
-          readonly require_gmgn_market
-          case "$require_gmgn_market" in
-            true|false) ;;
-            *) echo "The GMGN market requirement is invalid" >&2; exit 1 ;;
-          esac
-          echo "require_gmgn_market=$require_gmgn_market" >> "$GITHUB_OUTPUT"
-          printf '{"status":"resolved","requireGmgnMarket":%s}\n' \
-            "$require_gmgn_market"
 
       - name: Validate staged read-model release policy
         id: read-model-policy
@@ -1529,7 +1515,6 @@ jobs:
         env:
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-          PROGRAMMABLE_REQUIRE_GMGN_MARKET: ${{ steps.gmgn-market-requirement.outputs.require_gmgn_market }}
           PROGRAMMABLE_REQUIRE_SHARD_ROUTER_TRADE: "true"
         run: |
           node scripts/smoke-static-dexscreener-public-apis.mjs
@@ -1604,7 +1589,6 @@ jobs:
           READ_MODEL_EVIDENCE_REQUIRED: ${{ steps.read-model-policy.outputs.evidence_required }}
           WAKE_CANARY_REQUIRED: ${{ steps.read-model-policy.outputs.wake_canary_required }}
           WAKE_CANARY_STATUS: ${{ steps.wake-canary.outputs.status }}
-          GMGN_MARKET_REQUIRED: ${{ steps.gmgn-market-requirement.outputs.require_gmgn_market }}
           GMGN_ACCOUNT_GATE_MODE: ${{ steps.public-provider-smoke.outputs.gmgn_account_gate_mode }}
           GMGN_REQUESTS_PER_SECOND: ${{ steps.public-provider-smoke.outputs.gmgn_requests_per_second }}
           CUSTOM_V2_REQUIRED: ${{ needs.release-gate.outputs.verified_custom_v2 }}
@@ -1659,7 +1643,6 @@ jobs:
             echo "- QuickNode wake canary required: \`$WAKE_CANARY_REQUIRED\`"
             echo "- QuickNode wake canary: \`${WAKE_CANARY_STATUS:-not-required}\`"
             echo "- Candidate-only provider retry flag: \`true\`"
-            echo "- GMGN market required by staged public smoke: \`$GMGN_MARKET_REQUIRED\`"
             echo "- GMGN account gate mode: \`${GMGN_ACCOUNT_GATE_MODE:-not-run}\`"
             echo "- Effective GMGN requests per second: \`${GMGN_REQUESTS_PER_SECOND:-not-run}\`"
             echo "- Launch identities: validated current Classic or bounded Router fallback"

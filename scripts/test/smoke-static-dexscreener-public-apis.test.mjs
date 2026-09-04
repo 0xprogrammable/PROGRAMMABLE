@@ -5704,7 +5704,6 @@ test("post-promotion binds the exact deployment to the same public fast lane", a
     token: "vercel-test-token",
     teamId: "team_programmable_test",
     projectId: "prj_programmable_test",
-    requireGmgnMarket: false,
     fetchImpl,
   });
   assert.equal(result.ok, true);
@@ -5736,7 +5735,6 @@ test("post-promotion fails an exact deployment-id mismatch", async () => {
     token: "vercel-test-token",
     teamId: "team_programmable_test",
     projectId: "prj_programmable_test",
-    requireGmgnMarket: false,
     fetchImpl,
   });
   assert.equal(result.ok, false);
@@ -5752,7 +5750,6 @@ test("post-promotion rejects a non-production origin before fetching", async () 
       token: "vercel-test-token",
       teamId: "team_programmable_test",
       projectId: "prj_programmable_test",
-      requireGmgnMarket: false,
       fetchImpl: async () => {
         throw new Error("fetch must not run");
       },
@@ -5761,96 +5758,22 @@ test("post-promotion rejects a non-production origin before fetching", async () 
   );
 });
 
-test("post-promotion enforces an explicit production GMGN requirement", async () => {
-  const routeFetch = gmgnStagedFetch();
-  const fetchImpl = async (url, init) => {
-    const target = new URL(String(url));
-    if (target.hostname === "api.vercel.com") {
-      return Response.json({
-        id: "dpl_aaaaaaaaaaaaaaaaaaaaaaaa",
-        projectId: "prj_programmable_test",
-        readyState: "READY",
-        meta: { githubCommitSha: "b".repeat(40) },
-      });
-    }
-    return routeFetch(target, init);
-  };
-  const result = await verifyPostPromotion({
-    targetUrl: "https://programmable.market/",
-    expectedDeploymentId: "dpl_aaaaaaaaaaaaaaaaaaaaaaaa",
-    expectedGitHead: "b".repeat(40),
-    token: "vercel-test-token",
-    teamId: "team_programmable_test",
-    projectId: "prj_programmable_test",
-    requireGmgnMarket: true,
-    fetchImpl,
-  });
-  assert.equal(result.ok, true);
-  assert.deepEqual(result.failures, []);
-});
-
-test("post-promotion fails Dexscreener-only detail when GMGN is required", async () => {
-  const routeFetch = stagedFetch();
-  const fetchImpl = async (url, init) => {
-    const target = new URL(String(url));
-    if (target.hostname === "api.vercel.com") {
-      return Response.json({
-        id: "dpl_aaaaaaaaaaaaaaaaaaaaaaaa",
-        projectId: "prj_programmable_test",
-        readyState: "READY",
-        meta: { githubCommitSha: "b".repeat(40) },
-      });
-    }
-    return routeFetch(target, init);
-  };
-  const result = await verifyPostPromotion({
-    targetUrl: "https://programmable.market/",
-    expectedDeploymentId: "dpl_aaaaaaaaaaaaaaaaaaaaaaaa",
-    expectedGitHead: "b".repeat(40),
-    token: "vercel-test-token",
-    teamId: "team_programmable_test",
-    projectId: "prj_programmable_test",
-    requireGmgnMarket: true,
-    fetchImpl,
-  });
-  assert.equal(result.ok, false);
-  assert.ok(result.failures.some(({ id }) =>
-    id === "production-static-identity-dexscreener-public-apis"
-  ));
-});
-
-test("post-promotion rejects an omitted or non-Boolean GMGN requirement", async () => {
-  const base = {
-    targetUrl: "https://programmable.market/",
-    expectedDeploymentId: "dpl_aaaaaaaaaaaaaaaaaaaaaaaa",
-    expectedGitHead: "b".repeat(40),
-    token: "vercel-test-token",
-    teamId: "team_programmable_test",
-    projectId: "prj_programmable_test",
-    fetchImpl: async () => {
-      throw new Error("fetch must not run");
-    },
-  };
-  await assert.rejects(
-    verifyPostPromotion(base),
-    /explicit GMGN market requirement boolean/u,
-  );
-  await assert.rejects(
-    verifyPostPromotion({ ...base, requireGmgnMarket: "false" }),
-    /explicit GMGN market requirement boolean/u,
-  );
-});
-
-test("post-promotion has no local GMGN requirement source", () => {
+test("post-promotion has no GMGN release requirement source", () => {
   const source = readFileSync(
     "scripts/perf/read-model-post-promotion.mjs",
     "utf8",
   );
-  assert.doesNotMatch(source, /GMGN_API_KEY|input\.environment/u);
-  assert.match(source, /String\(input\.requireGmgnMarket\)/u);
+  assert.doesNotMatch(
+    source,
+    /GMGN_API_KEY|PROGRAMMABLE_REQUIRE_GMGN_MARKET|requireGmgnMarket|require-gmgn-market|input\.environment/u,
+  );
+  assert.match(
+    source,
+    /runProductionStaticDexscreenerSmokeV1\(\{\s*fetchImpl,\s*environment: \{\},\s*\}\)/u,
+  );
 });
 
-test("post-promotion CLI requires one exact GMGN Boolean argument", () => {
+test("post-promotion CLI accepts only the exact production binding arguments", () => {
   const base = [
     "--target-url",
     "https://programmable.market",
@@ -5859,33 +5782,21 @@ test("post-promotion CLI requires one exact GMGN Boolean argument", () => {
     "--git-head",
     "b".repeat(40),
   ];
-  assert.throws(
-    () => parsePostPromotionArguments(base),
-    /--require-gmgn-market are required/u,
+  assert.deepEqual(
+    parsePostPromotionArguments(base),
+    {
+      "target-url": "https://programmable.market",
+      "deployment-id": "dpl_aaaaaaaaaaaaaaaaaaaaaaaa",
+      "git-head": "b".repeat(40),
+    },
   );
   assert.throws(
     () => parsePostPromotionArguments([
       ...base,
       "--require-gmgn-market",
-      "enabled",
-    ]),
-    /must be exactly true or false/u,
-  );
-  assert.equal(
-    parsePostPromotionArguments([
-      ...base,
-      "--require-gmgn-market",
       "true",
-    ]).requireGmgnMarket,
-    true,
-  );
-  assert.equal(
-    parsePostPromotionArguments([
-      ...base,
-      "--require-gmgn-market",
-      "false",
-    ]).requireGmgnMarket,
-    false,
+    ]),
+    /arguments must be --name value pairs/u,
   );
 });
 

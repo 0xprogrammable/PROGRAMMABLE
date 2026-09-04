@@ -13,7 +13,6 @@ const REQUIRED_ARGUMENTS = Object.freeze([
   "target-url",
   "deployment-id",
   "git-head",
-  "require-gmgn-market",
 ]);
 
 export function parsePostPromotionArguments(argv) {
@@ -34,16 +33,10 @@ export function parsePostPromotionArguments(argv) {
   }
   if (REQUIRED_ARGUMENTS.some((name) => result[name] === undefined)) {
     throw new Error(
-      "--target-url, --deployment-id, --git-head and --require-gmgn-market are required",
+      "--target-url, --deployment-id and --git-head are required",
     );
   }
-  if (!["true", "false"].includes(result["require-gmgn-market"])) {
-    throw new Error("--require-gmgn-market must be exactly true or false");
-  }
-  return Object.freeze({
-    ...result,
-    requireGmgnMarket: result["require-gmgn-market"] === "true",
-  });
+  return Object.freeze(result);
 }
 
 async function retry(operation, attempts = 12, delayMs = 5_000) {
@@ -109,9 +102,6 @@ export async function verifyPostPromotion(input) {
       "post-promotion target must be the programmable.market production origin",
     );
   }
-  if (typeof input.requireGmgnMarket !== "boolean") {
-    throw new Error("an explicit GMGN market requirement boolean is required");
-  }
   if (
     !/^dpl_[A-Za-z0-9]{20,80}$/u.test(input.expectedDeploymentId ?? "") ||
     !/^[0-9a-f]{40}$/u.test(input.expectedGitHead ?? "") ||
@@ -135,9 +125,7 @@ export async function verifyPostPromotion(input) {
   try {
     await runProductionStaticDexscreenerSmokeV1({
       fetchImpl,
-      environment: {
-        PROGRAMMABLE_REQUIRE_GMGN_MARKET: String(input.requireGmgnMarket),
-      },
+      environment: {},
     });
     publicSurface = true;
   } catch {
@@ -147,7 +135,7 @@ export async function verifyPostPromotion(input) {
     id: "production-static-identity-dexscreener-public-apis",
     status: publicSurface ? "pass" : "fail",
     detail:
-      "production serves one catalog-bound identity surface with the configured GMGN requirement, GMGN market-cap ranking over its canonical intersection, Dexscreener visible and unmatched-remainder fallback, profile reads, token-address GMGN chart primary, and exact-pool Bitquery chart fallback",
+      "production serves the catalog-bound identity, profile, market and chart API contracts; GMGN qualification is not release authority",
   });
   const failures = checks
     .filter(({ status }) => status !== "pass")
@@ -170,7 +158,6 @@ async function main() {
       token: process.env.VERCEL_TOKEN,
       teamId: process.env.VERCEL_ORG_ID,
       projectId: process.env.VERCEL_PROJECT_ID,
-      requireGmgnMarket: args.requireGmgnMarket,
     }),
   );
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
