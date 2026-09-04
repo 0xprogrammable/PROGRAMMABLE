@@ -65,16 +65,6 @@ const PINNED_RPC_COMMITMENTS = {
   [providerBinding.PRODUCTION_RPC_ENV.secondaryCommitment]:
     ENDPOINT_COMMITMENTS.quicknode,
 };
-const productionRpcDotenv = (
-  urls: Readonly<{ primary?: string; secondary?: string }> = {},
-) => [
-  `${providerBinding.PRODUCTION_RPC_ENV.primaryProvider}="drpc"`,
-  `${providerBinding.PRODUCTION_RPC_ENV.primaryUrl}="${urls.primary ?? DRPC_URL}"`,
-  `${providerBinding.PRODUCTION_RPC_ENV.primaryCommitment}="${ENDPOINT_COMMITMENTS.drpc}"`,
-  `${providerBinding.PRODUCTION_RPC_ENV.secondaryProvider}="quicknode"`,
-  `${providerBinding.PRODUCTION_RPC_ENV.secondaryUrl}="${urls.secondary ?? QUICKNODE_URL}"`,
-  `${providerBinding.PRODUCTION_RPC_ENV.secondaryCommitment}="${ENDPOINT_COMMITMENTS.quicknode}"`,
-].join("\n");
 const ORIGIN_COMMITMENTS = {
   drpc: `0x${"aa".repeat(32)}`,
   quicknode: `0x${"bb".repeat(32)}`,
@@ -581,17 +571,6 @@ describe("read-model performance contract", () => {
       maxCallsPerProviderPerRun: 128,
       maxAggregateCallsPerRun: 256,
     });
-    expect(
-      sourceContracts
-        .evaluateReadModelSourceContracts(process.cwd(), profile)
-        .failures.map((failure: { id: string }) => failure.id),
-      ).toEqual([
-        "source-cache-exploreList",
-        "source-cache-tokenDetail",
-        "source-cache-tokenList",
-        "source-cache-publicIndexer",
-      ]);
-
     const fixture = createBundle(true);
     const result = gateCore.evaluateReadModelReleaseEvidence(
       loadBundle(fixture.evidencePath, true),
@@ -954,95 +933,66 @@ describe("read-model performance contract", () => {
     );
   });
 
-  it("enforces the exact private dRPC and QuickNode deployment boundary", () => {
+  it("enforces the provider-free Explore index-reset deployment boundary", () => {
     const exactFalse = deployPolicy.RELEASE_GATED_FLAG_NAMES.map(
       (name: string) => `${name}="false"`,
     ).join("\n");
-    const bitquerySecret = '\nBITQUERY_OAUTH_TOKEN="[Sensitive]"';
-    const direct = deployPolicy.evaluateReadModelDeployPolicy(
-      `${exactFalse}\n${productionRpcDotenv()}${bitquerySecret}`,
-      PINNED_RPC_COMMITMENTS,
-    );
-    expect(direct).toMatchObject({
-      mode: "direct-rpc",
+    const reset = deployPolicy.evaluateReadModelDeployPolicy(exactFalse, {});
+    expect(reset).toMatchObject({
+      mode: "index-reset",
       evidenceRequired: false,
+      providerCredentialsRequired: false,
       commitmentsReady: true,
       policyReady: true,
-      runtimeProviderBinding: "verified",
+      runtimeProviderBinding: "not-required",
+      activeFlagNames: [],
+      invalidFlagNames: [],
     });
+
     const indexedEnvironment = `${exactFalse.replace(
       "INDEXED_EXPLORE_TOKEN_READS_ENABLED=\"false\"",
       "INDEXED_EXPLORE_TOKEN_READS_ENABLED=\"true\"",
-    )}\n${productionRpcDotenv()}${bitquerySecret}`;
+    )}`;
     const indexed = deployPolicy.evaluateReadModelDeployPolicy(
       indexedEnvironment,
-      PINNED_RPC_COMMITMENTS,
+      {},
     );
     expect(indexed).toMatchObject({
-      mode: "indexed-or-shadow",
-      evidenceRequired: true,
+      mode: "index-reset",
+      evidenceRequired: false,
       commitmentsReady: true,
-      runtimeProviderBinding: "verified",
+      policyReady: false,
+      runtimeProviderBinding: "not-required",
+      activeFlagNames: ["INDEXED_EXPLORE_TOKEN_READS_ENABLED"],
     });
-    const sensitiveRuntimeEnvironment = `${exactFalse.replace(
+
+    const malformedEnvironment = `${exactFalse.replace(
       "INDEXED_EXPLORE_TOKEN_READS_ENABLED=\"false\"",
       "INDEXED_EXPLORE_TOKEN_READS_ENABLED=\"[sensitive]\"",
-    )}\n${productionRpcDotenv({
-      primary: "[sensitive]",
-      secondary: "[sensitive]",
-    })}${bitquerySecret}`;
-    expect(
-      deployPolicy.evaluateReadModelDeployPolicy(
-        sensitiveRuntimeEnvironment,
-        PINNED_RPC_COMMITMENTS,
-      ),
-    ).toMatchObject({
-      mode: "indexed-or-shadow",
-      evidenceRequired: true,
+    )}\nBITQUERY_OAUTH_TOKEN="[Sensitive]"\nLEGACY_RPC_URL="not-a-url"`;
+    expect(deployPolicy.evaluateReadModelDeployPolicy(malformedEnvironment, {
+      LEGACY_COMMITMENT: "not-a-commitment",
+    })).toMatchObject({
+      mode: "index-reset",
+      evidenceRequired: false,
+      providerCredentialsRequired: false,
       commitmentsReady: true,
-      runtimeProviderBinding: "deferred-stage",
+      policyReady: false,
+      runtimeProviderBinding: "not-required",
+      invalidFlagNames: ["INDEXED_EXPLORE_TOKEN_READS_ENABLED"],
     });
-    expect(
-      deployPolicy.evaluateReadModelDeployPolicy(
-        `${sensitiveRuntimeEnvironment}\n${providerBinding.PRODUCTION_RPC_ENV.primaryProvider}="quicknode"`,
-        PINNED_RPC_COMMITMENTS,
-      ),
-    ).toMatchObject({
-      evidenceRequired: true,
-      commitmentsReady: false,
-      runtimeProviderBinding: "unverified",
-    });
-    const publicFeedEnvironment = `${exactFalse.replace(
-      "INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED=\"false\"",
-      "INDEXED_PUBLIC_INDEXER_FEED_READS_ENABLED=\"true\"",
-    )}\n${productionRpcDotenv()}${bitquerySecret}`;
-    expect(
-      deployPolicy.evaluateReadModelDeployPolicy(
-        publicFeedEnvironment,
-        PINNED_RPC_COMMITMENTS,
-      ),
-    ).toMatchObject({
-      mode: "indexed-or-shadow",
-      evidenceRequired: true,
-      commitmentsReady: true,
-    });
-    expect(
-      deployPolicy.evaluateReadModelDeployPolicy(indexedEnvironment, {
-        ...PINNED_RPC_COMMITMENTS,
-        [providerBinding.PRODUCTION_RPC_ENV.primaryCommitment]:
-          `0x${"77".repeat(32)}`,
-      }),
-    ).toMatchObject({
-      evidenceRequired: true,
-      commitmentsReady: false,
-      invalidCommitmentNames: ["runtime-provider-commitment-mismatch"],
-    });
+
     expect(
       deployPolicy.evaluateReadModelDeployPolicy(
         exactFalse.split("\n").slice(1).join("\n"),
         {},
       ),
-    ).toMatchObject({ evidenceRequired: true, commitmentsReady: false });
+    ).toMatchObject({
+      mode: "index-reset",
+      evidenceRequired: false,
+      commitmentsReady: true,
+      policyReady: false,
+    });
   });
 
   it("derives release identities from two pinned non-secret commitments", () => {

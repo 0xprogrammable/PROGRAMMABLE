@@ -4,8 +4,8 @@ import {
   deploymentCommit,
   fetchVercelDeployment,
 } from "./read-model-live-verifier.mjs";
-import { runProductionStaticDexscreenerSmokeV1 } from
-  "../smoke-static-dexscreener-public-apis.mjs";
+import { runProductionExploreIndexResetSmokeV1 } from
+  "../smoke-explore-index-reset-public-apis.mjs";
 
 const PRODUCTION_ORIGIN = "https://programmable.market";
 
@@ -123,19 +123,16 @@ export async function verifyPostPromotion(input) {
   });
   let publicSurface = false;
   try {
-    await runProductionStaticDexscreenerSmokeV1({
-      fetchImpl,
-      environment: {},
-    });
+    await runProductionExploreIndexResetSmokeV1({ fetchImpl });
     publicSurface = true;
   } catch {
-    // Provider responses and deployment credentials never enter release output.
+    // Public response bodies and deployment credentials never enter release output.
   }
   checks.push({
-    id: "production-static-identity-dexscreener-public-apis",
+    id: "production-explore-index-reset-public-apis",
     status: publicSurface ? "pass" : "fail",
     detail:
-      "production serves the catalog-bound identity, profile, market and chart API contracts; GMGN qualification is not release authority",
+      "production serves the exact provider-free Explore index-reset API contracts",
   });
   const failures = checks
     .filter(({ status }) => status !== "pass")
