@@ -381,13 +381,14 @@ jobs:
         if: needs.scope.outputs.contracts == 'true'
         run: npm run contracts:official-deployments
 
-      - name: Run Slither
-        if: needs.scope.outputs.contracts == 'true'
-        run: npm run contracts:slither
-
+      # Release bindings need the complete build; Slither cleans and rebuilds a scoped profile.
       - name: Verify contract release bindings
         if: needs.scope.outputs.contracts == 'true'
         run: npm run test:contract-release:ci
+
+      - name: Run Slither
+        if: needs.scope.outputs.contracts == 'true'
+        run: npm run contracts:slither
 
       - name: Skip unaffected contracts
         if: >-
