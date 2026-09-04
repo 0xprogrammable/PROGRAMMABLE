@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { cp, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import Ajv2020 from "ajv/dist/2020.js";
 
@@ -11,6 +14,7 @@ import {
   buildCleanRoomRecoveryReceipt,
   canonicalJsonBytes,
   prepareCleanRoom,
+  requireReviewedReleaseCoordinateReady,
   validateCleanRoomEvidence,
   validateCleanRoomRecoveryReceipt,
   validateCleanRoomImage,
@@ -20,6 +24,15 @@ import {
 import {
   validCleanRoomTranscript,
 } from "./fixtures/programmable-launch-v4-clean-room.mjs";
+import {
+  withIsolatedProtectedCheckout,
+} from "./fixtures/isolated-protected-checkout.mjs";
+
+const repositoryRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
+const bindingPath = "docs/operations/releases/custom-launch-v4/cli-release-binding.json";
+const coordinatePath =
+  "docs/operations/releases/custom-launch-v4/clean-room-release-coordinate.json";
+const runnerPath = "scripts/programmable-launch-v4-clean-room.mjs";
 
 function hexSha(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
@@ -32,6 +45,37 @@ function prettyCanonical(value) {
     return Object.fromEntries(Object.keys(entry).sort().map((key) => [key, sort(entry[key])]));
   };
   return Buffer.from(`${JSON.stringify(sort(value), null, 2)}\n`, "utf8");
+}
+
+function blockedCoordinateBaseline(value) {
+  const coordinate = structuredClone(value);
+  coordinate.releaseReady = false;
+  coordinate.source.commitSha = null;
+  coordinate.source.treeSha = null;
+  coordinate.releaseBinding.sha256 = null;
+  coordinate.machineContractBinding.sha256 = null;
+  coordinate.manifestSha256 = null;
+  coordinate.assets = coordinate.assets.map((asset) => ({ ...asset, sha256: null }));
+  coordinate.blockers = [
+    "releaseBindingReady",
+    "releaseSourceCoordinate",
+    "releaseManifestDigest",
+    "releaseAssetDigests",
+    "machineContractBindingDigest",
+  ];
+  return coordinate;
+}
+
+function awaitingCliCoordinate(value, bindingSha256) {
+  const coordinate = blockedCoordinateBaseline(value);
+  coordinate.releaseBinding.sha256 = bindingSha256;
+  coordinate.machineContractBinding.sha256 = bindingSha256;
+  coordinate.blockers = [
+    "releaseSourceCoordinate",
+    "releaseManifestDigest",
+    "releaseAssetDigests",
+  ];
+  return coordinate;
 }
 
 function releaseFiles() {
@@ -337,20 +381,73 @@ test("prepare stage refuses to coexist with the production API credential", asyn
   }
 });
 
-test("prepare stage rejects the audited closed-but-not-release-ready binding", async () => {
-  const previous = process.env.PROGRAMMABLE_API_KEY;
-  delete process.env.PROGRAMMABLE_API_KEY;
-  try {
+test("reviewed release readiness distinguishes a blocked binding from an unpublished CLI", () => {
+  const committedCoordinate = JSON.parse(readFileSync(new URL(
+    "../../docs/operations/releases/custom-launch-v4/clean-room-release-coordinate.json",
+    import.meta.url,
+  ), "utf8"));
+  const coordinate = blockedCoordinateBaseline(committedCoordinate);
+  const bindingSha256 = `sha256:${"f".repeat(64)}`;
+  const blockedBinding = { releaseReady: false, bindingSha256 };
+  assert.equal(validateReviewedReleaseCoordinate(coordinate, blockedBinding), coordinate);
+  assert.throws(
+    () => requireReviewedReleaseCoordinateReady(coordinate, blockedBinding),
+    (error) => {
+      assert.equal(error?.code, "V4_RELEASE_BINDING_NOT_READY");
+      assert.equal(error.cause, undefined);
+      return true;
+    },
+  );
+
+  const awaitingCliRelease = awaitingCliCoordinate(committedCoordinate, bindingSha256);
+  const readyBinding = { releaseReady: true, bindingSha256 };
+  assert.equal(
+    validateReviewedReleaseCoordinate(awaitingCliRelease, readyBinding),
+    awaitingCliRelease,
+  );
+  assert.throws(
+    () => requireReviewedReleaseCoordinateReady(awaitingCliRelease, readyBinding),
+    (error) => {
+      assert.equal(error?.code, "REVIEWED_RELEASE_COORDINATE_BLOCKED");
+      assert.equal(error.cause, undefined);
+      return true;
+    },
+  );
+});
+
+test("prepare stage enforces the real binding-to-coordinate readiness wiring", async () => {
+  let expectedCode;
+  await withIsolatedProtectedCheckout({
+    repositoryRoot,
+    materialize: async ({ isolatedRoot }) => {
+      const bindingBytes = await readFile(path.join(isolatedRoot, bindingPath));
+      const binding = JSON.parse(bindingBytes.toString("utf8"));
+      const coordinate = JSON.parse(await readFile(
+        path.join(isolatedRoot, coordinatePath),
+        "utf8",
+      ));
+      const bindingSha256 = `sha256:${hexSha(bindingBytes)}`;
+      const blockedCoordinate = binding.releaseReady
+        ? awaitingCliCoordinate(coordinate, bindingSha256)
+        : blockedCoordinateBaseline(coordinate);
+      expectedCode = binding.releaseReady
+        ? "REVIEWED_RELEASE_COORDINATE_BLOCKED"
+        : "V4_RELEASE_BINDING_NOT_READY";
+      await cp(path.join(repositoryRoot, runnerPath), path.join(isolatedRoot, runnerPath));
+      await writeFile(path.join(isolatedRoot, coordinatePath), prettyCanonical(blockedCoordinate));
+      return [runnerPath, coordinatePath];
+    },
+  }, async ({ isolatedRoot, revision }) => {
+    const runner = await import(
+      `${pathToFileURL(path.join(isolatedRoot, runnerPath)).href}?fixture=${revision}`
+    );
     await assert.rejects(
-      prepareCleanRoom({}),
+      runner.prepareCleanRoom({}),
       (error) => {
-        assert.equal(error?.code, "V4_RELEASE_BINDING_NOT_READY");
+        assert.equal(error?.code, expectedCode);
         assert.equal(error.cause, undefined);
         return true;
       },
     );
-  } finally {
-    if (previous === undefined) delete process.env.PROGRAMMABLE_API_KEY;
-    else process.env.PROGRAMMABLE_API_KEY = previous;
-  }
+  });
 });
