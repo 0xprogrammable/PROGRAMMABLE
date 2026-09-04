@@ -428,6 +428,46 @@ describe("developer API key interface", () => {
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).not.toContain("pm_live_");
   });
 
+  it("routes copied setup by the intended chain and gates V4 before authenticated requests", () => {
+    const setup = PROGRAMMABLE_AGENT_SETUP_TEXT_V1;
+    const robinhoodStart = setup.indexOf("Robinhood Chain Mainnet only (V4, chain 4663)");
+    const ethereumStart = setup.indexOf("Ethereum Mainnet only (V3, chain 1)");
+    const robinhood = setup.slice(robinhoodStart, ethereumStart);
+    const ethereum = setup.slice(ethereumStart);
+
+    expect(robinhoodStart).toBeGreaterThan(0);
+    expect(ethereumStart).toBeGreaterThan(robinhoodStart);
+    expect(setup.slice(0, robinhoodStart)).toContain("project's intended chain");
+    expect(setup.slice(0, robinhoodStart)).toContain("never fall back to another chain");
+    expect(robinhood).toContain("customLaunchApi.versions.v4");
+    expect(robinhood).toContain("publicAuthorization, publicWrites and releaseReady to be true in both");
+    expect(robinhood).toContain("immutable published release");
+    expect(robinhood).toContain("matching tarball checksum");
+    expect(robinhood).toContain("stop before authenticated preflight or submission");
+    expect(robinhood).toContain("before reading the API key");
+    expect(robinhood.indexOf("stop before authenticated preflight or submission"))
+      .toBeLessThan(robinhood.indexOf("programmable-launch pack"));
+    for (const url of [
+      PROGRAMMABLE_AGENT_SETUP_LINKS_V1.robinhoodCapabilities,
+      PROGRAMMABLE_AGENT_SETUP_LINKS_V1.robinhoodReadiness,
+      PROGRAMMABLE_AGENT_SETUP_LINKS_V1.robinhoodPreflight,
+      PROGRAMMABLE_AGENT_SETUP_LINKS_V1.robinhoodPackConfigSchema,
+      PROGRAMMABLE_AGENT_SETUP_LINKS_V1.robinhoodGuide,
+      PROGRAMMABLE_AGENT_SETUP_LINKS_V1.robinhoodOpenApi,
+    ]) expect(robinhood).toContain(url);
+    expect(robinhood).toContain("programmable.launch-pack-config.v4");
+    expect(robinhood).toContain("PNG or single-frame GIF");
+    expect(robinhood).toContain("--api-version 4 --chain-id 4663 --watch --until authorized");
+    expect(robinhood).toContain("--api-version 4 --chain-id 4663 --watch --until finalized");
+    expect(robinhood).toContain("wallet_action_required");
+    expect(robinhood).toContain("never sign or broadcast");
+    expect(robinhood).not.toContain("/v3/");
+    expect(robinhood).not.toContain(PROGRAMMABLE_AGENT_SETUP_LINKS_V1.cli);
+    expect(ethereum).toContain(PROGRAMMABLE_AGENT_SETUP_LINKS_V1.cli);
+    expect(ethereum).toContain("programmable.launch-pack-config.v3");
+    expect(setup).not.toContain("Use only the current V3.3 profile for a new submission");
+  });
+
   it("offers named loading, failure, empty and recovery states", () => {
     expect(apiKeysSource).toContain("Loading wallet session");
     expect(apiKeysSource).toContain("Wallet access is unavailable");

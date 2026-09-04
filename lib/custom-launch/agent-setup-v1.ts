@@ -14,6 +14,18 @@ export const PROGRAMMABLE_AGENT_SETUP_LINKS_V1 = Object.freeze({
     "https://programmable.market/openapi/custom-launch-v2.json",
   openApiV1Compatibility:
     "https://programmable.market/openapi/custom-launch-v1.json",
+  robinhoodCapabilities:
+    "https://api.programmable.market/v4/chains/4663/capabilities",
+  robinhoodReadiness:
+    "https://api.programmable.market/v4/chains/4663/readiness",
+  robinhoodPreflight:
+    "https://api.programmable.market/v4/chains/4663/custom-launches/preflight",
+  robinhoodPackConfigSchema:
+    "https://programmable.market/schemas/custom-launch/v4/pack-config.json",
+  robinhoodGuide:
+    "https://programmable.market/developers/custom-launch-api-v1.md",
+  robinhoodOpenApi:
+    "https://programmable.market/openapi/custom-launch-v4.json",
 });
 
 export const PROGRAMMABLE_AGENT_SETUP_TEXT_V1 = Object.freeze([
@@ -23,11 +35,31 @@ export const PROGRAMMABLE_AGENT_SETUP_TEXT_V1 = Object.freeze([
   "The API key grants API access only. It does not contain policy or integration instructions.",
   "",
   `Start here: ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.discovery}`,
+  "Select the project's intended chain before installing a CLI or preparing request bytes: Ethereum Mainnet (1, eip155:1) uses V3; Robinhood Chain Mainnet (4663, eip155:4663) uses V4. If the project does not identify its chain, ask for it. Never choose Ethereum merely because the key came from the shared API keys page, and never fall back to another chain when a gate fails.",
+  "The same API-key entry point serves both chains. A key needs custom-launch:create and custom-launch:read plus server authorization for the selected chain; its presence does not prove a chain grant. A wallet key's launchWallet must equal its wallet binding. Keep credentials on https://api.programmable.market and follow only the selected chain's instructions below.",
+  "",
+  "Robinhood Chain Mainnet only (V4, chain 4663)",
+  "Read customLaunchApi.versions.v4 and the matching chains entry in live discovery. Require publicAuthorization, publicWrites and releaseReady to be true in both. Require an advertised released, installable CLI for profile 4.0.0, an immutable published release and matching tarball checksum before installing it. If any field, release asset or verification is missing or false, stop before authenticated preflight or submission and report the missing public release gate. A deployed runtime, a source candidate or a local checkout cannot replace these gates.",
+  `Public V4 capabilities: ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.robinhoodCapabilities}`,
+  `Public V4 readiness: ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.robinhoodReadiness}`,
+  `V4 non-persisting preflight: ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.robinhoodPreflight}`,
+  `V4 pack-config schema: ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.robinhoodPackConfigSchema}`,
+  `V4 raw guide: ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.robinhoodGuide}`,
+  `Public V4 OpenAPI: ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.robinhoodOpenApi}`,
+  "Fetch the public V4 capabilities and readiness before reading the API key. Require chain 4663, eip155:4663 and ready status. Bind the exact returned profile revision and digest, chainDeployment, chainDeploymentDescriptorDigest, trust roots and finality policy; the API server selects the chain's profile. Fetch the advertised immutable V4 CLI and verify its checksum, then use its V4 schema and guide. The Ethereum CLI link below is not a V4 installer.",
+  "Inspect the exact public source revision, compile the real graph targets with the capabilities-pinned compiler, and create programmable-launch.config.json with schemaVersion programmable.launch-pack-config.v4 and chainId 4663 as required by that schema. Supply truthful project metadata and a non-empty local PNG or single-frame GIF with its canonical public image URI; V4 rejects JPEG, WebP and animated GIF. Use only an advertised funding mode, none or wallet-transaction-value. The CLI derives request bytes, hashes and deployment bindings; never handwrite them.",
+  "After all public release gates pass: programmable-launch pack --config programmable-launch.config.json --output launch.json",
+  "Then: programmable-launch validate launch.json --config programmable-launch.config.json --remote",
+  "Follow the V4 preflight's server-authored disposition and typed remediation. Preflight is not admission or a wallet action. If ready for submission, submit the exact validated bytes with programmable-launch submit launch.json --config programmable-launch.config.json. Keep the CLI journal and Idempotency-Key unchanged for retries. An action_required resource requires its specified correction, rebuild and a new immutable request; never bypass a server decision.",
+  "programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until authorized",
+  "At authorized, awaiting_wallet_signature or wallet_action_required, open only the server-provided same-origin walletHandoffUrl and stop for the controller to review chain 4663, sender, Router, value, calldata and expiry. The API key and CLI never sign or broadcast. After the controller sends the exact transaction: programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until finalized. Source verification, indexing, trading and publication remain separate from finality. The following Ethereum instructions do not apply to this V4 request.",
+  "",
+  "Ethereum Mainnet only (V3, chain 1)",
   `Public capabilities: ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.capabilities}`,
   `Non-persisting preflight: ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.preflight}`,
   `Existing-project remediation contract: ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.remediation}`,
   `Pack-config schema: ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.packConfigSchema}`,
-  "Fetch discovery and public GET /v3/capabilities first. Bind the project to the returned profile revision; do not infer support from an older response.",
+  "For Ethereum, fetch discovery and public GET /v3/capabilities first. Bind the project to the returned profile revision; do not infer support from an older response.",
   "Read customLaunchApi.agentIntegration, then follow its remediation catalog, guide, OpenAPI and pinned CLI release before changing the project.",
   `Install: npm install --global ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.cli}`,
   `Release asset: ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.cli}`,
@@ -35,7 +67,7 @@ export const PROGRAMMABLE_AGENT_SETUP_TEXT_V1 = Object.freeze([
   `Public V3 OpenAPI: ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApi}`,
   `V2 read compatibility and fresh-write fence: ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApiV2Compatibility}`,
   `V1 read compatibility and fresh-write fence: ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.openApiV1Compatibility}`,
-  "Use only the current V3.3 profile for a new submission. Fresh V2 and V1 POSTs are permanently read-only and return non-retryable 409 CUSTOM_LAUNCH_V2_READ_ONLY or 409 CUSTOM_LAUNCH_V1_READ_ONLY; their schemas and reads remain available for historical resources.",
+  "For a new Ethereum submission, use the current V3.3 profile. Fresh V2 and V1 POSTs are permanently read-only and return non-retryable 409 CUSTOM_LAUNCH_V2_READ_ONLY or 409 CUSTOM_LAUNCH_V1_READ_ONLY; their schemas and reads remain available for historical resources.",
   "CLI 3.3.9 is the current installable release and defaults fresh packs to live profile 3.3.0. Explicit profile 3.4.0 output remains preparatory and is rejected by live capabilities until the backend and .well-known document independently activate that pending profile. Do not submit explicit profile 3.4.0 bytes before activation.",
   "V2 detail reads are observation-only for prepared or simulating resources. GET cannot advance simulation or authorization or expose a new walletTransaction; existing authorized and submitted reconciliation and finalized reads remain available.",
   "Before pack, collect the required project name and symbol, a meaningful description, one canonical website, one canonical X profile, and a non-empty local PNG, JPEG, WebP or GIF plus its canonical public HTTPS, IPFS or Arweave URI. Documentation, Telegram, Discord, GitHub and other links remain optional. Never invent metadata or a public image URI.",
