@@ -1582,11 +1582,9 @@ function LaunchBuilderFormView({
                 submittedAccount,
               )}&transaction=${encodeURIComponent(transactionHash)}`
             : model === "classic-v3"
-              ? activeSubmission?.tokenAddress
-                ? `/api/explore/token?address=${encodeURIComponent(
-                    activeSubmission.tokenAddress,
-                  )}`
-                : "/api/explore?sort=newest&limit=100"
+              ? `/api/profile/classic-v3?account=${encodeURIComponent(
+                  submittedAccount,
+                )}&launch=${encodeURIComponent(transactionHash)}`
               : `/api/explore/profile?account=${encodeURIComponent(
                   submittedAccount,
                 )}&launch=${encodeURIComponent(

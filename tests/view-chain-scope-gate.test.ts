@@ -30,7 +30,6 @@ describe("Robinhood view-chain scope gate", () => {
     const navigation = read("components/site-navigation.tsx");
     const selector = read("components/explore-chain-selector.tsx");
     const tokenPage = read("app/token/[address]/page.tsx");
-    const tokenSync = read("components/token-route-chain-sync.tsx");
     const styles = read("components/view-chain-unavailable.module.css");
 
     expect(boundary).toContain("resolvedViewChainId === 4663");
@@ -42,20 +41,22 @@ describe("Robinhood view-chain scope gate", () => {
     expect(transition).not.toContain("<ViewChainUnavailable />");
     expect(transition).toContain("routeUsesChainBoundary");
     expect(navigation).not.toContain("HeaderChainToggle");
-    expect(tokenPage).toContain("<TokenRouteChainSync");
-    expect(tokenSync).toContain("synchronized.current = true");
+    expect(tokenPage).toContain("<TokenIndexResetView />");
+    expect(tokenPage).not.toContain("<TokenRouteChainSync");
     expect(transition).toContain(
       "const resolvedInitialChain = !previousHydrated.current && hydrated",
     );
-    expect(transition).toContain(
-      "previousFocusContext.current = focusContext",
-    );
+    expect(transition).toContain("previousFocusContext.current = focusContext");
     expect(component).toContain("setViewChainId(1)");
     expect(component).toContain("Ethereum remains live");
     expect(component).toContain("Your connected wallet stays connected");
-    expect(component).not.toMatch(/useWallet|switchChain|switchNetwork|disconnect/);
+    expect(component).not.toMatch(
+      /useWallet|switchChain|switchNetwork|disconnect/,
+    );
     expect(selector).toContain("setViewChainId(option.viewChainId)");
-    expect(selector).not.toMatch(/useWallet|switchChain|switchNetwork|disconnect/);
+    expect(selector).not.toMatch(
+      /useWallet|switchChain|switchNetwork|disconnect/,
+    );
     expect(styles).toMatch(/\.action\s*\{[^}]*min-height:\s*44px;/s);
     expect(styles).toMatch(/\.action:focus-visible\s*\{/);
     expect(styles).toContain("@media (prefers-reduced-motion: reduce)");

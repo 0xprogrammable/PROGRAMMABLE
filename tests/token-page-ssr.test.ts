@@ -1,25 +1,13 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-vi.mock("@/app/api/explore/token/route", () => ({ GET: vi.fn() }));
-vi.mock("@/components/token-detail-view", () => ({
-  TokenDetailView: () => null,
-}));
+import { tokenDetailPageChainId } from "../app/token/[address]/page";
 
-import {
-  INITIAL_TOKEN_DETAIL_TIMEOUT_MS,
-  readInitialTokenDetailWithinDeadline,
-  tokenDetailPageChainId,
-} from
-  "../app/token/[address]/page";
+const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 
-afterEach(() => {
-  vi.useRealTimers();
-});
-
-describe("token detail initial server read", () => {
-  it("defaults only an omitted chain and rejects explicit invalid or repeated values", () => {
+describe("token detail index reset", () => {
+  it("defaults only an omitted chain and rejects invalid or repeated values", () => {
     expect(tokenDetailPageChainId(undefined)).toBe(1);
     expect(tokenDetailPageChainId("1")).toBe(1);
     expect(tokenDetailPageChainId("4663")).toBe(4663);
@@ -27,87 +15,22 @@ describe("token detail initial server read", () => {
     expect(tokenDetailPageChainId(["1", "4663"])).toBeNull();
   });
 
-  it("covers the API provider budget without allowing an unbounded render", () => {
-    expect(INITIAL_TOKEN_DETAIL_TIMEOUT_MS).toBeGreaterThan(8_000);
-    expect(INITIAL_TOKEN_DETAIL_TIMEOUT_MS).toBeLessThanOrEqual(9_000);
-  });
+  it("renders a noindex reset page without token, chart or analytics reads", () => {
+    const page = read("app/token/[address]/page.tsx");
+    const resetView = read("components/token-index-reset-view.tsx");
 
-  it("places the bounded detail read behind an immediate Suspense shell", () => {
-    const source = readFileSync(
-      join(process.cwd(), "app/token/[address]/page.tsx"),
-      "utf8",
-    );
-    expect(source).toContain("<Suspense fallback={<TokenDetailShell />}> ".trim());
-    expect(source).toContain(
-      "<InitialTokenDetail address={address} chainId={chainId} />",
-    );
-    expect(source).toContain("const readInitialTokenDetail = cache");
-    expect(source).toContain("chain: String(chainId)");
-    expect(source).toContain("readInitialTokenDetail(address, chainId)");
-    expect(source).toContain('key={`${chainId}:${address.toLowerCase()}`}');
-    expect(source).toContain("if (chainId === null) notFound()");
-    expect(source).toContain("export async function generateMetadata");
-    expect(source.match(/readTokenDetailResponse\(/gu)).toHaveLength(1);
-  });
-
-  it("keeps the token layout stable while the initial detail read is pending", () => {
-    const shell = readFileSync(
-      join(process.cwd(), "components/token-detail-shell.tsx"),
-      "utf8",
-    );
-
-    expect(shell).toContain('aria-busy="true"');
-    expect(shell).toContain("className={styles.navigationRow}");
-    expect(shell).toContain(
-      "`${styles.layout} ${styles.classicLayout} ${styles.detailSkeleton}`",
-    );
-    expect(shell).toContain("className={styles.identity}");
-    expect(shell).toContain("className={styles.marketChart}");
-    expect(shell).toContain("className={styles.tradeShell}");
-    expect(shell).toContain('data-skeleton="true"');
-    expect(shell).toContain("Loading token details");
-  });
-
-  it("returns at the total deadline and consumes the aborted read", async () => {
-    vi.useFakeTimers();
-    let readSignal: AbortSignal | undefined;
-    const result = readInitialTokenDetailWithinDeadline(
-      (signal) => {
-        readSignal = signal;
-        return new Promise((_, reject) => {
-          signal.addEventListener(
-            "abort",
-            () => reject(new Error("late provider failure")),
-            { once: true },
-          );
-        });
-      },
-      25,
-    );
-
-    await vi.advanceTimersByTimeAsync(25);
-
-    await expect(result).resolves.toEqual({
-      status: 503,
-      body: { error: "Token data is temporarily unavailable" },
-    });
-    expect(readSignal?.aborted).toBe(true);
-    expect(vi.getTimerCount()).toBe(0);
-  });
-
-  it("clears the deadline and aborts the signal after success", async () => {
-    vi.useFakeTimers();
-    let readSignal: AbortSignal | undefined;
-
-    await expect(readInitialTokenDetailWithinDeadline(async (signal) => {
-      readSignal = signal;
-      return { status: 200, body: { status: "ready" } };
-    }, 25)).resolves.toEqual({
-      status: 200,
-      body: { status: "ready" },
-    });
-
-    expect(readSignal?.aborted).toBe(true);
-    expect(vi.getTimerCount()).toBe(0);
+    expect(page).toContain("genericTokenDetailMetadata(address, true");
+    expect(page).toContain("<TokenIndexResetView />");
+    expect(page).toContain("notFound()");
+    expect(page).not.toContain("@/app/api/explore/token/route");
+    expect(page).not.toContain("TokenDetailView");
+    expect(page).not.toContain("TokenDetailShell");
+    expect(page).not.toContain("readInitialTokenDetail");
+    expect(page).not.toContain("NextRequest");
+    expect(page).not.toContain("Suspense");
+    expect(page).toContain("isAddress(address)");
+    expect(resetView).toContain("Token indexing is being rebuilt");
+    expect(resetView).toContain("market data are unavailable");
+    expect(resetView).not.toContain("fetch(");
   });
 });
