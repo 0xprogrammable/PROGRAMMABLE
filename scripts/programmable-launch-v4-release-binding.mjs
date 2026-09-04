@@ -862,7 +862,7 @@ function auditBackend(value, deployment) {
   required(value.backendPromotionInputDigest, SHA256, "backend raw promotion input digest");
   artifactDigest(value.apiContract, "release/custom-launch-api-contract.v4.json",
     "backend API contract");
-  if (value.migration?.path !== "migrations/0017_chain_aware_custom_launch_v4.sql") {
+  if (value.migration?.path !== "migrations/0024_custom_launch_source_authority_v4.sql") {
     throw new Error("backend final migration path is invalid");
   }
   artifactDigest(value.migration, value.migration.path, "backend final migration");

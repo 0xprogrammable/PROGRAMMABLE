@@ -111,6 +111,9 @@ import {
 
 const repositoryRoot = path.resolve(fileURLToPath(new URL("../../../", import.meta.url)));
 const bindingPath = "docs/operations/releases/custom-launch-v4/cli-release-binding.json";
+const FLY_V1_TEST_TOKEN =
+  "fm2_AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=";
+const FLY_V1_TEST_HEADER = `FlyV1 ${FLY_V1_TEST_TOKEN}`;
 const sourcePaths = [
   "contracts/spec/robinhood-custom-launch/standard-json/ProgrammableCreate2GraphDeployerV1.standard-input.json",
   "contracts/spec/robinhood-custom-launch/standard-json/ProgrammableLaunchStampRouterV1.standard-input.json",
@@ -181,6 +184,39 @@ const PHASE_A_TRANSACTION_INDEX = "9";
 const PHASE_A_DEPLOYER = "0x2Bb333d48DFAF1596D9036671d2E43168994249E";
 const OWNER_CALLDATA_HASH =
   "0x3ba04469085b17e12843a94c154a335c9c384837f8f6531f179cb4915fd237d9";
+const BACKEND_MAIN_2CA9D297_COMPOSITION = Object.freeze({
+  authoritativeChainRuntime: true,
+  liveExactPrivyPolicyReadiness: true,
+  apiSignerObserverVerifierRoleAttestation: true,
+  durableLedger: true,
+  exactCredentialScopeRecheck: true,
+  isolatedImageDecoder: true,
+  dualProviderSimulation: true,
+  exactExternalContractVerifier: true,
+  permitDigestSigner: true,
+  durableFinalityWriter: true,
+  canonicalFinalitySubjectReader: true,
+  dualProviderSubmissionDiscovery: true,
+  finalityObserver: true,
+  finalityWorkerLifecycle: true,
+  sourceVerificationWorkerConfigured: true,
+  sourceVerificationWorkerStarted: true,
+  sourceVerificationWorkerLifecycle: true,
+});
+const BACKEND_MAIN_2CA9D297_PROVIDER_PROFILE_DIGEST =
+  "sha256:88daed906c2a142c57d2483099a6d18be31dbff2a282108657ec6f5e73f53132";
+const BACKEND_MAIN_2CA9D297_MIGRATION = Object.freeze({
+  path: "migrations/0024_custom_launch_source_authority_v4.sql",
+  sha256: "sha256:51efb50f6f59131042d4253ce485cf14c3d375ab639d8c7075eb22dc8a9d44a0",
+});
+const BACKEND_MAIN_2CA9D297_API_CONTRACT = Object.freeze({
+  path: "release/custom-launch-api-contract.v4.json",
+  sha256: "sha256:1c22711fa0516507d1e207ee7cb565d9ec95f59e042d869c0052a98a57d73634",
+});
+const BACKEND_MAIN_2CA9D297_ROBINHOOD_PROVIDER_QUORUM = Object.freeze([
+  Object.freeze({ providerId: "drpc", trustDomain: "drpc.org" }),
+  Object.freeze({ providerId: "alchemy", trustDomain: "alchemy.com" }),
+]);
 const ROUTER_READ_ABI = [
   { type: "function", name: "PERMIT_AUTHORITY", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
   { type: "function", name: "PERMIT_AUTHORITY_RUNTIME_CODE_HASH", stateMutability: "view", inputs: [], outputs: [{ type: "bytes32" }] },
@@ -1357,7 +1393,7 @@ test("backend raw promotion input rejects fake summaries, ref swaps, and incompl
       input: failedLatestInput,
       stageBundle: stage,
       now: baseline.dependencies.now,
-    }), /absolute latest release is not complete and stable/u);
+    }), /latest Fly release is not complete/u);
 
     assert.throws(() => validateRobinhoodBackendPromotionInput({
       input: baseline.privateInput,
@@ -1441,6 +1477,255 @@ test("backend raw promotion input rejects fake summaries, ref swaps, and incompl
   }
 });
 
+test("backend promotion accepts the exact main@2ca9d297 release identity and rejects drift", async () => {
+  const fixture = await fixtureRepository();
+  try {
+    const built = await buildInput(fixture);
+    const stage = await materialize(fixture, built);
+    const candidate = structuredClone(buildRobinhoodBackendPromotionFixture(stage));
+    const readiness = responseBody(candidate.readinessReadback);
+    readiness.providerProfileDigest = BACKEND_MAIN_2CA9D297_PROVIDER_PROFILE_DIGEST;
+    readiness.migration = structuredClone(BACKEND_MAIN_2CA9D297_MIGRATION);
+    readiness.apiContract = structuredClone(BACKEND_MAIN_2CA9D297_API_CONTRACT);
+    readiness.profile.providerProfileDigest = BACKEND_MAIN_2CA9D297_PROVIDER_PROFILE_DIGEST;
+    readiness.providerQuorums.robinhood =
+      structuredClone(BACKEND_MAIN_2CA9D297_ROBINHOOD_PROVIDER_QUORUM);
+    readiness.composition = structuredClone(BACKEND_MAIN_2CA9D297_COMPOSITION);
+    replaceResponseBody(candidate.readinessReadback, readiness);
+    const privateInput = buildRobinhoodBackendPromotionInput(candidate);
+    const privateInputBytes = Buffer.from(`${JSON.stringify(privateInput, null, 2)}\n`, "utf8");
+    const publicInput = buildRobinhoodBackendPromotionPublicInputFromPrivate({
+      privateInput,
+      privateInputBytes,
+      stageBundle: stage,
+      now: () => new Date("2026-08-29T12:01:00Z"),
+    });
+    const validated = validateRobinhoodBackendPromotionPublicInput({
+      input: publicInput,
+      stageBundle: stage,
+      now: () => new Date("2026-08-29T12:01:00Z"),
+    });
+    assert.deepEqual(
+      validated.releaseIdentity.composition,
+      BACKEND_MAIN_2CA9D297_COMPOSITION,
+    );
+    const validateBackend = postdeploymentAjv.getSchema(
+      "https://programmable.market/schemas/releases/custom-launch-v4/backend-promotion-public-input.schema.json",
+    );
+    assert.equal(validateBackend(publicInput), true, JSON.stringify(validateBackend.errors));
+
+    for (const [label, expectedError, mutate] of [
+      [
+        "missing capability",
+        /must contain exactly/u,
+        (composition) => { delete composition.sourceVerificationWorkerLifecycle; },
+      ],
+      [
+        "legacy renamed capability",
+        /must contain exactly/u,
+        (composition) => {
+          delete composition.apiSignerObserverVerifierRoleAttestation;
+          composition.apiSignerObserverRoleAttestation = true;
+        },
+      ],
+      [
+        "extra capability",
+        /must contain exactly/u,
+        (composition) => { composition.unreviewedCapability = true; },
+      ],
+      [
+        "false capability",
+        /production composition is incomplete/u,
+        (composition) => { composition.sourceVerificationWorkerStarted = false; },
+      ],
+    ]) {
+      const driftedPrivate = structuredClone(privateInput);
+      const driftedReadiness = responseBody(driftedPrivate.readinessReadback);
+      mutate(driftedReadiness.composition);
+      replaceResponseBody(driftedPrivate.readinessReadback, driftedReadiness);
+      const sealedPrivate = buildRobinhoodBackendPromotionInput(driftedPrivate);
+      assert.throws(() => validateRobinhoodBackendPromotionInput({
+        input: sealedPrivate,
+        stageBundle: stage,
+        now: () => new Date("2026-08-29T12:01:00Z"),
+      }), expectedError, `${label} raw readiness`);
+
+      const drifted = structuredClone(publicInput);
+      mutate(drifted.runtimeReadiness.releaseIdentity.composition);
+      const sealed = buildRobinhoodBackendPromotionPublicInput(drifted);
+      assert.throws(() => validateRobinhoodBackendPromotionPublicInput({
+        input: sealed,
+        stageBundle: stage,
+        now: () => new Date("2026-08-29T12:01:00Z"),
+      }), expectedError, label);
+      assert.equal(validateBackend(sealed), false, `${label} must fail the public schema`);
+    }
+
+    for (const [label, expectedError, schemaMustReject, mutate] of [
+      [
+        "missing provider-profile binding",
+        /must contain exactly/u,
+        true,
+        (identity) => { delete identity.providerProfileDigest; },
+      ],
+      [
+        "split provider-profile binding",
+        /profile differs|source\/deployment identity differs/u,
+        true,
+        (identity) => { identity.profile.providerProfileDigest = `sha256:${"f".repeat(64)}`; },
+      ],
+      [
+        "legacy Robinhood provider quorum",
+        /provider quorums differ/u,
+        true,
+        (identity) => {
+          identity.providerQuorums.robinhood[0] = {
+            providerId: "quicknode",
+            trustDomain: "quicknode.com",
+          };
+        },
+      ],
+      [
+        "legacy migration",
+        /artifact bindings are invalid/u,
+        true,
+        (identity) => {
+          identity.migration = {
+            path: "migrations/0017_chain_aware_custom_launch_v4.sql",
+            sha256: `sha256:${"2".repeat(64)}`,
+          };
+        },
+      ],
+      [
+        "unreviewed API contract bytes",
+        /artifact bindings are invalid/u,
+        false,
+        (identity) => { identity.apiContract.sha256 = `sha256:${"3".repeat(64)}`; },
+      ],
+    ]) {
+      const driftedPrivate = structuredClone(privateInput);
+      const driftedReadiness = responseBody(driftedPrivate.readinessReadback);
+      mutate(driftedReadiness);
+      replaceResponseBody(driftedPrivate.readinessReadback, driftedReadiness);
+      const sealedPrivate = buildRobinhoodBackendPromotionInput(driftedPrivate);
+      assert.throws(() => validateRobinhoodBackendPromotionInput({
+        input: sealedPrivate,
+        stageBundle: stage,
+        now: () => new Date("2026-08-29T12:01:00Z"),
+      }), expectedError, `${label} raw readiness`);
+
+      const drifted = structuredClone(publicInput);
+      mutate(drifted.runtimeReadiness.releaseIdentity);
+      const sealed = buildRobinhoodBackendPromotionPublicInput(drifted);
+      assert.throws(() => validateRobinhoodBackendPromotionPublicInput({
+        input: sealed,
+        stageBundle: stage,
+        now: () => new Date("2026-08-29T12:01:00Z"),
+      }), expectedError, label);
+      if (schemaMustReject) {
+        assert.equal(validateBackend(sealed), false, `${label} must fail the public schema`);
+      }
+    }
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("backend promotion mirrors complete Machines-backed Fly release semantics", async () => {
+  const fixture = await fixtureRepository();
+  try {
+    const built = await buildInput(fixture);
+    const stage = await materialize(fixture, built);
+    const candidate = structuredClone(buildRobinhoodBackendPromotionFixture(stage));
+    const releaseResponse = responseBody(candidate.flyReadbacks[0]);
+    releaseResponse.data.app.releasesUnprocessed.nodes[0].stable = false;
+    replaceResponseBody(candidate.flyReadbacks[0], releaseResponse);
+    const machineReleaseId = "rel_abcdef123456";
+    const firstMetadata = responseBody(candidate.flyReadbacks[4]);
+    firstMetadata.fly_release_id = machineReleaseId;
+    replaceResponseBody(candidate.flyReadbacks[4], firstMetadata);
+    addBackendFixtureMachine(candidate, {
+      machineId: "bcdefa123456",
+      machineReleaseId,
+    });
+    const privateInput = buildRobinhoodBackendPromotionInput(candidate);
+    const privateInputBytes = Buffer.from(`${JSON.stringify(privateInput, null, 2)}\n`, "utf8");
+    const publicInput = buildRobinhoodBackendPromotionPublicInputFromPrivate({
+      privateInput,
+      privateInputBytes,
+      stageBundle: stage,
+      now: () => new Date("2026-08-29T12:01:00Z"),
+    });
+    const validated = validateRobinhoodBackendPromotionPublicInput({
+      input: publicInput,
+      stageBundle: stage,
+      now: () => new Date("2026-08-29T12:01:00Z"),
+    });
+    assert.equal(validated.backendReleaseEvidence.flyControlPlane.machines.length, 2);
+    const fresh = await freshVerifyRobinhoodBackendPromotionInput({
+      stageBundle: stage,
+      capturedInput: publicInput,
+      fetch: freshBackendFetch(privateInput),
+      flyApiToken: FLY_V1_TEST_TOKEN,
+      now: () => new Date("2026-08-29T12:01:00Z"),
+    });
+    assert.equal(fresh.observedAt, "2026-08-29T12:01:00.000Z");
+
+    const rejectPrivateMutation = (label, expectedError, mutate) => {
+      const drifted = structuredClone(privateInput);
+      mutate(drifted);
+      const sealed = buildRobinhoodBackendPromotionInput(drifted);
+      assert.throws(() => validateRobinhoodBackendPromotionInput({
+        input: sealed,
+        stageBundle: stage,
+        now: () => new Date("2026-08-29T12:01:00Z"),
+      }), expectedError, label);
+    };
+    rejectPrivateMutation("stable type", /release identities\/versions/u, (drifted) => {
+      const releases = responseBody(drifted.flyReadbacks[0]);
+      releases.data.app.releasesUnprocessed.nodes[0].stable = "false";
+      replaceResponseBody(drifted.flyReadbacks[0], releases);
+    });
+    rejectPrivateMutation("incomplete latest release", /latest Fly release is not complete/u,
+      (drifted) => {
+        const releases = responseBody(drifted.flyReadbacks[0]);
+        releases.data.app.releasesUnprocessed.nodes[0].status = "pending";
+        replaceResponseBody(drifted.flyReadbacks[0], releases);
+      });
+    rejectPrivateMutation("paginated release inventory", /paginated or incomplete/u, (drifted) => {
+      const releases = responseBody(drifted.flyReadbacks[0]);
+      releases.data.app.releasesUnprocessed.pageInfo.hasPreviousPage = true;
+      replaceResponseBody(drifted.flyReadbacks[0], releases);
+    });
+    rejectPrivateMutation("stale latest release", /latest Fly release is stale/u, (drifted) => {
+      const releases = responseBody(drifted.flyReadbacks[0]);
+      releases.data.app.releasesUnprocessed.nodes[0].createdAt = "2026-08-28T11:00:00Z";
+      replaceResponseBody(drifted.flyReadbacks[0], releases);
+    });
+    rejectPrivateMutation("wrapped machine list", /machine inventory/u, (drifted) => {
+      const machines = responseBody(drifted.flyReadbacks[2]);
+      replaceResponseBody(drifted.flyReadbacks[2], { machines });
+    });
+    rejectPrivateMutation("non-Machines release id", /metadata differs/u, (drifted) => {
+      const metadata = responseBody(drifted.flyReadbacks[4]);
+      metadata.fly_release_id = "release_123";
+      replaceResponseBody(drifted.flyReadbacks[4], metadata);
+    });
+    rejectPrivateMutation("split Machines release ids", /metadata inventories differ/u, (drifted) => {
+      const metadata = responseBody(drifted.flyReadbacks[6]);
+      metadata.fly_release_id = "rel_bcdefa123456";
+      replaceResponseBody(drifted.flyReadbacks[6], metadata);
+    });
+    rejectPrivateMutation("Machines release version drift", /metadata differs/u, (drifted) => {
+      const metadata = responseBody(drifted.flyReadbacks[6]);
+      metadata.fly_release_version = "124";
+      replaceResponseBody(drifted.flyReadbacks[6], metadata);
+    });
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("fresh backend replay re-reads the full readiness and Fly inventory", async () => {
   const fixture = await fixtureRepository();
   try {
@@ -1453,7 +1738,7 @@ test("fresh backend replay re-reads the full readiness and Fly inventory", async
       fetch: freshBackendFetch(backend.privateInput, {
         responseDate: "Sat, 29 Aug 2026 18:00:00 GMT",
       }),
-      flyApiToken: "protected-test-token-value",
+      flyApiToken: FLY_V1_TEST_TOKEN,
       now: () => new Date("2026-08-29T18:00:00Z"),
     });
     assert.equal(fresh.observedAt, "2026-08-29T18:00:00.000Z");
@@ -1465,7 +1750,7 @@ test("fresh backend replay re-reads the full readiness and Fly inventory", async
         privateCanaries: true,
         responseDate: "Sat, 29 Aug 2026 18:00:00 GMT",
       }),
-      flyApiToken: "protected-test-token-value",
+      flyApiToken: FLY_V1_TEST_TOKEN,
       now: () => new Date("2026-08-29T18:00:00Z"),
     });
     assert.equal(
@@ -1474,14 +1759,20 @@ test("fresh backend replay re-reads the full readiness and Fly inventory", async
       "fresh backend output must expose the semantic public digest, never the raw-private digest",
     );
     assert.equal(privateCanary.freshBackendReadbackDigest, fresh.freshBackendReadbackDigest);
+    let replayClock = new Date("2026-08-29T18:00:00Z");
+    const laterFetch = freshBackendFetch(backend.privateInput, {
+      responseDate: "Sat, 29 Aug 2026 18:01:00 GMT",
+    });
     const later = await freshVerifyRobinhoodBackendPromotionInput({
       stageBundle: stage,
       capturedInput: backend.input,
-      fetch: freshBackendFetch(backend.privateInput, {
-        responseDate: "Sat, 29 Aug 2026 18:01:00 GMT",
-      }),
-      flyApiToken: "protected-test-token-value",
-      now: () => new Date("2026-08-29T18:01:00Z"),
+      fetch: async (...args) => {
+        const response = await laterFetch(...args);
+        replayClock = new Date("2026-08-29T18:01:00Z");
+        return response;
+      },
+      flyApiToken: FLY_V1_TEST_TOKEN,
+      now: () => replayClock,
     });
     assert.equal(later.observedAt, "2026-08-29T18:01:00.000Z");
     assert.notEqual(
@@ -1496,9 +1787,45 @@ test("fresh backend replay re-reads the full readiness and Fly inventory", async
         driftMachineImage: true,
         responseDate: "Sat, 29 Aug 2026 18:00:00 GMT",
       }),
-      flyApiToken: "protected-test-token-value",
+      flyApiToken: FLY_V1_TEST_TOKEN,
       now: () => new Date("2026-08-29T18:00:00Z"),
     }), /machine identity|fresh backend\/Fly readback differs/u);
+
+    const schemed = await freshVerifyRobinhoodBackendPromotionInput({
+      stageBundle: stage,
+      capturedInput: backend.input,
+      fetch: freshBackendFetch(backend.privateInput, {
+        responseDate: "Sat, 29 Aug 2026 18:00:00 GMT",
+      }),
+      flyApiToken: FLY_V1_TEST_HEADER,
+      now: () => new Date("2026-08-29T18:00:00Z"),
+    });
+    assert.equal(schemed.freshBackendReadbackDigest, fresh.freshBackendReadbackDigest);
+
+    const oversizedFlyV1Token =
+      `fm2_${Buffer.alloc(12_288, 1).toString("base64")}`;
+    for (const invalidToken of [
+      `Bearer ${FLY_V1_TEST_TOKEN}`,
+      "fm2_short",
+      oversizedFlyV1Token,
+    ]) {
+      let fetchCalls = 0;
+      await assert.rejects(() => freshVerifyRobinhoodBackendPromotionInput({
+        stageBundle: stage,
+        capturedInput: backend.input,
+        fetch: async () => {
+          fetchCalls += 1;
+          throw new Error("invalid Fly token reached the network");
+        },
+        flyApiToken: invalidToken,
+        now: () => new Date("2026-08-29T18:00:00Z"),
+      }), (error) => {
+        assert.equal(error.message, "FLY_V1_TOKEN_WIRE_INVALID");
+        assert.doesNotMatch(error.message, /fm2_|Bearer/u);
+        return true;
+      });
+      assert.equal(fetchCalls, 0, "an invalid Fly token must fail before any network request");
+    }
   } finally {
     await rm(fixture.root, { recursive: true, force: true });
   }
@@ -3286,6 +3613,53 @@ function replaceResponseBody(readback, value) {
   readback.response.bodySha256 = sha256Digest(bytes);
 }
 
+function replaceReadbackPathAndKind(readback, { kind, requestPath, requestId }) {
+  const requestBodyBytes = Buffer.from(readback.request.bodyBytesBase64, "base64");
+  const requestBytes = Buffer.from(
+    `${readback.request.method} https://${readback.request.hostname}${requestPath}\n`
+      + `accept: ${readback.request.accept}\n`
+      + `content-type: ${readback.request.contentType ?? "none"}\n`
+      + `authentication: ${readback.request.authentication}\n\n`
+      + requestBodyBytes.toString("utf8"),
+    "utf8",
+  );
+  readback.kind = kind;
+  readback.request.path = requestPath;
+  readback.request.sanitizedBytesBase64 = requestBytes.toString("base64");
+  readback.request.byteLength = String(requestBytes.byteLength);
+  readback.request.sha256 = sha256Digest(requestBytes);
+  readback.response.requestId = requestId;
+}
+
+function addBackendFixtureMachine(input, { machineId, machineReleaseId }) {
+  const listedMachines = responseBody(input.flyReadbacks[2]);
+  const listedMachine = structuredClone(listedMachines[0]);
+  listedMachine.id = machineId;
+  listedMachines.push(listedMachine);
+  replaceResponseBody(input.flyReadbacks[2], listedMachines);
+
+  const machineReadback = structuredClone(input.flyReadbacks[3]);
+  const machine = responseBody(machineReadback);
+  machine.id = machineId;
+  replaceResponseBody(machineReadback, machine);
+  replaceReadbackPathAndKind(machineReadback, {
+    kind: `machine:${machineId}`,
+    requestPath: `/v1/apps/programmable-custom-launch-api/machines/${machineId}`,
+    requestId: `fixture-machine-${machineId}`,
+  });
+
+  const metadataReadback = structuredClone(input.flyReadbacks[4]);
+  const metadata = responseBody(metadataReadback);
+  metadata.fly_release_id = machineReleaseId;
+  replaceResponseBody(metadataReadback, metadata);
+  replaceReadbackPathAndKind(metadataReadback, {
+    kind: `metadata:${machineId}`,
+    requestPath: `/v1/apps/programmable-custom-launch-api/machines/${machineId}/metadata`,
+    requestId: `fixture-metadata-${machineId}`,
+  });
+  input.flyReadbacks.push(machineReadback, metadataReadback);
+}
+
 function freshBackendFetch(input, {
   driftMachineImage = false,
   privateCanaries = false,
@@ -3304,7 +3678,7 @@ function freshBackendFetch(input, {
     if (readback === undefined) throw new Error(`unexpected fresh backend URL ${url}`);
     assert.equal(init.redirect, "error");
     if (readback.request.authentication === "fly-api-token-redacted") {
-      assert.equal(init.headers.authorization, "Bearer protected-test-token-value");
+      assert.equal(init.headers.authorization, FLY_V1_TEST_HEADER);
     } else {
       assert.equal(init.headers.authorization, undefined);
     }

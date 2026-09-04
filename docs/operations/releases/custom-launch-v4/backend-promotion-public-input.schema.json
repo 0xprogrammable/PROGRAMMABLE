@@ -227,7 +227,8 @@
         "businessProfileId",
         "profileRevision",
         "profileVersion",
-        "profileDigest"
+        "profileDigest",
+        "providerProfileDigest"
       ],
       "properties": {
         "structuralProfileId": {
@@ -238,6 +239,9 @@
         "profileVersion": { "const": "4.0.0" },
         "profileDigest": {
           "const": "sha256:484b1dc6e9091804fabc230f2b3a7504940fa00264f8e66e82a66a951e71f1a0"
+        },
+        "providerProfileDigest": {
+          "const": "sha256:88daed906c2a142c57d2483099a6d18be31dbff2a282108657ec6f5e73f53132"
         }
       }
     },
@@ -249,7 +253,7 @@
         "robinhood": {
           "type": "array",
           "prefixItems": [
-            { "const": { "providerId": "quicknode", "trustDomain": "quicknode.com" } },
+            { "const": { "providerId": "drpc", "trustDomain": "drpc.org" } },
             { "const": { "providerId": "alchemy", "trustDomain": "alchemy.com" } }
           ],
           "items": false,
@@ -273,7 +277,8 @@
       "additionalProperties": false,
       "required": [
         "authoritativeChainRuntime",
-        "apiSignerObserverRoleAttestation",
+        "liveExactPrivyPolicyReadiness",
+        "apiSignerObserverVerifierRoleAttestation",
         "durableLedger",
         "exactCredentialScopeRecheck",
         "isolatedImageDecoder",
@@ -284,11 +289,15 @@
         "canonicalFinalitySubjectReader",
         "dualProviderSubmissionDiscovery",
         "finalityObserver",
-        "finalityWorkerLifecycle"
+        "finalityWorkerLifecycle",
+        "sourceVerificationWorkerConfigured",
+        "sourceVerificationWorkerStarted",
+        "sourceVerificationWorkerLifecycle"
       ],
       "properties": {
         "authoritativeChainRuntime": { "const": true },
-        "apiSignerObserverRoleAttestation": { "const": true },
+        "liveExactPrivyPolicyReadiness": { "const": true },
+        "apiSignerObserverVerifierRoleAttestation": { "const": true },
         "durableLedger": { "const": true },
         "exactCredentialScopeRecheck": { "const": true },
         "isolatedImageDecoder": { "const": true },
@@ -299,7 +308,10 @@
         "canonicalFinalitySubjectReader": { "const": true },
         "dualProviderSubmissionDiscovery": { "const": true },
         "finalityObserver": { "const": true },
-        "finalityWorkerLifecycle": { "const": true }
+        "finalityWorkerLifecycle": { "const": true },
+        "sourceVerificationWorkerConfigured": { "const": true },
+        "sourceVerificationWorkerStarted": { "const": true },
+        "sourceVerificationWorkerLifecycle": { "const": true }
       }
     },
     "releaseIdentity": {
@@ -314,6 +326,7 @@
         "chainId",
         "chainDeploymentId",
         "chainDeploymentDescriptorDigest",
+        "providerProfileDigest",
         "migration",
         "apiContract",
         "openApiSha256",
@@ -335,6 +348,9 @@
         "chainId": { "const": "4663" },
         "chainDeploymentId": { "const": "robinhood-mainnet-custom-launch-v1" },
         "chainDeploymentDescriptorDigest": { "$ref": "#/$defs/hex32" },
+        "providerProfileDigest": {
+          "const": "sha256:88daed906c2a142c57d2483099a6d18be31dbff2a282108657ec6f5e73f53132"
+        },
         "migration": {
           "allOf": [
             { "$ref": "#/$defs/artifactBinding" },
@@ -342,7 +358,7 @@
               "type": "object",
               "properties": {
                 "path": {
-                  "const": "migrations/0017_chain_aware_custom_launch_v4.sql"
+                  "const": "migrations/0024_custom_launch_source_authority_v4.sql"
                 }
               }
             }
