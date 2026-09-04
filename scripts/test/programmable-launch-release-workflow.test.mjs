@@ -590,6 +590,14 @@ function robinhoodPromotionFailures(value) {
     ".github/workflows/verify.yml",
     ".github/workflows/capture-robinhood-custom-launch-postdeployment.yml",
     ".github/workflows/capture-programmable-robinhood-promotion.yml",
+    "run_id=\"$(jq -er '.runId | select(test(\"^[1-9][0-9]*$\"))' \"$coordinates\")\"",
+    "run_attempt=\"$(jq -er '.runAttempt | select(test(\"^[1-9][0-9]*$\"))' \"$coordinates\")\"",
+    "artifact_id=\"$(jq -er '.artifactId | select(test(\"^[1-9][0-9]*$\"))' \"$coordinates\")\"",
+    "artifact_digest=\"$(jq -er '.artifactDigest | select(test(\"^sha256:[0-9a-f]{64}$\"))' \"$coordinates\")\"",
+    "printf 'run_id=%s\\n' \"$run_id\"",
+    "printf 'run_attempt=%s\\n' \"$run_attempt\"",
+    "printf 'artifact_id=%s\\n' \"$artifact_id\"",
+    "printf 'artifact_digest=%s\\n' \"$artifact_digest\"",
     "finalize-robinhood-custom-launch-deployment.mjs authorize-backend",
     "--capture-attestation-bundle",
     "--stage-attestation-bundle",
@@ -656,6 +664,7 @@ test("Robinhood Phase B workflow accepts only portable public-safe producer evid
   assert.equal(robinhoodPromotionSource.includes("inputs.backend_artifact"), false);
   assert.equal(robinhoodPromotionSource.includes("pull_request:"), false);
   assert.equal(robinhoodPromotionSource.includes("create-storage-record: false"), false);
+  assert.equal(robinhoodPromotionSource.includes('test(\\"'), false);
 });
 
 test("Robinhood Phase B workflow contract mutations fail closed", () => {
