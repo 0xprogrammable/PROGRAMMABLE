@@ -1,81 +1,20 @@
-import { timingSafeEqual } from "node:crypto";
-
-import { revalidateTag } from "next/cache";
-import { NextRequest, NextResponse } from "next/server";
-
-import {
-  ALCHEMY_EXPLORE_CACHE_TAG,
-  refreshAlchemyExploreRegistry,
-} from "../../../../lib/alchemy/explore.server";
-import {
-  persistRouterCustomIdentitySnapshotFromSourceV1,
-} from "../../../../lib/alchemy/router-custom-public.server";
+import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
 export const runtime = "nodejs";
 
-const NO_STORE = Object.freeze({ "Cache-Control": "no-store" });
+const INDEX_RESET_HEADERS = Object.freeze({
+  "Cache-Control": "no-store",
+  "X-Programmable-Indexing-Status": "reset",
+});
 
-function isAuthorized(request: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  const authorization = request.headers.get("authorization");
-  const secretLength = secret ? Buffer.byteLength(secret, "utf8") : 0;
-  if (
-    !secret ||
-    secretLength < 32 ||
-    secretLength > 1_024 ||
-    !authorization?.startsWith("Bearer ")
-  ) {
-    return false;
-  }
-  const provided = Buffer.from(authorization.slice(7), "utf8");
-  const expected = Buffer.from(secret, "utf8");
-  return (
-    provided.length === expected.length && timingSafeEqual(provided, expected)
+export function GET() {
+  return NextResponse.json(
+    {
+      status: "index_rebuilding",
+      code: "indexing_reset",
+      operation: "alchemy-launch-refresh",
+    },
+    { status: 410, headers: INDEX_RESET_HEADERS },
   );
-}
-
-export async function GET(request: NextRequest) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json(
-      { error: "Unauthorized" },
-      { status: 401, headers: NO_STORE },
-    );
-  }
-
-  try {
-    const result = await refreshAlchemyExploreRegistry({
-      forcePersist: true,
-      includeLatest: false,
-      requirePersistence: true,
-    });
-    const routerSnapshot =
-      await persistRouterCustomIdentitySnapshotFromSourceV1({
-        generatedAt: result.registryGeneratedAt,
-        status: result.launchStampRouterCaughtUp
-          ? "current"
-          : "last-known-good",
-        reorgDetected: result.launchStampRouterRebuiltAfterReorg,
-        slice: result.launchStampRouter,
-      });
-    revalidateTag(ALCHEMY_EXPLORE_CACHE_TAG, { expire: 0 });
-    return NextResponse.json(
-      {
-        ok: true,
-        persisted: result.persisted,
-        registryChanged: result.registryChanged,
-        confirmedBlockNumber: result.confirmedBlockNumber,
-        launchStampRouterBlockNumber: result.launchStampRouterBlockNumber,
-        routerCustomIdentityCount: routerSnapshot.entries.length,
-        routerCustomIdentityCommitment: routerSnapshot.identityCommitment,
-      },
-      { headers: NO_STORE },
-    );
-  } catch {
-    return NextResponse.json(
-      { error: "Alchemy launch registry refresh unavailable" },
-      { status: 503, headers: NO_STORE },
-    );
-  }
 }

@@ -4,7 +4,10 @@ import { V4_TOKEN_ADDRESS } from "@/components/docs-public-policy";
 const SITE_ORIGIN = "https://programmable.market";
 const CUSTOM_LAUNCH_API_ORIGIN = "https://api.programmable.market";
 
-const jsonResponse = (schema: Record<string, unknown>, description: string) => ({
+const jsonResponse = (
+  schema: Record<string, unknown>,
+  description: string,
+) => ({
   description,
   content: {
     "application/json": {
@@ -17,182 +20,23 @@ const component = (name: string) => ({
   $ref: `#/components/schemas/${name}`,
 });
 
-const exploreIdentityResponseHeaders = {
-  "X-Programmable-Chain-Id": {
-    description: "Chain namespace used for the verified identity lookup.",
-    schema: { type: "string", enum: ["1", "4663"] },
-  },
-  "X-Programmable-Launch-Source": {
+const exploreIndexResetStateResponseHeaders = {
+  "Cache-Control": {
     description:
-      "Verified launch identity authorities included in the completed lookup.",
-    schema: { type: "string" },
+      "Reset responses are never stored by clients or shared caches.",
+    schema: { const: "no-store" },
   },
-  "X-Programmable-Read-Source": {
-    description:
-      "Sources actually read for this response. A verified 404 contains identity sources only because no market lookup occurs.",
-    schema: { type: "string" },
-  },
-  "X-Programmable-Canonical-Read-Status": {
-    description: "Freshness state of the canonical Classic identity catalog.",
-    schema: {
-      type: "string",
-      enum: ["current", "last-known-good", "unavailable"],
-    },
-  },
-  "X-Programmable-Router-Read-Status": {
-    description: "Freshness state of the finalized Router Custom identity read.",
-    schema: {
-      type: "string",
-      enum: ["current", "last-known-good", "unavailable"],
-    },
-  },
-  "X-Programmable-Identity-Last-Indexed-At": {
-    description: "Generation time of the identity boundary used by the response.",
-    schema: { type: "string", format: "date-time" },
+  "X-Programmable-Indexing-Status": {
+    description: "Explore indexing is intentionally reset while it is rebuilt.",
+    schema: { const: "reset" },
   },
 } as const;
 
-const exploreMarketResponseHeaders = {
-  "X-Programmable-Market-Provider": {
-    description:
-      "Market enrichment provider selected for this Ethereum response. gmgn+dexscreener means GMGN was primary and Dexscreener was used for at least one fallback request.",
-    schema: {
-      type: "string",
-      enum: ["dexscreener", "gmgn", "gmgn+dexscreener"],
-    },
-  },
-  "X-Programmable-Market-Read-Status": {
-    description:
-      "Aggregate completeness of the bounded market read. Identity results remain authoritative independently of this status.",
-    schema: {
-      type: "string",
-      enum: ["complete", "partial", "unavailable"],
-    },
-  },
-  "X-Programmable-Market-Source": {
-    description:
-      "Providers that returned an exact-identity market observation. Omitted when no provider observation was accepted.",
-    schema: {
-      type: "string",
-      enum: ["dexscreener", "gmgn", "gmgn+dexscreener"],
-    },
-  },
-  "X-Programmable-Price-Source": {
-    description:
-      "Providers whose exact-identity observations qualified the displayed valuation. Omitted when no valuation qualified.",
-    schema: {
-      type: "string",
-      enum: ["dexscreener", "gmgn", "gmgn+dexscreener"],
-    },
-  },
-  "X-Programmable-Market-As-Of": {
-    description:
-      "Provider observation time for the response valuation. Omitted when no market valuation is available.",
-    schema: { type: "string", format: "date-time" },
-  },
-} as const;
-
-const exploreDiscoveryResponseHeaders = {
-  "X-Programmable-Discovery-Provider": {
-    description:
-      "Discovery provider consulted for the optional Ethereum Trending order. Emitted only for sort=trending.",
-    schema: { const: "gmgn" },
-  },
-  "X-Programmable-Discovery-Read-Status": {
-    description:
-      "Coverage of the filtered canonical launch set. Unavailable means canonical Newest order was used without hiding any launch.",
-    schema: {
-      type: "string",
-      enum: ["complete", "partial", "unavailable"],
-    },
-  },
-  "X-Programmable-Discovery-Matched-Count": {
-    description:
-      "Number of filtered canonical launches matched by accepted GMGN discovery observations.",
-    schema: { type: "string", pattern: "^(?:0|[1-9][0-9]*)$" },
-  },
-  "X-Programmable-Discovery-Matched-Unique-Count": {
-    description:
-      "Number of unique lowercase canonical token addresses represented by the matched entry prefix.",
-    schema: { type: "string", pattern: "^(?:0|[1-9][0-9]*)$" },
-  },
-  "X-Programmable-Discovery-Ranking-Commitment": {
-    description:
-      "Deterministic commitment to the ordered canonical matches (token address, canonical index, GMGN snapshot kind, interval and fetchedAt). Raw GMGN ranks remain private.",
-    schema: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
-  },
-} as const;
-
-const exploreRankingResponseHeaders = {
-  "X-Programmable-Ranking-Primary-Provider": {
-    description:
-      "Provider attempted first for market-cap ranking. This does not mean GMGN covered every canonical launch.",
-    schema: { const: "gmgn" },
-  },
-  "X-Programmable-Ranking-Source": {
-    description:
-      "Accepted ranking signals. canonical-launch-order means neither provider supplied an accepted ranking signal.",
-    schema: {
-      type: "string",
-      enum: [
-        "gmgn",
-        "gmgn+dexscreener",
-        "dexscreener",
-        "canonical-launch-order",
-      ],
-    },
-  },
-  "X-Programmable-Ranking-Read-Status": {
-    description:
-      "Aggregate coverage by accepted GMGN global market-cap ranks, GMGN token_info FDV and exact-identity Dexscreener FDV fallback. See the separate GMGN status for primary-provider coverage.",
-    schema: {
-      type: "string",
-      enum: ["complete", "partial", "unavailable"],
-    },
-  },
-  "X-Programmable-Ranking-GMGN-Status": {
-    description:
-      "GMGN-only canonical coverage across global market-cap rank and bounded token_info FDV hydration. partial never means a globally complete GMGN market-cap ranking.",
-    schema: {
-      type: "string",
-      enum: ["complete", "partial", "unavailable"],
-    },
-  },
-  "X-Programmable-Ranking-Commitment": {
-    description:
-      "Deterministic commitment to direction, accepted snapshot intent and the complete ordered canonical identity set.",
-    schema: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
-  },
-} as const;
-
-const exploreSearchResponseHeaders = {
-  "X-Programmable-Search-Provider": {
-    description:
-      "Search relevance provider consulted for a nonempty Ethereum q query.",
-    schema: { const: "gmgn" },
-  },
-  "X-Programmable-Search-Read-Status": {
-    description:
-      "Coverage of the canonical search result. unavailable means the bounded GMGN read failed and local exact/substring launch order was retained.",
-    schema: {
-      type: "string",
-      enum: ["complete", "partial", "unavailable"],
-    },
-  },
-  "X-Programmable-Search-Matched-Count": {
-    description:
-      "Number of canonical Programmable entries matched by accepted GMGN coin rows.",
-    schema: { type: "string", pattern: "^(?:0|[1-9][0-9]*)$" },
-  },
-  "X-Programmable-Search-Matched-Unique-Count": {
-    description:
-      "Number of unique canonical Ethereum token addresses matched by GMGN.",
-    schema: { type: "string", pattern: "^(?:0|[1-9][0-9]*)$" },
-  },
-  "X-Programmable-Search-Ranking-Commitment": {
-    description:
-      "Deterministic commitment to the normalized query, accepted GMGN snapshot metadata and complete ordered canonical result.",
-    schema: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
+const exploreIndexResetResponseHeaders = {
+  ...exploreIndexResetStateResponseHeaders,
+  "Retry-After": {
+    description: "Clients may retry after the one-hour reset interval.",
+    schema: { const: "3600" },
   },
 } as const;
 
@@ -200,11 +44,11 @@ export const programmablePublicOpenApi = {
   openapi: "3.1.0",
   info: {
     title: "Programmable developer APIs",
-    version: "1.9.0",
+    version: "1.10.0",
     summary:
-      "Verified launch discovery, live Ethereum V3 creation and the public self-serve Robinhood V4 release candidate.",
+      "Explore indexing reset, live Ethereum V3 creation and the public self-serve Robinhood V4 release candidate.",
     description:
-      "The programmable.market discovery endpoints remain unauthenticated and read-only. At the separately hosted Custom Launch API, fresh writes use the public Ethereum V3.3 contract. Robinhood Chain V4 Router and backend are deployed and ready, and target a public self-serve launch path; this static release candidate awaits public discovery promotion, so clients must require live publicWrites, publicAuthorization and releaseReady fields before creating. The required default policy for new Robinhood V4 API Custom launches is 20 bps to the published recipient. It is policy configuration, not proof of canonical onchain fee enforcement, a charged fee or platform revenue, and missing onchain fee enforcement is not itself a write blocker. V2 and V1 history remain readable, while both legacy creation routes are write-fenced with non-retryable 409 CUSTOM_LAUNCH_V2_READ_ONLY and CUSTOM_LAUNCH_V1_READ_ONLY responses. CLI and model checks prepare a request; only the API server decides whether verified evidence permits a wallet handoff. Legacy Registry and GitHub submission intake is closed. An API key and the CLI never sign or broadcast a controller-wallet transaction.",
+      "The programmable.market Explore endpoints remain unauthenticated and read-only, but token indexing is intentionally reset while a replacement indexer is built. Valid Explore list, detail and analytics requests return a deterministic 503 reset response; chart requests return the provider-neutral market-chart-error.v2 reset response. At the separately hosted Custom Launch API, fresh writes use the public Ethereum V3.3 contract. Robinhood Chain V4 Router and backend are deployed and ready, and target a public self-serve launch path; this static release candidate awaits public discovery promotion, so clients must require live publicWrites, publicAuthorization and releaseReady fields before creating. The required default policy for new Robinhood V4 API Custom launches is 20 bps to the published recipient. It is policy configuration, not proof of canonical onchain fee enforcement, a charged fee or platform revenue, and missing onchain fee enforcement is not itself a write blocker. V2 and V1 history remain readable, while both legacy creation routes are write-fenced with non-retryable 409 CUSTOM_LAUNCH_V2_READ_ONLY and CUSTOM_LAUNCH_V1_READ_ONLY responses. CLI and model checks prepare a request; only the API server decides whether verified evidence permits a wallet handoff. Legacy Registry and GitHub submission intake is closed. An API key and the CLI never sign or broadcast a controller-wallet transaction.",
     contact: {
       name: "Programmable",
       url: `${SITE_ORIGIN}/docs/developers`,
@@ -219,11 +63,12 @@ export const programmablePublicOpenApi = {
   tags: [
     {
       name: "Discovery",
-      description: "Verified launch catalog and token identity reads.",
+      description:
+        "Explore token reads are intentionally unavailable while indexing is rebuilt.",
     },
     {
       name: "Operations",
-      description: "Public, secret-free provider readiness observations.",
+      description: "Public, provider-free Explore indexing state.",
     },
     {
       name: "Registry",
@@ -256,71 +101,73 @@ export const programmablePublicOpenApi = {
     "/api/ops/health": {
       get: {
         operationId: "getOperationsHealth",
-        summary: "Read public provider health",
+        summary: "Read the Explore indexing state",
         description:
-          "Returns informational provider-stack readiness, the effective parsed GMGN request rate used by every server-side GMGN adapter, and a secret-free account-gate mode attestation. RPS 20 is ready only with multiflight-v1. The response never contains provider credentials, environment metadata, or endpoint configuration.",
+          "Reports the intentional provider-free Explore index reset. It performs no provider or indexer health check.",
         tags: ["Operations"],
         security: [],
         responses: {
-          "200": jsonResponse(
-            component("OperationsHealth"),
-            "Secret-free provider-stack health observation.",
-          ),
+          "200": {
+            ...jsonResponse(
+              component("OperationsHealth"),
+              "Provider-free Explore index reset state.",
+            ),
+            headers: exploreIndexResetStateResponseHeaders,
+          },
         },
       },
     },
     "/api/explore": {
       get: {
         operationId: "listVerifiedLaunches",
-        summary: "List verified public launches",
+        summary: "Read the Explore index reset state",
         description:
-          "Returns verified public identities. Optional market enrichment may be unavailable without removing a verified identity.",
+          "Valid requests return a deterministic 503 while token indexing is intentionally reset. No catalog, ranking, search, market-data provider or fallback is read.",
         tags: ["Discovery"],
         security: [],
         parameters: [
           {
             name: "chain",
             in: "query",
-            description:
-              "Chain-scoped Explore discovery. Ethereum Mainnet retains its existing market-enriched response. Robinhood returns a newest-only ready projection only when the finalized Programmable backend feed and direct chain verification succeed; otherwise it returns the honest planned-not-deployed response.",
+            description: "Chain namespace retained for request validation.",
             schema: { type: "integer", enum: [1, 4663], default: 1 },
           },
           {
             name: "page",
             in: "query",
-            description: "One-based result page.",
+            description:
+              "One-based result page retained for request validation.",
             schema: { type: "integer", minimum: 1, default: 1 },
           },
           {
             name: "limit",
             in: "query",
-            description: "Results per page.",
+            description: "Results per page retained for request validation.",
             schema: { type: "integer", minimum: 1, maximum: 100, default: 9 },
           },
           {
             name: "q",
             in: "query",
             description:
-              "One to 100 Unicode code points after normalization. GMGN coin relevance is intersected with the canonical Programmable catalog; foreign coins and wallet rows can never enter the result. Local exact and substring matches remain the stable fallback.",
+              "One to 100 Unicode code points retained for request validation.",
             schema: { type: "string", minLength: 1, maxLength: 100 },
           },
           {
             name: "model",
             in: "query",
-            description: "Limit results to one public launch category.",
+            description: "Launch category retained for request validation.",
             schema: { type: "string", enum: ["classic", "custom"] },
           },
           {
             name: "socials",
             in: "query",
-            description: "Require or exclude X or Telegram links.",
+            description: "Social-link filter retained for request validation.",
             schema: { type: "string", enum: ["yes", "no"] },
           },
           {
             name: "sort",
             in: "query",
-            description:
-              "Canonical launch order, GMGN Trending, or GMGN-primary market-cap ordering. chain=4663 accepts only newest. trending and every market-cap sort are accepted only with chain=1. Market-cap sorts place qualified canonical GMGN rank matches first in the requested direction, then sort only the unobserved canonical remainder by exact-identity Dexscreener FDV; this is deliberately not a cross-provider numeric merge. Every mode retains the complete filtered canonical catalog.",
+            description: "Sort selection retained for request validation.",
             schema: {
               type: "string",
               enum: [
@@ -339,7 +186,7 @@ export const programmablePublicOpenApi = {
             name: "rankingCommitment",
             in: "query",
             description:
-              "Required for page > 1 with sort=market-cap or sort=market-cap-asc. Pass the exact ranking.rankingCommitment returned by page 1 to keep every page on the same retained ranking generation. If that generation is no longer retained, restart from page 1.",
+              "Previously issued ranking commitment retained only for request validation during the reset.",
             schema: {
               type: "string",
               pattern: "^sha256:[0-9a-f]{64}$",
@@ -347,45 +194,30 @@ export const programmablePublicOpenApi = {
           },
         ],
         responses: {
-          "200": {
-            ...jsonResponse(
-              component("ExploreListResponse"),
-              "Verified chain-scoped launch page or an honest planned-not-deployed Robinhood response.",
-            ),
-            headers: {
-              ...exploreIdentityResponseHeaders,
-              ...exploreMarketResponseHeaders,
-              ...exploreDiscoveryResponseHeaders,
-              ...exploreRankingResponseHeaders,
-              ...exploreSearchResponseHeaders,
-            },
-          },
           "400": jsonResponse(component("ApiError"), "Invalid query shape."),
-          "409": jsonResponse(
-            component("ApiError"),
-            "The requested market-cap ranking generation is no longer retained; restart pagination from page 1.",
-          ),
-          "503": jsonResponse(
-            component("ApiError"),
-            "The verified identity source is temporarily unavailable.",
-          ),
+          "503": {
+            ...jsonResponse(
+              component("ExploreIndexResetError"),
+              "Explore token indexing is intentionally reset.",
+            ),
+            headers: exploreIndexResetResponseHeaders,
+          },
         },
       },
     },
     "/api/explore/token": {
       get: {
         operationId: "getVerifiedToken",
-        summary: "Look up one verified token",
+        summary: "Read the token-detail index reset state",
         description:
-          "Looks up an exact token identity on the selected chain. Ethereum Mainnet retains its existing market-enriched response. Robinhood returns a ready identity only when the finalized Programmable backend feed and direct chain verification succeed; otherwise it returns the honest planned-not-deployed response. A 404 response is a completed verified lookup with no public identity, not a provider timeout.",
+          "Valid requests return a deterministic 503 while token indexing is intentionally reset. A 404 is not emitted because no completed identity lookup occurs.",
         tags: ["Discovery"],
         security: [],
         parameters: [
           {
             name: "chain",
             in: "query",
-            description:
-              "Identity namespace. Omit for the backward-compatible Ethereum Mainnet default.",
+            description: "Chain namespace retained for request validation.",
             schema: { type: "integer", enum: [1, 4663], default: 1 },
           },
           {
@@ -398,37 +230,26 @@ export const programmablePublicOpenApi = {
           },
         ],
         responses: {
-          "200": {
-            ...jsonResponse(
-              component("TokenDetailResponse"),
-              "Verified chain-scoped token, Registry-verified Custom project, or honest planned-not-deployed Robinhood response.",
-            ),
-            headers: {
-              ...exploreIdentityResponseHeaders,
-              ...exploreMarketResponseHeaders,
-            },
-          },
-          "400": jsonResponse(component("ApiError"), "Invalid address or query shape."),
-          "404": {
-            ...jsonResponse(
-              component("TokenDetailLookupReadyResponse"),
-              "Verified lookup completed but no public token identity matched. No market provider is read for this response.",
-            ),
-            headers: exploreIdentityResponseHeaders,
-          },
-          "503": jsonResponse(
+          "400": jsonResponse(
             component("ApiError"),
-            "The identity boundary could not be verified at this time.",
+            "Invalid address or query shape.",
           ),
+          "503": {
+            ...jsonResponse(
+              component("ExploreIndexResetError"),
+              "Explore token indexing is intentionally reset.",
+            ),
+            headers: exploreIndexResetResponseHeaders,
+          },
         },
       },
     },
     "/api/explore/token/analytics": {
       get: {
         operationId: "getVerifiedTokenAnalytics",
-        summary: "Read normalized GMGN analytics for one verified token",
+        summary: "Read the token-analytics index reset state",
         description:
-          "Resolves the token through Programmable's canonical Ethereum launch authorities and requires a strict GMGN token_info admission proof before returning analytics. summary returns token-level security heuristics and token-level Uniswap v4 pool_info observations with unavailable pool attribution. holders and traders are token-address rankings admitted by that proof; they use a fixed 20-row request and return only seven normalized wallet metrics per row and are always private and no-store. Provider output remains normalized: raw GMGN envelopes, ranking query metadata, wallet profile metadata, and credentials are never returned.",
+          "Valid requests return a deterministic 503 while token analytics indexing is intentionally reset. No analytics provider or fallback is read.",
         tags: ["Discovery"],
         security: [],
         parameters: [
@@ -442,15 +263,14 @@ export const programmablePublicOpenApi = {
             name: "address",
             in: "query",
             required: true,
-            description: "Canonical Programmable token contract address.",
+            description: "EVM token contract address.",
             schema: component("EthereumAddress"),
             example: V4_TOKEN_ADDRESS,
           },
           {
             name: "section",
             in: "query",
-            description:
-              "summary is edge-cacheable only when data is accepted. holders and traders are private no-store reads.",
+            description: "Analytics section retained for request validation.",
             schema: {
               type: "string",
               enum: ["summary", "holders", "traders"],
@@ -461,65 +281,21 @@ export const programmablePublicOpenApi = {
             name: "limit",
             in: "query",
             description:
-              "Optional fixed ranking limit. When present, the exact decimal value 20 is required for every section; every other value is rejected.",
+              "Optional fixed ranking limit. When present, the exact decimal value 20 is required.",
             schema: { type: "integer", const: 20, default: 20 },
           },
         ],
         responses: {
-          "200": {
-            ...jsonResponse(
-              component("TokenAnalyticsResponse"),
-              "Canonical-bound, normalized GMGN analytics. An unavailable status remains a successful canonical lookup with null analytics.",
-            ),
-            headers: {
-              ...exploreIdentityResponseHeaders,
-              ...exploreMarketResponseHeaders,
-              "X-Programmable-Analytics-Provider": {
-                description: "Normalized analytics provider.",
-                schema: { const: "gmgn" },
-              },
-              "X-Programmable-Analytics-Scope": {
-                description: "Scope of every accepted analytics section.",
-                schema: { const: "token" },
-              },
-              "X-Programmable-Analytics-Pool-Attribution": {
-                description:
-                  "GMGN pool_info does not expose the canonical bytes32 v4 PoolId, so analytics pool attribution is unavailable.",
-                schema: { const: "unavailable" },
-              },
-              "X-Programmable-Analytics-Read-Status": {
-                description:
-                  "Accepted normalized analytics coverage for the requested section.",
-                schema: {
-                  type: "string",
-                  enum: ["ready", "partial", "unavailable"],
-                },
-              },
-              "X-Programmable-Data-Quality": {
-                description: "Current, partial, or unavailable analytics quality.",
-                schema: {
-                  type: "string",
-                  enum: ["current", "partial", "unavailable"],
-                },
-              },
-              "Cache-Control": {
-                description:
-                  "summary may use a 15-second shared cache only when data is accepted. holders, traders, and unavailable responses are private no-store.",
-                schema: { type: "string" },
-              },
-            },
-          },
-          "400": jsonResponse(component("ApiError"), "Invalid analytics query."),
-          "404": {
-            ...jsonResponse(component("ApiError"), "No canonical token matched."),
-            headers: exploreIdentityResponseHeaders,
-          },
+          "400": jsonResponse(
+            component("ApiError"),
+            "Invalid analytics query.",
+          ),
           "503": {
             ...jsonResponse(
-              component("ApiError"),
-              "The canonical identity boundary could not be verified.",
+              component("ExploreIndexResetError"),
+              "Explore token analytics indexing is intentionally reset.",
             ),
-            headers: exploreIdentityResponseHeaders,
+            headers: exploreIndexResetResponseHeaders,
           },
         },
       },
@@ -527,9 +303,9 @@ export const programmablePublicOpenApi = {
     "/api/explore/token/chart": {
       get: {
         operationId: "getVerifiedTokenChart",
-        summary: "Read token price history with explicit series scope",
+        summary: "Read the token-chart index reset state",
         description:
-          "Resolves one canonical Ethereum launch, then prefers current GMGN token_kline period-close OHLCV scoped to the token address. GMGN token_info must first prove the exact token, quote asset, v4 exchange and canonical supply; every explicit base or token-pair field must match that token and quote. Coherent bytes32 locators must equal the canonical PoolId and yield exact current admission attribution; coherent 20-byte provider contract locators yield unavailable attribution. Neither state is per-candle provenance. Bitquery period-median history remains the exact-pool fallback. Provider errors never add or remove canonical launch identity.",
+          "Valid requests return the provider-neutral market-chart-error.v2 response while token chart indexing is intentionally reset. No chart provider or fallback is read.",
         tags: ["Discovery"],
         security: [],
         parameters: [
@@ -537,7 +313,7 @@ export const programmablePublicOpenApi = {
             name: "address",
             in: "query",
             required: true,
-            description: "Canonical Programmable Ethereum token address.",
+            description: "EVM token contract address.",
             schema: component("EthereumAddress"),
             example: V4_TOKEN_ADDRESS,
           },
@@ -553,71 +329,14 @@ export const programmablePublicOpenApi = {
           },
         ],
         responses: {
-          "200": {
-            ...jsonResponse(
-              component("TokenChartResponse"),
-              "Token-address GMGN period-close OHLCV, exact-pool Bitquery period-median history, or an honest unavailable chart response.",
-            ),
-            headers: {
-              "X-Programmable-Data-Quality": {
-                description: "Current, partial, or unavailable chart quality.",
-                schema: {
-                  type: "string",
-                  enum: ["current", "partial", "unavailable"],
-                },
-              },
-              "X-Programmable-Launch-Source":
-                exploreIdentityResponseHeaders["X-Programmable-Launch-Source"],
-              "X-Programmable-Read-Source":
-                exploreIdentityResponseHeaders["X-Programmable-Read-Source"],
-              "X-Programmable-Router-Read-Status":
-                exploreIdentityResponseHeaders["X-Programmable-Router-Read-Status"],
-              "X-Programmable-Market-Provider": {
-                description: "Chart provider selected for this response.",
-                schema: { type: "string", enum: ["gmgn", "bitquery"] },
-              },
-              "X-Programmable-Market-Read-Status": {
-                description: "Live or bounded cache-fallback chart read.",
-                schema: {
-                  type: "string",
-                  enum: ["live", "cache-fallback"],
-                },
-              },
-              "X-Programmable-Chart-Scope": {
-                description:
-                  "Series scope selected for this response. GMGN is token-address history; Bitquery is exact-pool history.",
-                schema: { type: "string", enum: ["token", "pool"] },
-              },
-              "X-Programmable-Chart-Pool-Attribution": {
-                description:
-                  "For GMGN, the current token_info locator attribution; it is not per-candle provenance. Bitquery exact means its chart is queried by canonical pool identity.",
-                schema: {
-                  type: "string",
-                  enum: ["unavailable", "exact"],
-                },
-              },
-              "X-Programmable-Market-Source": {
-                description:
-                  "Accepted chart source. Interpret it with the chart scope and pool-attribution headers.",
-                schema: { type: "string", enum: ["gmgn", "bitquery"] },
-              },
-              "X-Programmable-Price-Source": {
-                description:
-                  "Accepted chart price source. Omitted when no chart point was accepted.",
-                schema: { type: "string", enum: ["gmgn", "bitquery"] },
-              },
-              "X-Programmable-Market-As-Of": {
-                description: "End time of the latest accepted chart period.",
-                schema: { type: "string", format: "date-time" },
-              },
-            },
-          },
           "400": jsonResponse(component("ApiError"), "Invalid chart query."),
-          "404": jsonResponse(component("ApiError"), "No canonical token matched."),
-          "503": jsonResponse(
-            component("MarketChartError"),
-            "The identity or selected chart history boundary is unavailable.",
-          ),
+          "503": {
+            ...jsonResponse(
+              component("MarketChartError"),
+              "Explore token chart indexing is intentionally reset.",
+            ),
+            headers: exploreIndexResetResponseHeaders,
+          },
         },
       },
     },
@@ -748,7 +467,8 @@ export const programmablePublicOpenApi = {
             "API key lacks the legacy custom-launch:create scope.",
           ),
           "409": {
-            description: "V1 launch creation is read-only. Do not retry this request.",
+            description:
+              "V1 launch creation is read-only. Do not retry this request.",
             content: {
               "application/json": {
                 schema: component("CustomLaunchApiError"),
@@ -756,7 +476,8 @@ export const programmablePublicOpenApi = {
                   schemaVersion: "programmable.api-error.v1",
                   error: {
                     code: "CUSTOM_LAUNCH_V1_READ_ONLY",
-                    message: "V1 launch creation is read-only; use the public V3.3 launch contract",
+                    message:
+                      "V1 launch creation is read-only; use the public V3.3 launch contract",
                     requestId: "018f1f8e-7d93-7c2f-8d7f-e114942e7f25",
                   },
                 },
@@ -1007,8 +728,7 @@ export const programmablePublicOpenApi = {
           kind: { const: "deterministic-source-bundle" },
           controllerWallet: {
             ...component("EthereumAddress"),
-            description:
-              "Must equal launchWallet after address normalization.",
+            description: "Must equal launchWallet after address normalization.",
           },
           sourceLineageNonce: component("CanonicalUint256"),
           sourceBundleDigest: component("LowerHex32"),
@@ -1082,7 +802,11 @@ export const programmablePublicOpenApi = {
           },
           declaredHookPermissions: {
             oneOf: [
-              { type: "array", maxItems: 14, items: component("HookPermission") },
+              {
+                type: "array",
+                maxItems: 14,
+                items: component("HookPermission"),
+              },
               { type: "null" },
             ],
           },
@@ -1114,8 +838,7 @@ export const programmablePublicOpenApi = {
           schemaVersion: { const: "programmable.custom-graph-bundle.v1" },
           sourceBundleSha256: {
             ...component("Sha256Digest"),
-            description:
-              "Must equal sourceDescriptor.bundleContentSha256.",
+            description: "Must equal sourceDescriptor.bundleContentSha256.",
           },
           targets: {
             type: "array",
@@ -1352,7 +1075,13 @@ export const programmablePublicOpenApi = {
             minItems: 1,
             items: {
               type: "object",
-              required: ["resultIndex", "account", "runtimeCodeHash", "kind", "scope"],
+              required: [
+                "resultIndex",
+                "account",
+                "runtimeCodeHash",
+                "kind",
+                "scope",
+              ],
               properties: {
                 resultIndex: { type: "integer", minimum: 0, maximum: 255 },
                 account: component("EthereumAddress"),
@@ -1419,7 +1148,9 @@ export const programmablePublicOpenApi = {
           "artifactHash",
         ],
         properties: {
-          schemaVersion: { const: "programmable.prepared-custom-graph-launch.v1" },
+          schemaVersion: {
+            const: "programmable.prepared-custom-graph-launch.v1",
+          },
           graphBundleHash: component("Sha256Digest"),
           sourceBundleSha256: component("Sha256Digest"),
           chainBindings: { type: "object", additionalProperties: true },
@@ -1526,7 +1257,9 @@ export const programmablePublicOpenApi = {
           "deadline",
         ],
         properties: {
-          schemaVersion: { const: "programmable.signed-prepared-launch-permit.v1" },
+          schemaVersion: {
+            const: "programmable.signed-prepared-launch-permit.v1",
+          },
           artifactHash: component("Sha256Digest"),
           chainId: { const: "1" },
           router: component("EthereumAddress"),
@@ -1558,7 +1291,9 @@ export const programmablePublicOpenApi = {
           "broadcastByService",
         ],
         properties: {
-          schemaVersion: { const: "programmable.custom-launch-wallet-transaction.v1" },
+          schemaVersion: {
+            const: "programmable.custom-launch-wallet-transaction.v1",
+          },
           chainId: { const: "1" },
           from: component("EthereumAddress"),
           to: component("EthereumAddress"),
@@ -1576,9 +1311,17 @@ export const programmablePublicOpenApi = {
         type: "object",
         description:
           "Bounded Mainnet Router log window captured during preparation. Single-resource GET polling reconciles only inside this window.",
-        required: ["schemaVersion", "chainId", "router", "fromBlock", "toBlock"],
+        required: [
+          "schemaVersion",
+          "chainId",
+          "router",
+          "fromBlock",
+          "toBlock",
+        ],
         properties: {
-          schemaVersion: { const: "programmable.custom-launch-observation-window.v1" },
+          schemaVersion: {
+            const: "programmable.custom-launch-observation-window.v1",
+          },
           chainId: { const: "1" },
           router: component("EthereumAddress"),
           fromBlock: component("CanonicalUint256"),
@@ -1610,7 +1353,9 @@ export const programmablePublicOpenApi = {
           "observedAtBlockNumber",
         ],
         properties: {
-          schemaVersion: { const: "programmable.custom-launch-onchain-evidence.v1" },
+          schemaVersion: {
+            const: "programmable.custom-launch-onchain-evidence.v1",
+          },
           finalityState: { type: "string", enum: ["submitted", "finalized"] },
           chainId: { const: "1" },
           router: component("EthereumAddress"),
@@ -1642,7 +1387,9 @@ export const programmablePublicOpenApi = {
           "walletTransaction",
         ],
         properties: {
-          schemaVersion: { const: "programmable.custom-launch-authorization-result.v1" },
+          schemaVersion: {
+            const: "programmable.custom-launch-authorization-result.v1",
+          },
           artifact: component("PreparedLaunchArtifact"),
           agentAttestation: component("AgentLaunchAttestationResult"),
           signedPermit: { type: "null" },
@@ -1664,7 +1411,9 @@ export const programmablePublicOpenApi = {
           "onchain",
         ],
         properties: {
-          schemaVersion: { const: "programmable.custom-launch-authorization-result.v1" },
+          schemaVersion: {
+            const: "programmable.custom-launch-authorization-result.v1",
+          },
           artifact: component("PreparedLaunchArtifact"),
           agentAttestation: component("AgentLaunchAttestationResult"),
           signedPermit: component("SignedPreparedLaunchPermit"),
@@ -1796,10 +1545,7 @@ export const programmablePublicOpenApi = {
           sourceVerification: {
             description:
               "Optional server-authored post-finality verification state. It is absent or null for legacy requests, requests without an exact-source bundle, and requests that have not created verification jobs.",
-            oneOf: [
-              component("SourceVerificationStatusV1"),
-              { type: "null" },
-            ],
+            oneOf: [component("SourceVerificationStatusV1"), { type: "null" }],
           },
         },
         additionalProperties: false,
@@ -1882,7 +1628,14 @@ export const programmablePublicOpenApi = {
       },
       ApiIndex: {
         type: "object",
-        required: ["schemaVersion", "status", "openapi", "documentation", "llms", "scope"],
+        required: [
+          "schemaVersion",
+          "status",
+          "openapi",
+          "documentation",
+          "llms",
+          "scope",
+        ],
         properties: {
           schemaVersion: { const: "programmable.public-api-index.v1" },
           status: { const: "ready" },
@@ -1907,1256 +1660,34 @@ export const programmablePublicOpenApi = {
       },
       OperationsHealth: {
         type: "object",
-        required: ["status", "provider", "providers", "checkedAt"],
+        description:
+          "Provider-free status for the intentional Explore indexing reset.",
+        required: ["status", "providers"],
         properties: {
-          status: { type: "string", enum: ["ready", "degraded"] },
-          provider: component("OperationsPrimaryProvider"),
+          status: { const: "index-reset" },
           providers: {
             type: "array",
-            minItems: 3,
-            maxItems: 3,
-            prefixItems: [
-              component("OperationsGmgnProvider"),
-              component("OperationsBitqueryProvider"),
-              component("OperationsDexscreenerProvider"),
-            ],
+            maxItems: 0,
             items: false,
           },
-          checkedAt: { type: "string", format: "date-time" },
         },
         additionalProperties: false,
       },
-      OperationsPrimaryProvider: {
-        type: "object",
-        required: ["name", "configured"],
-        properties: {
-          name: { const: "gmgn" },
-          configured: { type: "boolean" },
-        },
-        additionalProperties: false,
-      },
-      OperationsGmgnProvider: {
+      ExploreIndexResetError: {
         type: "object",
         description:
-          "GMGN primary runtime state. requestsPerSecond is the effective shared server-side limiter setting after fail-closed parsing; accountGateMode is a secret-free concurrency readiness attestation. Neither field is a credential.",
-        required: [
-          "name",
-          "role",
-          "configured",
-          "requestsPerSecond",
-          "accountGateMode",
-        ],
+          "Deterministic Explore response while token indexing is intentionally reset.",
+        required: ["error"],
         properties: {
-          name: { const: "gmgn" },
-          role: { const: "primary-token-market" },
-          configured: { type: "boolean" },
-          requestsPerSecond: {
-            type: "integer",
-            minimum: 1,
-            maximum: 20,
-          },
-          accountGateMode: {
-            type: "string",
-            enum: [
-              "multiflight-v1",
-              "legacy-singleflight-v1",
-              "unavailable",
-            ],
-          },
-        },
-        additionalProperties: false,
-      },
-      OperationsBitqueryProvider: {
-        type: "object",
-        required: ["name", "role", "configured"],
-        properties: {
-          name: { const: "bitquery" },
-          role: { const: "exact-pool-chart-fallback" },
-          configured: { type: "boolean" },
-        },
-        additionalProperties: false,
-      },
-      OperationsDexscreenerProvider: {
-        type: "object",
-        required: ["name", "role", "configured"],
-        properties: {
-          name: { const: "dexscreener" },
-          role: { const: "batch-fail-soft-fallback" },
-          configured: { const: true },
-        },
-        additionalProperties: false,
-      },
-      ExploreValuation: {
-        oneOf: [
-          {
-            type: "object",
-            required: ["status", "metric", "currency", "valueWad", "freshness"],
-            properties: {
-              status: { const: "available" },
-              metric: { type: "string", enum: ["market-cap", "fdv"] },
-              supplyBasis: { type: "string", enum: ["circulating", "total"] },
-              currency: { type: "string", enum: ["usd", "eth", "quote"] },
-              valueWad: { type: "string", pattern: "^(0|[1-9][0-9]*)$" },
-              freshness: {
-                type: "string",
-                enum: ["current", "provider-recent", "stale", "unknown"],
-              },
-              source: {
-                type: "string",
-                enum: ["bitquery", "dexscreener", "gmgn", "stateview-chainlink"],
-              },
-              asOfTime: { type: "string", format: "date-time" },
-            },
-            additionalProperties: true,
-          },
-          {
-            type: "object",
-            required: ["status", "reason"],
-            properties: {
-              status: { const: "unavailable" },
-              reason: { type: "string" },
-            },
-            additionalProperties: false,
-          },
-        ],
-      },
-      DexscreenerExploreMarketRead: {
-        type: "object",
-        description:
-          "Bounded Dexscreener batch result for the exact market identities requested by Explore.",
-        required: [
-          "provider",
-          "status",
-          "currency",
-          "requestedCount",
-          "observedCount",
-          "qualifiedCount",
-          "unavailableCount",
-          "oldestFetchedAt",
-          "newestFetchedAt",
-        ],
-        properties: {
-          provider: { const: "dexscreener" },
-          status: {
-            type: "string",
-            enum: ["complete", "partial", "unavailable"],
-          },
-          currency: { const: "USD" },
-          requestedCount: { type: "integer", minimum: 0 },
-          observedCount: { type: "integer", minimum: 0 },
-          qualifiedCount: { type: "integer", minimum: 0 },
-          unavailableCount: { type: "integer", minimum: 0 },
-          oldestFetchedAt: {
-            oneOf: [
-              { type: "string", format: "date-time" },
-              { type: "null" },
-            ],
-          },
-          newestFetchedAt: {
-            oneOf: [
-              { type: "string", format: "date-time" },
-              { type: "null" },
-            ],
-          },
-        },
-        additionalProperties: false,
-      },
-      GmgnExploreMarketRead: {
-        type: "object",
-        description:
-          "Bounded GMGN primary result with exact-identity Dexscreener fallback accounting for the same Explore response.",
-        required: [
-          "provider",
-          "fallbackProvider",
-          "status",
-          "currency",
-          "requestedCount",
-          "observedCount",
-          "qualifiedCount",
-          "unavailableCount",
-          "gmgnObservedCount",
-          "gmgnQualifiedCount",
-          "fallbackRequestedCount",
-          "fallbackObservedCount",
-          "fallbackQualifiedCount",
-          "oldestFetchedAt",
-          "newestFetchedAt",
-        ],
-        properties: {
-          provider: { const: "gmgn" },
-          fallbackProvider: { const: "dexscreener" },
-          status: {
-            type: "string",
-            enum: ["complete", "partial", "unavailable"],
-          },
-          currency: { const: "USD" },
-          requestedCount: { type: "integer", minimum: 0 },
-          observedCount: { type: "integer", minimum: 0 },
-          qualifiedCount: { type: "integer", minimum: 0 },
-          unavailableCount: { type: "integer", minimum: 0 },
-          gmgnObservedCount: { type: "integer", minimum: 0 },
-          gmgnQualifiedCount: { type: "integer", minimum: 0 },
-          fallbackRequestedCount: { type: "integer", minimum: 0 },
-          fallbackObservedCount: { type: "integer", minimum: 0 },
-          fallbackQualifiedCount: { type: "integer", minimum: 0 },
-          oldestFetchedAt: {
-            oneOf: [
-              { type: "string", format: "date-time" },
-              { type: "null" },
-            ],
-          },
-          newestFetchedAt: {
-            oneOf: [
-              { type: "string", format: "date-time" },
-              { type: "null" },
-            ],
-          },
-        },
-        additionalProperties: false,
-      },
-      ExploreMarketRead: {
-        oneOf: [
-          component("DexscreenerExploreMarketRead"),
-          component("GmgnExploreMarketRead"),
-        ],
-      },
-      GmgnMarketIdentity: {
-        type: "object",
-        description:
-          "Canonical Programmable admission context for a GMGN token-level observation. poolId identifies the admitted launch context. A token_info response may attest it only when both provider locators carry this exact bytes32 value; a coherent 20-byte provider contract locator leaves pool attribution unavailable.",
-        required: [
-          "chainId",
-          "protocol",
-          "tokenAddress",
-          "poolId",
-          "quoteAddress",
-        ],
-        properties: {
-          chainId: { const: "1" },
-          protocol: { const: "uniswap_v4" },
-          tokenAddress: component("EthereumAddress"),
-          poolId: {
-            ...component("Hex32"),
-            description:
-              "Canonical Programmable Uniswap v4 PoolId carried as admission context. See poolAttribution on the enclosing observation.",
-          },
-          quoteAddress: component("EthereumAddress"),
-        },
-        additionalProperties: false,
-      },
-      GmgnMarketSnapshot: {
-        type: "object",
-        description:
-          "Short-lived GMGN token-level market observation attached only after exact Programmable Ethereum token, quote asset, Uniswap v4 exchange and canonical supply matching. Coherent nonzero 20-byte pool locators yield unavailable attribution. Coherent bytes32 locators yield exact attribution only when both equal the canonical request PoolId.",
-        required: [
-          "schemaVersion",
-          "source",
-          "marketScope",
-          "poolAttribution",
-          "currency",
-          "fetchedAt",
-          "identity",
-          "priceUsdWad",
-          "fdvUsdWad",
-          "liquidityUsdWad",
-          "volume24hUsdWad",
-          "swapCount24h",
-        ],
-        properties: {
-          schemaVersion: { const: "programmable.gmgn-market-snapshot.v1" },
-          source: { const: "gmgn" },
-          marketScope: { const: "token" },
-          poolAttribution: {
-            type: "string",
-            enum: ["exact", "unavailable"],
-          },
-          currency: { const: "USD" },
-          fetchedAt: { type: "string", format: "date-time" },
-          identity: component("GmgnMarketIdentity"),
-          priceUsdWad: { type: "string", pattern: "^[1-9][0-9]*$" },
-          fdvUsdWad: { type: "string", pattern: "^[1-9][0-9]*$" },
-          liquidityUsdWad: { type: "string", pattern: "^[1-9][0-9]*$" },
-          volume24hUsdWad: { type: "string", pattern: "^(0|[1-9][0-9]*)$" },
-          swapCount24h: { type: "integer", minimum: 0 },
-        },
-        additionalProperties: false,
-      },
-      ExploreMarketCapRanking: {
-        type: "object",
-        description:
-          "GMGN-primary market-cap ordering over the canonical Ethereum catalog. Fresh, positive-market-cap global GMGN ranks form the first tier. Rank-unobserved entries first use bounded, canonical-supply-bound GMGN token_info FDV; only the still-unqualified or deferred remainder can use exact-identity Dexscreener FDV, followed by stable canonical launch order. Values are sorted only within their metric/provider tier and are never compared across tiers.",
-        required: [
-          "schemaVersion",
-          "requested",
-          "direction",
-          "primaryProvider",
-          "source",
-          "fallbackProvider",
-          "rankingCommitment",
-          "status",
-          "gmgnStatus",
-          "applied",
-          "metricOrder",
-          "rankInterval",
-          "rankLimit",
-          "observedTokenCount",
-          "matchedTokenCount",
-          "matchedUniqueTokenCount",
-          "canonicalEntryCount",
-          "canonicalTokenCount",
-          "unobservedCanonicalEntryCount",
-          "canonicalAddressCoverageBps",
-          "foreignTokenCount",
-          "discardedProviderItemCount",
-          "gmgnHydrationLimit",
-          "gmgnHydrationEligibleCount",
-          "gmgnHydrationRequestedCount",
-          "gmgnHydrationObservedCount",
-          "gmgnHydrationQualifiedCount",
-          "gmgnHydrationDeferredCount",
-          "fallbackRequestedCount",
-          "fallbackQualifiedCount",
-          "canonicalTailCount",
-          "qualifiedCount",
-          "totalCount",
-          "asOfTime",
-        ],
-        properties: {
-          schemaVersion: {
-            const: "programmable.explore-market-cap-ranking.v1",
-          },
-          requested: { const: "market-cap" },
-          direction: { type: "string", enum: ["asc", "desc"] },
-          primaryProvider: { const: "gmgn" },
-          source: {
-            type: "string",
-            enum: [
-              "gmgn",
-              "gmgn+dexscreener",
-              "dexscreener",
-              "canonical-launch-order",
-            ],
-          },
-          fallbackProvider: { const: "dexscreener" },
-          rankingCommitment: {
-            type: "string",
-            pattern: "^sha256:[0-9a-f]{64}$",
-          },
-          status: {
-            type: "string",
-            enum: ["complete", "partial", "unavailable"],
-            description:
-              "Aggregate accepted ranking-signal coverage across GMGN and fallback.",
-          },
-          gmgnStatus: {
-            type: "string",
-            enum: ["complete", "partial", "unavailable"],
-            description: "Coverage from GMGN alone.",
-          },
-          applied: {
-            type: "string",
-            enum: [
-              "gmgn-market-cap",
-              "gmgn-market-cap-then-gmgn-token-info-fdv",
-              "gmgn-market-cap-then-gmgn-token-info-fdv-then-launch-order",
-              "gmgn-market-cap-then-gmgn-token-info-fdv-then-dexscreener-fdv",
-              "gmgn-market-cap-then-gmgn-token-info-fdv-then-dexscreener-fdv-then-launch-order",
-              "gmgn-market-cap-then-dexscreener-fdv",
-              "gmgn-market-cap-then-dexscreener-fdv-then-launch-order",
-              "gmgn-market-cap-then-launch-order",
-              "gmgn-token-info-fdv",
-              "gmgn-token-info-fdv-then-launch-order",
-              "gmgn-token-info-fdv-then-dexscreener-fdv",
-              "gmgn-token-info-fdv-then-dexscreener-fdv-then-launch-order",
-              "fdv",
-              "qualified-fdv-then-launch-order",
-              "launch-order",
-            ],
-          },
-          metricOrder: {
-            const:
-              "gmgn-market-cap>gmgn-token-info-fdv>dexscreener-fdv>canonical-launch-order",
-          },
-          rankInterval: { const: "1h" },
-          rankLimit: { const: 100 },
-          observedTokenCount: { type: "integer", minimum: 0, maximum: 100 },
-          matchedTokenCount: { type: "integer", minimum: 0 },
-          matchedUniqueTokenCount: { type: "integer", minimum: 0 },
-          canonicalEntryCount: { type: "integer", minimum: 0 },
-          canonicalTokenCount: { type: "integer", minimum: 0 },
-          unobservedCanonicalEntryCount: { type: "integer", minimum: 0 },
-          canonicalAddressCoverageBps: {
-            type: "integer",
-            minimum: 0,
-            maximum: 10_000,
-          },
-          foreignTokenCount: { type: "integer", minimum: 0, maximum: 100 },
-          discardedProviderItemCount: {
-            type: "integer",
-            minimum: 0,
-            maximum: 1_000,
-          },
-          gmgnHydrationLimit: { type: "integer", minimum: 0, maximum: 100 },
-          gmgnHydrationEligibleCount: { type: "integer", minimum: 0 },
-          gmgnHydrationRequestedCount: {
-            type: "integer",
-            minimum: 0,
-            maximum: 100,
-          },
-          gmgnHydrationObservedCount: {
-            type: "integer",
-            minimum: 0,
-            maximum: 100,
-          },
-          gmgnHydrationQualifiedCount: {
-            type: "integer",
-            minimum: 0,
-            maximum: 100,
-          },
-          gmgnHydrationDeferredCount: { type: "integer", minimum: 0 },
-          fallbackRequestedCount: { type: "integer", minimum: 0 },
-          fallbackQualifiedCount: { type: "integer", minimum: 0 },
-          canonicalTailCount: { type: "integer", minimum: 0 },
-          qualifiedCount: { type: "integer", minimum: 0 },
-          totalCount: { type: "integer", minimum: 0 },
-          asOfTime: {
-            description:
-              "When the accepted GMGN global rank observed any qualified Ethereum token, this is exactly that rank snapshot time even if no token intersects the canonical catalog. Otherwise it is the latest accepted GMGN token_info or Dexscreener ordering time, or null when no provider ordering signal was accepted.",
-            oneOf: [
-              { type: "string", format: "date-time" },
-              { type: "null" },
-            ],
-          },
-        },
-        additionalProperties: false,
-      },
-      ExploreSearchRanking: {
-        type: "object",
-        description:
-          "Bounded GMGN coin-search relevance intersected with the canonical Ethereum Programmable catalog. Provider-matched canonical aliases may join local name, symbol, address or model matches. Foreign coins and wallet rows never enter the result, and omitted local matches remain in stable fallback order.",
-        required: [
-          "schemaVersion",
-          "provider",
-          "requested",
-          "orderBy",
-          "rankingCommitment",
-          "status",
-          "applied",
-          "observedTokenCount",
-          "matchedTokenCount",
-          "matchedUniqueTokenCount",
-          "canonicalMatchCount",
-          "canonicalMatchTokenCount",
-          "unobservedCanonicalMatchCount",
-          "providerOnlyCanonicalTokenCount",
-          "foreignTokenCount",
-          "discardedProviderItemCount",
-          "duplicateProviderItemCount",
-          "canonicalAddressCoverageBps",
-          "asOfTime",
-        ],
-        properties: {
-          schemaVersion: {
-            const: "programmable.explore-search-ranking.v1",
-          },
-          provider: { const: "gmgn" },
-          requested: { const: "search" },
-          orderBy: { const: "weight" },
-          rankingCommitment: {
-            type: "string",
-            pattern: "^sha256:[0-9a-f]{64}$",
-          },
-          status: {
-            type: "string",
-            enum: ["complete", "partial", "unavailable"],
-          },
-          applied: {
-            type: "string",
-            enum: [
-              "gmgn-canonical-search-with-local-match-fallback",
-              "local-match-order",
-            ],
-          },
-          observedTokenCount: {
-            type: "integer",
-            minimum: 0,
-            maximum: 1_000,
-          },
-          matchedTokenCount: { type: "integer", minimum: 0 },
-          matchedUniqueTokenCount: { type: "integer", minimum: 0 },
-          canonicalMatchCount: { type: "integer", minimum: 0 },
-          canonicalMatchTokenCount: { type: "integer", minimum: 0 },
-          unobservedCanonicalMatchCount: { type: "integer", minimum: 0 },
-          providerOnlyCanonicalTokenCount: { type: "integer", minimum: 0 },
-          foreignTokenCount: {
-            type: "integer",
-            minimum: 0,
-            maximum: 1_000,
-          },
-          discardedProviderItemCount: {
-            type: "integer",
-            minimum: 0,
-            maximum: 1_000,
-          },
-          duplicateProviderItemCount: {
-            type: "integer",
-            minimum: 0,
-            maximum: 1_000,
-          },
-          canonicalAddressCoverageBps: {
-            type: "integer",
-            minimum: 0,
-            maximum: 10_000,
-          },
-          asOfTime: {
-            oneOf: [
-              { type: "string", format: "date-time" },
-              { type: "null" },
-            ],
-          },
-        },
-        additionalProperties: false,
-      },
-      ExploreDiscoveryRanking: {
-        type: "object",
-        description:
-          "Bounded metadata for an optional GMGN ranking intersected with the already filtered canonical Programmable catalog. No raw GMGN ranking payload is exposed.",
-        required: [
-          "schemaVersion",
-          "provider",
-          "requested",
-          "rankingCommitment",
-          "status",
-          "applied",
-          "rankInterval",
-          "hotSearchInterval",
-          "snapshotCount",
-          "observedTokenCount",
-          "matchedTokenCount",
-          "matchedUniqueTokenCount",
-          "canonicalEntryCount",
-          "canonicalTokenCount",
-          "unobservedCanonicalEntryCount",
-          "canonicalAddressCoverageBps",
-          "foreignTokenCount",
-          "discardedProviderItemCount",
-          "asOfTime",
-        ],
-        properties: {
-          schemaVersion: {
-            const: "programmable.explore-discovery-ranking.v1",
-          },
-          provider: { const: "gmgn" },
-          requested: { const: "trending" },
-          rankingCommitment: {
-            type: "string",
-            pattern: "^sha256:[0-9a-f]{64}$",
-            description:
-              "Commits to the ordered matched canonical ranking identity without exposing raw provider ranks. Observed freshness is reported separately by asOfTime and is not part of this commitment.",
-          },
-          status: {
-            type: "string",
-            enum: ["complete", "partial", "unavailable"],
-          },
-          applied: {
-            type: "string",
-            enum: [
-              "gmgn-ranked-with-launch-order-fallback",
-              "launch-order",
-            ],
-          },
-          rankInterval: { const: "1h" },
-          hotSearchInterval: { const: "24h" },
-          snapshotCount: { type: "integer", minimum: 0, maximum: 2 },
-          observedTokenCount: { type: "integer", minimum: 0, maximum: 200 },
-          matchedTokenCount: { type: "integer", minimum: 0 },
-          matchedUniqueTokenCount: { type: "integer", minimum: 0 },
-          canonicalEntryCount: { type: "integer", minimum: 0 },
-          canonicalTokenCount: { type: "integer", minimum: 0 },
-          unobservedCanonicalEntryCount: { type: "integer", minimum: 0 },
-          canonicalAddressCoverageBps: {
-            type: "integer",
-            minimum: 0,
-            maximum: 10_000,
-          },
-          foreignTokenCount: { type: "integer", minimum: 0, maximum: 200 },
-          discardedProviderItemCount: {
-            type: "integer",
-            minimum: 0,
-            maximum: 2_000,
-          },
-          asOfTime: {
-            oneOf: [
-              { type: "string", format: "date-time" },
-              { type: "null" },
-            ],
-          },
-        },
-        additionalProperties: false,
-      },
-      GmgnTokenSecurity: {
-        type: "object",
-        description:
-          "Normalized token-level GMGN heuristics admitted for the exact canonical token. These fields are observations, not a safety guarantee or pool-level evidence.",
-        required: [
-          "schemaVersion",
-          "source",
-          "fetchedAt",
-          "identity",
-          "tokenAddress",
-          "isShowAlert",
-          "isOpenSource",
-          "isBlacklisted",
-          "isHoneypot",
-          "isOwnerRenounced",
-          "isMintRenounced",
-          "isFreezeAccountRenounced",
-          "isWashTrading",
-          "top10HolderRatio",
-          "developerTeamHoldRatio",
-          "creatorBalanceRatio",
-          "suspectedInsiderHoldRatio",
-          "rugRatio",
-          "ratTraderAmountRatio",
-          "bundlerTraderAmountRatio",
-          "buyTaxRatio",
-          "sellTaxRatio",
-          "averageTaxRatio",
-          "highTaxRatio",
-          "burnRatio",
-          "developerTokenBurnAmount",
-          "developerTokenBurnRatio",
-          "burnStatus",
-          "creatorTokenStatus",
-          "sniperCount",
-          "canSellCount",
-          "cannotSellCount",
-          "hideRisk",
-          "flags",
-          "lockSummary",
-        ],
-        properties: {
-          schemaVersion: { const: "programmable.gmgn-token-security.v1" },
-          source: { const: "gmgn" },
-          fetchedAt: { type: "string", format: "date-time" },
-          identity: component("GmgnMarketIdentity"),
-          tokenAddress: component("EthereumAddress"),
-          isShowAlert: { type: ["boolean", "null"] },
-          isOpenSource: { type: ["boolean", "null"] },
-          isBlacklisted: { type: ["boolean", "null"] },
-          isHoneypot: { type: ["boolean", "null"] },
-          isOwnerRenounced: { type: ["boolean", "null"] },
-          isMintRenounced: { type: ["boolean", "null"] },
-          isFreezeAccountRenounced: { type: ["boolean", "null"] },
-          isWashTrading: { type: ["boolean", "null"] },
-          top10HolderRatio: {
-            type: ["string", "null"],
-            pattern: "^(?:0(?:\\.[0-9]+)?|1(?:\\.0+)?)$",
-            maxLength: 160,
-          },
-          developerTeamHoldRatio: {
-            type: ["string", "null"],
-            pattern: "^(?:0(?:\\.[0-9]+)?|1(?:\\.0+)?)$",
-            maxLength: 160,
-          },
-          creatorBalanceRatio: {
-            type: ["string", "null"],
-            pattern: "^(?:0(?:\\.[0-9]+)?|1(?:\\.0+)?)$",
-            maxLength: 160,
-          },
-          suspectedInsiderHoldRatio: {
-            type: ["string", "null"],
-            pattern: "^(?:0(?:\\.[0-9]+)?|1(?:\\.0+)?)$",
-            maxLength: 160,
-          },
-          rugRatio: {
-            type: ["string", "null"],
-            pattern: "^(?:0(?:\\.[0-9]+)?|1(?:\\.0+)?)$",
-            maxLength: 160,
-          },
-          ratTraderAmountRatio: {
-            type: ["string", "null"],
-            pattern: "^(?:0(?:\\.[0-9]+)?|1(?:\\.0+)?)$",
-            maxLength: 160,
-          },
-          bundlerTraderAmountRatio: {
-            type: ["string", "null"],
-            pattern: "^(?:0(?:\\.[0-9]+)?|1(?:\\.0+)?)$",
-            maxLength: 160,
-          },
-          buyTaxRatio: {
-            type: ["string", "null"],
-            pattern: "^(?:0(?:\\.[0-9]+)?|1(?:\\.0+)?)$",
-            maxLength: 160,
-          },
-          sellTaxRatio: {
-            type: ["string", "null"],
-            pattern: "^(?:0(?:\\.[0-9]+)?|1(?:\\.0+)?)$",
-            maxLength: 160,
-          },
-          averageTaxRatio: {
-            type: ["string", "null"],
-            pattern: "^(?:0(?:\\.[0-9]+)?|1(?:\\.0+)?)$",
-            maxLength: 160,
-          },
-          highTaxRatio: {
-            type: ["string", "null"],
-            pattern: "^(?:0(?:\\.[0-9]+)?|1(?:\\.0+)?)$",
-            maxLength: 160,
-          },
-          burnRatio: {
-            type: ["string", "null"],
-            pattern: "^(?:0(?:\\.[0-9]+)?|1(?:\\.0+)?)$",
-            maxLength: 160,
-          },
-          developerTokenBurnAmount: {
-            type: ["string", "null"],
-            pattern: "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
-            maxLength: 160,
-          },
-          developerTokenBurnRatio: {
-            type: ["string", "null"],
-            pattern: "^(?:0(?:\\.[0-9]+)?|1(?:\\.0+)?)$",
-            maxLength: 160,
-          },
-          burnStatus: { type: ["string", "null"], maxLength: 128 },
-          creatorTokenStatus: { type: ["string", "null"], maxLength: 128 },
-          sniperCount: {
-            type: ["integer", "null"],
-            minimum: 0,
-            maximum: Number.MAX_SAFE_INTEGER,
-          },
-          canSellCount: {
-            type: ["integer", "null"],
-            minimum: 0,
-            maximum: Number.MAX_SAFE_INTEGER,
-          },
-          cannotSellCount: {
-            type: ["integer", "null"],
-            minimum: 0,
-            maximum: Number.MAX_SAFE_INTEGER,
-          },
-          hideRisk: { type: ["boolean", "null"] },
-          flags: {
-            type: "array",
-            items: { type: "string", maxLength: 128 },
-            maxItems: 64,
-          },
-          lockSummary: {
-            oneOf: [
-              {
-                type: "object",
-                required: [
-                  "isLocked",
-                  "lockRatio",
-                  "remainingLockRatio",
-                  "details",
-                ],
-                properties: {
-                  isLocked: { type: "boolean" },
-                  lockRatio: {
-                    type: "string",
-                    pattern: "^(?:0(?:\\.[0-9]+)?|1(?:\\.0+)?)$",
-                    maxLength: 160,
-                  },
-                  remainingLockRatio: {
-                    type: "string",
-                    pattern: "^(?:0(?:\\.[0-9]+)?|1(?:\\.0+)?)$",
-                    maxLength: 160,
-                  },
-                  details: {
-                    type: "array",
-                    maxItems: 256,
-                    items: {
-                      type: "object",
-                      required: ["ratio", "poolAddress", "isBlackhole"],
-                      properties: {
-                        ratio: {
-                          type: "string",
-                          pattern: "^(?:0(?:\\.[0-9]+)?|1(?:\\.0+)?)$",
-                          maxLength: 160,
-                        },
-                        poolAddress: component("EthereumAddress"),
-                        isBlackhole: { type: "boolean" },
-                      },
-                      additionalProperties: false,
-                    },
-                  },
-                },
-                additionalProperties: false,
-              },
-              { type: "null" },
-            ],
-          },
-        },
-        additionalProperties: false,
-      },
-      GmgnTokenPoolInfo: {
-        type: "object",
-        description:
-          "Normalized token-level Uniswap v4 pool_info observation from GMGN. Live v4 responses identify the queried token in address and base_address and do not expose the canonical bytes32 PoolId, so pool attribution remains unavailable.",
-        required: [
-          "schemaVersion",
-          "source",
-          "marketScope",
-          "poolAttribution",
-          "currency",
-          "fetchedAt",
-          "identity",
-          "tokenAddress",
-          "providerAddress",
-          "baseAddress",
-          "quoteAddress",
-          "token0Address",
-          "token1Address",
-          "quoteSymbol",
-          "exchange",
-          "liquidityUsd",
-          "baseReserve",
-          "quoteReserve",
-          "baseReserveValueUsd",
-          "quoteReserveValueUsd",
-          "initialLiquidityUsd",
-          "initialBaseReserve",
-          "initialQuoteReserve",
-          "priceUsd",
-          "feeRatio",
-          "creationTimestamp",
-        ],
-        properties: {
-          schemaVersion: { const: "programmable.gmgn-token-pool-info.v1" },
-          source: { const: "gmgn" },
-          marketScope: { const: "token" },
-          poolAttribution: { const: "unavailable" },
-          currency: { const: "USD" },
-          fetchedAt: { type: "string", format: "date-time" },
-          identity: component("GmgnMarketIdentity"),
-          tokenAddress: component("EthereumAddress"),
-          providerAddress: {
-            ...component("EthereumAddress"),
-            description:
-              "Normalized GMGN pool_info address field; for accepted v4 responses it equals tokenAddress and baseAddress.",
-          },
-          baseAddress: component("EthereumAddress"),
-          quoteAddress: component("EthereumAddress"),
-          token0Address: {
-            ...component("EthereumAddress"),
-            description:
-              "Address-sorted Uniswap v4 currency0, derived from the exact base and quote binding.",
-          },
-          token1Address: {
-            ...component("EthereumAddress"),
-            description:
-              "Address-sorted Uniswap v4 currency1, derived from the exact base and quote binding.",
-          },
-          quoteSymbol: { type: ["string", "null"], maxLength: 64 },
-          exchange: { const: "uniswap_v4" },
-          liquidityUsd: {
-            type: "string",
-            pattern: "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
-            maxLength: 160,
-          },
-          baseReserve: {
-            type: "string",
-            pattern: "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
-            maxLength: 160,
-          },
-          quoteReserve: {
-            type: "string",
-            pattern: "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
-            maxLength: 160,
-          },
-          baseReserveValueUsd: {
-            type: ["string", "null"],
-            pattern: "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
-            maxLength: 160,
-          },
-          quoteReserveValueUsd: {
-            type: ["string", "null"],
-            pattern: "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
-            maxLength: 160,
-          },
-          initialLiquidityUsd: {
-            type: ["string", "null"],
-            pattern: "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
-            maxLength: 160,
-          },
-          initialBaseReserve: {
-            type: ["string", "null"],
-            pattern: "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
-            maxLength: 160,
-          },
-          initialQuoteReserve: {
-            type: ["string", "null"],
-            pattern: "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
-            maxLength: 160,
-          },
-          priceUsd: {
-            type: ["string", "null"],
-            pattern: "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
-            maxLength: 160,
-          },
-          feeRatio: {
-            type: ["string", "null"],
-            pattern: "^(?:0(?:\\.[0-9]+)?|1(?:\\.0+)?)$",
-            maxLength: 160,
-          },
-          creationTimestamp: {
-            type: "integer",
-            minimum: 0,
-            maximum: Number.MAX_SAFE_INTEGER,
-          },
-        },
-        additionalProperties: false,
-      },
-      GmgnTokenWalletRanking: {
-        type: "object",
-        description:
-          "Privacy-reduced token-address holder or trader ranking with at most 20 rows, admitted by the exact GMGN token_info proof. It is not a pool ranking. The public object excludes provider schema, source, query, token identity, names, avatars, social accounts, tags, transfers and transaction hashes. Wallet analytics are informational and never used for signing or settlement.",
-        required: ["fetchedAt", "wallets"],
-        properties: {
-          fetchedAt: { type: "string", format: "date-time" },
-          wallets: {
-            type: "array",
-            maxItems: 20,
-            items: {
-              type: "object",
-              required: [
-                "address",
-                "usdValue",
-                "amountRatio",
-                "buyVolumeUsd",
-                "sellVolumeUsd",
-                "profitUsd",
-                "profitRatio",
-              ],
-              properties: {
-                address: component("EthereumAddress"),
-                usdValue: { type: ["number", "null"] },
-                amountRatio: { type: ["number", "null"] },
-                buyVolumeUsd: { type: ["number", "null"] },
-                sellVolumeUsd: { type: ["number", "null"] },
-                profitUsd: { type: ["number", "null"] },
-                profitRatio: { type: ["number", "null"] },
-              },
-              additionalProperties: false,
-            },
-          },
-        },
-        additionalProperties: false,
-      },
-      TokenAnalyticsSummaryResponse: {
-        type: "object",
-        required: [
-          "schemaVersion",
-          "status",
-          "provider",
-          "analyticsScope",
-          "poolAttribution",
-          "section",
-          "identity",
-          "analytics",
-        ],
-        properties: {
-          schemaVersion: { const: "programmable.token-analytics.v1" },
-          status: {
-            type: "string",
-            enum: ["ready", "partial", "unavailable"],
-          },
-          provider: { const: "gmgn" },
-          analyticsScope: { const: "token" },
-          poolAttribution: { const: "unavailable" },
-          section: { const: "summary" },
-          identity: {
-            oneOf: [component("GmgnMarketIdentity"), { type: "null" }],
-          },
-          analytics: {
-            type: "object",
-            required: ["security", "pool"],
-            properties: {
-              security: {
-                oneOf: [component("GmgnTokenSecurity"), { type: "null" }],
-              },
-              pool: {
-                oneOf: [component("GmgnTokenPoolInfo"), { type: "null" }],
-              },
-            },
-            additionalProperties: false,
-          },
-        },
-        additionalProperties: false,
-      },
-      TokenAnalyticsRankingResponse: {
-        type: "object",
-        required: [
-          "schemaVersion",
-          "status",
-          "provider",
-          "analyticsScope",
-          "poolAttribution",
-          "section",
-          "identity",
-          "analytics",
-        ],
-        properties: {
-          schemaVersion: { const: "programmable.token-analytics.v1" },
-          status: { type: "string", enum: ["ready", "unavailable"] },
-          provider: { const: "gmgn" },
-          analyticsScope: { const: "token" },
-          poolAttribution: { const: "unavailable" },
-          section: { type: "string", enum: ["holders", "traders"] },
-          identity: {
-            oneOf: [component("GmgnMarketIdentity"), { type: "null" }],
-          },
-          analytics: {
-            type: "object",
-            required: ["ranking"],
-            properties: {
-              ranking: {
-                oneOf: [
-                  component("GmgnTokenWalletRanking"),
-                  { type: "null" },
-                ],
-              },
-            },
-            additionalProperties: false,
-          },
-        },
-        additionalProperties: false,
-      },
-      TokenAnalyticsResponse: {
-        oneOf: [
-          component("TokenAnalyticsSummaryResponse"),
-          component("TokenAnalyticsRankingResponse"),
-        ],
-      },
-      MarketOhlc: {
-        type: "object",
-        required: ["open", "high", "low", "close"],
-        properties: {
-          open: { type: "string" },
-          high: { type: "string" },
-          low: { type: "string" },
-          close: { type: "string" },
-        },
-        additionalProperties: false,
-      },
-      BitqueryMarketChartPoint: {
-        type: "object",
-        required: [
-          "blockNumber",
-          "time",
-          "bucketStart",
-          "bucketEnd",
-          "observedAt",
-          "valueSemantics",
-          "tradeCount",
-        ],
-        properties: {
-          blockNumber: { type: "string", pattern: "^(?:0|[1-9][0-9]*)$" },
-          time: { type: "string", format: "date-time" },
-          bucketStart: { type: "string", format: "date-time" },
-          bucketEnd: { type: "string", format: "date-time" },
-          observedAt: { type: "string", format: "date-time" },
-          valueSemantics: { const: "period-median" },
-          priceUsd: { type: "string" },
-          priceQuote: { type: "string" },
-          quoteSymbol: { type: "string" },
-          ohlcUsd: component("MarketOhlc"),
-          ohlcQuote: component("MarketOhlc"),
-          volumeUsdWad: {
-            type: "string",
-            pattern: "^(?:0|[1-9][0-9]*)$",
-          },
-          tradeCount: { type: "integer", minimum: 0 },
-        },
-        additionalProperties: false,
-      },
-      BitqueryMarketChart: {
-        type: "object",
-        description:
-          "Exact canonical Uniswap v4 pool history. The response headers report pool scope and exact pool attribution.",
-        required: [
-          "schemaVersion",
-          "source",
-          "readStatus",
-          "status",
-          "generatedAt",
-          "identity",
-          "range",
-          "points",
-          "swapCount",
-          "valuation",
-          "truncated",
-        ],
-        properties: {
-          schemaVersion: { const: "programmable.market-chart.v1" },
-          source: { const: "bitquery" },
-          readStatus: { type: "string", enum: ["live", "cache-fallback"] },
-          status: {
-            type: "string",
-            enum: [
-              "ready",
-              "insufficient-history",
-              "partial",
-              "waiting-for-first-trade",
-              "unavailable",
-            ],
-          },
-          generatedAt: { type: "string", format: "date-time" },
-          identity: component("GmgnMarketIdentity"),
-          range: { type: "string", enum: ["1h", "1d", "1w", "all"] },
-          points: {
-            type: "array",
-            maxItems: 512,
-            items: component("BitqueryMarketChartPoint"),
-          },
-          swapCount: { type: "integer", minimum: 0 },
-          volumeUsdWad: {
-            type: "string",
-            pattern: "^(?:0|[1-9][0-9]*)$",
-          },
-          valuation: {
-            type: "object",
-            required: ["status", "reason"],
-            properties: {
-              status: { const: "unavailable" },
-              reason: { type: "string" },
-            },
-            additionalProperties: false,
-          },
-          asOfTime: { type: "string", format: "date-time" },
-          truncated: { type: "boolean" },
-        },
-        additionalProperties: false,
-      },
-      GmgnMarketChartPoint: {
-        type: "object",
-        required: [
-          "time",
-          "bucketStart",
-          "bucketEnd",
-          "valueSemantics",
-          "priceUsd",
-          "ohlcUsd",
-          "volumeUsdWad",
-        ],
-        properties: {
-          time: { type: "string", format: "date-time" },
-          bucketStart: { type: "string", format: "date-time" },
-          bucketEnd: { type: "string", format: "date-time" },
-          valueSemantics: { const: "period-close" },
-          priceUsd: { type: "string" },
-          ohlcUsd: component("MarketOhlc"),
-          volumeUsdWad: {
-            type: "string",
-            pattern: "^(?:0|[1-9][0-9]*)$",
-          },
-        },
-        additionalProperties: false,
-      },
-      GmgnChartIdentityProof: {
-        type: "object",
-        description:
-          "Current token_info admission proof for the token, quote, v4 exchange and supply. Every provider base or token-pair field that is present must match the canonical token and quote. poolAttribution is exact only when both provider locators equal the canonical bytes32 PoolId; coherent 20-byte provider contract locators leave it unavailable. This is current admission context, not per-candle provenance.",
-        required: [
-          "schemaVersion",
-          "source",
-          "verifiedAt",
-          "identity",
-          "poolAttribution",
-          "canonicalSupply",
-        ],
-        properties: {
-          schemaVersion: {
-            const: "programmable.gmgn-chart-identity-proof.v1",
-          },
-          source: { const: "gmgn-token-info" },
-          verifiedAt: { type: "string", format: "date-time" },
-          identity: component("GmgnMarketIdentity"),
-          poolAttribution: {
-            type: "string",
-            enum: ["exact", "unavailable"],
-          },
-          canonicalSupply: {
-            type: "object",
-            required: ["totalSupplyRaw", "tokenDecimals"],
-            properties: {
-              totalSupplyRaw: component("CanonicalUint256"),
-              tokenDecimals: { type: "integer", minimum: 0, maximum: 255 },
-            },
-            additionalProperties: false,
-          },
-        },
-        additionalProperties: false,
-      },
-      GmgnMarketChart: {
-        type: "object",
-        description:
-          "GMGN token_kline period-close OHLCV scoped to the token address. poolAttribution reports the current token_info admission locator: exact for a canonical bytes32 PoolId match, unavailable for a coherent 20-byte provider contract locator. It is not per-candle historical provenance.",
-        required: [
-          "schemaVersion",
-          "source",
-          "seriesScope",
-          "poolAttribution",
-          "readStatus",
-          "status",
-          "generatedAt",
-          "identity",
-          "identityProof",
-          "range",
-          "resolution",
-          "requestedFrom",
-          "requestedTo",
-          "points",
-          "candleCount",
-          "volumeUsdWad",
-          "asOfTime",
-          "truncated",
-        ],
-        properties: {
-          schemaVersion: { const: "programmable.gmgn-market-chart.v1" },
-          source: { const: "gmgn" },
-          seriesScope: { const: "token" },
-          poolAttribution: {
-            type: "string",
-            enum: ["exact", "unavailable"],
-          },
-          readStatus: { const: "live" },
-          status: {
-            type: "string",
-            enum: ["ready", "insufficient-history", "partial"],
-          },
-          generatedAt: { type: "string", format: "date-time" },
-          identity: component("GmgnMarketIdentity"),
-          identityProof: component("GmgnChartIdentityProof"),
-          range: { type: "string", enum: ["1h", "1d", "1w", "all"] },
-          resolution: {
-            type: "string",
-            enum: ["30s", "1m", "5m", "15m", "1h", "4h", "1d"],
-          },
-          requestedFrom: { type: "string", format: "date-time" },
-          requestedTo: { type: "string", format: "date-time" },
-          points: {
-            type: "array",
-            minItems: 1,
-            maxItems: 512,
-            items: component("GmgnMarketChartPoint"),
-          },
-          candleCount: { type: "integer", minimum: 1, maximum: 512 },
-          volumeUsdWad: {
-            type: "string",
-            pattern: "^(?:0|[1-9][0-9]*)$",
-          },
-          asOfTime: { type: "string", format: "date-time" },
-          truncated: { type: "boolean" },
+          error: { const: "Token data is temporarily unavailable" },
+          status: { const: "index_rebuilding" },
         },
         additionalProperties: false,
       },
       MarketChartError: {
         type: "object",
         description:
-          "Provider-neutral chart error emitted before a chart provider can be selected. The current API emits v2; application parsers may continue accepting legacy programmable.market-chart-error.v1 payloads captured from earlier releases.",
+          "Provider-neutral chart response while token chart indexing is intentionally reset.",
         required: [
           "schemaVersion",
           "source",
@@ -3174,294 +1705,8 @@ export const programmablePublicOpenApi = {
           generatedAt: { type: "string", format: "date-time" },
           address: component("EthereumAddress"),
           range: { type: "string", enum: ["1h", "1d", "1w", "all"] },
-          reason: {
-            type: "string",
-            enum: ["identity-unavailable", "market-data-unavailable"],
-          },
-          error: { type: "string" },
-        },
-        additionalProperties: false,
-      },
-      TokenChartResponse: {
-        oneOf: [
-          component("GmgnMarketChart"),
-          component("BitqueryMarketChart"),
-          component("MarketChartError"),
-        ],
-      },
-      ExploreEntry: {
-        type: "object",
-        required: ["exploreKind", "id", "name", "launchedAt", "valuation"],
-        properties: {
-          exploreKind: { type: "string", enum: ["token", "custom-project"] },
-          id: { type: "string" },
-          name: { type: "string" },
-          symbol: { type: ["string", "null"] },
-          tokenAddress: {
-            oneOf: [component("EthereumAddress"), { type: "null" }],
-          },
-          launchedAt: { type: "string", format: "date-time" },
-          valuation: component("ExploreValuation"),
-          gmgnMarketData: component("GmgnMarketSnapshot"),
-          links: {
-            type: "array",
-            items: {
-              type: "object",
-              required: ["kind"],
-              properties: {
-                kind: { type: "string", enum: ["website", "x", "telegram"] },
-                url: { type: "string", format: "uri" },
-              },
-              additionalProperties: true,
-            },
-          },
-        },
-        additionalProperties: true,
-      },
-      CatalogBoundary: {
-        type: "object",
-        required: ["source", "launchSource", "status", "lastIndexedAt", "identityCount"],
-        properties: {
-          source: { const: "envio-classic-v3" },
-          launchSource: { type: "string" },
-          status: { type: "string", enum: ["current", "last-known-good"] },
-          lastIndexedAt: { type: "string", format: "date-time" },
-          asOfBlock: { type: "string" },
-          asOfBlockHash: component("Hex32"),
-          identityCount: { type: "integer", minimum: 1 },
-          identityCommitment: { type: "string" },
-        },
-        additionalProperties: true,
-      },
-      RobinhoodFinalizedCatalogBoundary: {
-        type: "object",
-        description:
-          "Finalized Robinhood Custom launch identities admitted from the Programmable V4 backend and reverified against the canonical launch-stamp Router before publication.",
-        required: [
-          "source",
-          "launchSource",
-          "status",
-          "lastIndexedAt",
-          "identityCount",
-        ],
-        properties: {
-          source: { const: "robinhood-finalized-custom-launch-feed-v4" },
-          launchSource: {
-            const:
-              "robinhood-finalized-custom-launch-feed-v4+canonical-launch-stamp-router",
-          },
-          status: { const: "current" },
-          lastIndexedAt: { type: "string", format: "date-time" },
-          asOfBlock: { type: "string", pattern: "^[1-9][0-9]*$" },
-          asOfBlockHash: component("Hex32"),
-          identityCount: { type: "integer", minimum: 1 },
-          identityCommitment: component("Sha256Digest"),
-        },
-        additionalProperties: true,
-      },
-      ExploreListResponse: {
-        oneOf: [
-          component("ExploreReadyListResponse"),
-          component("RobinhoodExploreReadyListResponse"),
-          component("ExplorePlannedListResponse"),
-        ],
-      },
-      ExploreReadyListResponse: {
-        type: "object",
-        required: [
-          "status",
-          "chainId",
-          "tokens",
-          "page",
-          "pageSize",
-          "total",
-          "totalPages",
-          "sort",
-          "query",
-          "catalog",
-          "marketRead",
-        ],
-        properties: {
-          status: { const: "ready" },
-          chainId: { const: 1 },
-          tokens: { type: "array", items: component("ExploreEntry") },
-          page: { type: "integer", minimum: 1 },
-          pageSize: { type: "integer", minimum: 1, maximum: 100 },
-          total: { type: "integer", minimum: 0 },
-          totalPages: { type: "integer", minimum: 0 },
-          sort: {
-            type: "string",
-            enum: [
-              "newest",
-              "oldest",
-              "trending",
-              "market-cap",
-              "market-cap-asc",
-            ],
-          },
-          query: { type: "string" },
-          sortMetric: {
-            type: "string",
-            enum: [
-              "fdv",
-              "gmgn-trending",
-              "gmgn-market-cap+gmgn-token-info-fdv+dexscreener-fdv-fallback",
-            ],
-          },
-          catalog: component("CatalogBoundary"),
-          dataQuality: { type: "object", additionalProperties: true },
-          marketRead: component("ExploreMarketRead"),
-          ranking: component("ExploreMarketCapRanking"),
-          discovery: component("ExploreDiscoveryRanking"),
-          search: component("ExploreSearchRanking"),
-        },
-        additionalProperties: true,
-      },
-      RobinhoodExploreReadyListResponse: {
-        type: "object",
-        description:
-          "Newest-first Robinhood Custom launches from the finalized Programmable backend feed after direct Router, L2 inclusion and Ethereum-finality verification. Market enrichment is unavailable and marketRead is omitted (or null).",
-        required: [
-          "status",
-          "chainId",
-          "tokens",
-          "page",
-          "pageSize",
-          "total",
-          "totalPages",
-          "sort",
-          "query",
-          "catalog",
-        ],
-        properties: {
-          status: { const: "ready" },
-          chainId: { const: 4663 },
-          tokens: { type: "array", items: component("ExploreEntry") },
-          page: { type: "integer", minimum: 1 },
-          pageSize: { type: "integer", minimum: 1, maximum: 100 },
-          total: { type: "integer", minimum: 0 },
-          totalPages: { type: "integer", minimum: 0 },
-          sort: { const: "newest" },
-          query: { type: "string" },
-          catalog: component("RobinhoodFinalizedCatalogBoundary"),
-          marketRead: {
-            type: "null",
-            description:
-              "Robinhood Explore currently performs no market-data provider read.",
-          },
-        },
-        additionalProperties: false,
-      },
-      ExplorePlannedListResponse: {
-        type: "object",
-        required: [
-          "status",
-          "activationStage",
-          "chainId",
-          "tokens",
-          "page",
-          "pageSize",
-          "total",
-          "totalPages",
-          "sort",
-          "query",
-        ],
-        properties: {
-          status: { const: "not-deployed" },
-          activationStage: { const: "planned-not-deployed" },
-          chainId: { const: 4663 },
-          tokens: {
-            type: "array",
-            items: component("ExploreEntry"),
-            maxItems: 0,
-          },
-          page: { const: 1 },
-          pageSize: { type: "integer", minimum: 1, maximum: 100 },
-          total: { const: 0 },
-          totalPages: { const: 0 },
-          sort: { const: "newest" },
-          query: { type: "string" },
-        },
-        additionalProperties: false,
-      },
-      TokenDetailResponse: {
-        oneOf: [
-          component("TokenDetailReadyResponse"),
-          component("RobinhoodTokenDetailReadyResponse"),
-          component("TokenDetailPlannedResponse"),
-        ],
-      },
-      TokenDetailLookupReadyResponse: {
-        oneOf: [
-          component("TokenDetailReadyResponse"),
-          component("RobinhoodTokenDetailReadyResponse"),
-        ],
-      },
-      TokenDetailReadyResponse: {
-        type: "object",
-        required: ["status", "token", "customProject", "creatorArticle", "catalog"],
-        properties: {
-          status: { const: "ready" },
-          token: {
-            oneOf: [component("ExploreEntry"), { type: "null" }],
-          },
-          customProject: {
-            oneOf: [component("ExploreEntry"), { type: "null" }],
-          },
-          creatorArticle: { type: ["object", "null"], additionalProperties: true },
-          snapshot: { type: ["object", "null"], additionalProperties: true },
-          catalog: component("CatalogBoundary"),
-        },
-        additionalProperties: true,
-      },
-      RobinhoodTokenDetailReadyResponse: {
-        type: "object",
-        description:
-          "A Robinhood token lookup completed against the finalized Programmable feed and direct chain verification boundary. token is null only for a verified 404.",
-        required: ["status", "token", "customProject", "creatorArticle", "catalog"],
-        properties: {
-          status: { const: "ready" },
-          token: {
-            oneOf: [component("ExploreEntry"), { type: "null" }],
-          },
-          customProject: { type: "null" },
-          routerTradeProject: { type: "null" },
-          platformFeeCertification: { type: "null" },
-          sourceVerification: {
-            type: ["object", "null"],
-            additionalProperties: true,
-          },
-          creatorArticle: { type: "null" },
-          snapshot: { type: ["object", "null"], additionalProperties: true },
-          catalog: component("RobinhoodFinalizedCatalogBoundary"),
-        },
-        additionalProperties: true,
-      },
-      TokenDetailPlannedResponse: {
-        type: "object",
-        required: [
-          "status",
-          "activationStage",
-          "chainId",
-          "token",
-          "customProject",
-          "routerTradeProject",
-          "platformFeeCertification",
-          "sourceVerification",
-          "creatorArticle",
-          "snapshot",
-        ],
-        properties: {
-          status: { const: "not-deployed" },
-          activationStage: { const: "planned-not-deployed" },
-          chainId: { const: 4663 },
-          token: { type: "null" },
-          customProject: { type: "null" },
-          routerTradeProject: { type: "null" },
-          platformFeeCertification: { type: "null" },
-          sourceVerification: { type: "null" },
-          creatorArticle: { type: "null" },
-          snapshot: { type: "null" },
+          reason: { const: "identity-unavailable" },
+          error: { const: "Price history is temporarily unavailable" },
         },
         additionalProperties: false,
       },
@@ -3505,7 +1750,9 @@ export const programmablePublicOpenApi = {
           "finality",
         ],
         properties: {
-          schemaVersion: { const: "programmable.custom-registry-public-manifest.v2" },
+          schemaVersion: {
+            const: "programmable.custom-registry-public-manifest.v2",
+          },
           status: { const: "live" },
           generation: { const: "2" },
           chainId: { const: "1" },
@@ -3531,13 +1778,23 @@ export const programmablePublicOpenApi = {
             additionalProperties: false,
           },
           release: { type: "object", additionalProperties: { type: "string" } },
-          finality: { type: "object", additionalProperties: { type: "string" } },
+          finality: {
+            type: "object",
+            additionalProperties: { type: "string" },
+          },
         },
         additionalProperties: false,
       },
     },
   },
   "x-programmable-availability": {
+    exploreIndexing: {
+      status: "reset",
+      publicReadStatus: 503,
+      providerCalls: false,
+      fallbacks: false,
+      backgroundWorkers: false,
+    },
     v1Reads: "live",
     v1Create: {
       status: "read-only",
@@ -3605,20 +1862,15 @@ export const programmablePublicOpenApi = {
       chainId: 4663,
       caip2: "eip155:4663",
       openApiUrl: `${SITE_ORIGIN}/openapi/custom-launch-v4.json`,
-      packConfigSchemaUrl:
-        `${SITE_ORIGIN}/schemas/custom-launch/v4/pack-config.json`,
-      sourceVerificationSchemaUrl:
-        `${SITE_ORIGIN}/schemas/custom-launch/v4/source-verification-status.json`,
+      packConfigSchemaUrl: `${SITE_ORIGIN}/schemas/custom-launch/v4/pack-config.json`,
+      sourceVerificationSchemaUrl: `${SITE_ORIGIN}/schemas/custom-launch/v4/source-verification-status.json`,
       capabilitiesPath: "/v4/chains/4663/capabilities",
       readinessPath: "/v4/chains/4663/readiness",
       finalizedMetadataPath: "/v4/chains/4663/finalized-custom-launches",
       statusPath: "/v4/chains/4663/custom-launches/{launchId}",
-      terminalIndexerGuideUrl:
-        `${SITE_ORIGIN}/developer-reference/robinhood-terminal-indexer`,
-      terminalIndexerFixtureUrl:
-        `${SITE_ORIGIN}/fixtures/robinhood-terminal-indexer-v1.json`,
-      launchStampRouterAbiUrl:
-        `${SITE_ORIGIN}/contracts/robinhood/ProgrammableLaunchStampRouterV1.abi.json`,
+      terminalIndexerGuideUrl: `${SITE_ORIGIN}/developer-reference/robinhood-terminal-indexer`,
+      terminalIndexerFixtureUrl: `${SITE_ORIGIN}/fixtures/robinhood-terminal-indexer-v1.json`,
+      launchStampRouterAbiUrl: `${SITE_ORIGIN}/contracts/robinhood/ProgrammableLaunchStampRouterV1.abi.json`,
       launchStampRouterAbiSha256:
         "sha256:bb4e728e9f9c850eb01f928e8a798ac206a82e241a8d93b3b3c686635c88ed86",
       launchStampRouterProfileNormalizedAbiSha256:
@@ -3677,13 +1929,13 @@ export const programmablePublicOpenApi = {
   },
   "x-programmable-boundary": {
     identity:
-      "Verified Classic V3, Registry-verified Custom, finalized Router-stamped Custom provenance, and the sole official Classic V2 main-token exception.",
+      "The historical Explore admission boundary is retained for a future replacement indexer, but no token identity is served while Explore indexing is reset.",
     excluded:
       "All other Classic V1/V2, every Stock family, and Custom launches without a verified Registry record or finalized Router stamp.",
     marketData:
-      "Optional enrichment never determines whether a verified identity is present.",
+      "No token market, ranking, search, analytics or chart data is read while Explore indexing is reset.",
     router:
-      "Finalized Router evidence becomes provenance-only Custom discovery after 64 confirmations. It is not approval, an audit, or a safety claim, and third-party listing remains consumer-controlled.",
+      "Finalized Router evidence is not read or published through Explore while indexing is reset. It remains independent from Custom Launch API lifecycle and finality evidence.",
     market:
       "Router verification requires pool initialization and fixed runtime and pool bindings, not active liquidity or tradability; the Custom graph owns liquidity behavior.",
     actions:
@@ -3695,7 +1947,10 @@ export const programmablePublicOpenApi = {
     localOrModelApprovalAccepted: false,
     requiredForProfileVersion: "3.4.0",
     walletHandoffRequiresVerifiedEvidence: false,
-    mandatoryServerGates: ["static-hard-block-policy", "exact-router-simulation"],
+    mandatoryServerGates: [
+      "static-hard-block-policy",
+      "exact-router-simulation",
+    ],
     configurationIsExecutionEvidence: false,
     requiredPlatformFeeConformanceStatus: "verified",
     nonFeeVectorsMayRemainUnverified: true,

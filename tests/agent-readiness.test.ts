@@ -44,18 +44,6 @@ describe("agent-readable public surface", () => {
     expect(programmableLlmsIndex).toContain(
       "every Stock family, and Custom launches without a verified Registry record or finalized Router stamp",
     );
-    expect(programmableLlmsIndex).toContain(
-      "GMGN is the bounded primary provider for visible-page market enrichment",
-    );
-    expect(programmableLlmsIndex).toContain(
-      "Dexscreener batch-sorts the complete unmatched canonical remainder",
-    );
-    expect(programmableLlmsIndex).toContain(
-      "Bitquery remains the exact-pool chart fallback",
-    );
-    expect(programmableLlmsIndex).toContain(
-      "not a cross-provider numeric merge or a claim of full GMGN coverage",
-    );
     expect(programmableLlmsIndex).not.toMatch(
       /^# Programmable Launch Stamp Router$/mu,
     );
@@ -88,10 +76,25 @@ describe("agent-readable public surface", () => {
     const operationIds = operations.map((operation) => operation.operationId);
     expect(new Set(operationIds).size).toBe(operationIds.length);
     expect(
-      operations.every((operation) =>
-        operation.description || operation.summary
+      operations.every(
+        (operation) => operation.description || operation.summary,
       ),
     ).toBe(true);
+    expect(
+      programmablePublicOpenApi["x-programmable-availability"].exploreIndexing,
+    ).toEqual({
+      status: "reset",
+      publicReadStatus: 503,
+      providerCalls: false,
+      fallbacks: false,
+      backgroundWorkers: false,
+    });
+    expect(
+      programmablePublicOpenApi["x-programmable-boundary"].marketData,
+    ).toContain("while Explore indexing is reset");
+    expect(JSON.stringify(programmablePublicOpenApi)).not.toMatch(
+      /gmgn|dexscreener|bitquery/iu,
+    );
     const readOnlyPaths = [
       "/api",
       "/api/custom-launch/registry/v2/manifest",
@@ -139,20 +142,15 @@ describe("agent-readable public surface", () => {
   });
 
   it("keeps legacy reads live and exposes the V1 and V2 write fences", () => {
-    const prohibitedSegments = new Set([
-      "claim",
-      "profile",
-      "trade",
-      "wallet",
-    ]);
+    const prohibitedSegments = new Set(["claim", "profile", "trade", "wallet"]);
     expect(
       Object.keys(programmablePublicOpenApi.paths).every((path) =>
-        path.split("/").every((segment) => !prohibitedSegments.has(segment))
+        path.split("/").every((segment) => !prohibitedSegments.has(segment)),
       ),
     ).toBe(true);
-    expect(programmablePublicOpenApi["x-programmable-boundary"].actions).toContain(
-      "API keys never sign, broadcast",
-    );
+    expect(
+      programmablePublicOpenApi["x-programmable-boundary"].actions,
+    ).toContain("API keys never sign, broadcast");
     expect(
       Object.keys(programmablePublicOpenApi.paths["/v1/custom-launches"]),
     ).toEqual(["get", "post"]);
@@ -162,12 +160,16 @@ describe("agent-readable public surface", () => {
       deprecated: true,
       summary: "V1 launch creation is read-only",
     });
-    expect(Object.keys(
-      programmablePublicOpenApi.paths["/v1/custom-launches"].post.responses,
-    )).toEqual(["401", "403", "409"]);
+    expect(
+      Object.keys(
+        programmablePublicOpenApi.paths["/v1/custom-launches"].post.responses,
+      ),
+    ).toEqual(["401", "403", "409"]);
     expect(
       programmablePublicOpenApi.paths["/v1/custom-launches"].get.description,
-    ).toContain("pending rows receive bounded best-effort chain reconciliation");
+    ).toContain(
+      "pending rows receive bounded best-effort chain reconciliation",
+    );
     expect(
       programmablePublicOpenApi.paths["/v1/custom-launches"].get.description,
     ).toContain("output is always null");
@@ -176,7 +178,9 @@ describe("agent-readable public surface", () => {
         programmablePublicOpenApi.paths["/v1/custom-launches/{launchId}"],
       ),
     ).toEqual(["get"]);
-    expect(programmablePublicOpenApi["x-programmable-api-scopes"]).toMatchObject({
+    expect(
+      programmablePublicOpenApi["x-programmable-api-scopes"],
+    ).toMatchObject({
       "custom-launch:create": {
         state: V4_API_DISCOVERY.releaseReady
           ? "v1-v2-write-fenced-v3.3-live-v4-public-api-wallet-handoff"
@@ -185,16 +189,17 @@ describe("agent-readable public surface", () => {
       "fees:claim": { state: "reserved-disabled" },
       "buybacks:manage": { state: "reserved-disabled" },
     });
-    expect(programmablePublicOpenApi["x-programmable-availability"].v2)
-      .toMatchObject({
-        reads: "live",
-        create: "read-only",
-        createHttpStatus: 409,
-        createErrorCode: "CUSTOM_LAUNCH_V2_READ_ONLY",
-        retryable: false,
-        preparedAndSimulatingReads: "observation-only",
-        readMayAuthorize: false,
-      });
+    expect(
+      programmablePublicOpenApi["x-programmable-availability"].v2,
+    ).toMatchObject({
+      reads: "live",
+      create: "read-only",
+      createHttpStatus: 409,
+      createErrorCode: "CUSTOM_LAUNCH_V2_READ_ONLY",
+      retryable: false,
+      preparedAndSimulatingReads: "observation-only",
+      readMayAuthorize: false,
+    });
   });
 
   it("publishes typed and unambiguous Custom launch lifecycle identifiers", () => {
@@ -202,10 +207,11 @@ describe("agent-readable public surface", () => {
     expect(schemas.CustomLaunchCreateRequest.required).not.toContain(
       "verificationBundle",
     );
-    expect(schemas.CustomLaunchCreateRequest.properties.verificationBundle)
-      .toMatchObject({
-        $ref: "#/components/schemas/ExactSourceVerificationBundleV1",
-      });
+    expect(
+      schemas.CustomLaunchCreateRequest.properties.verificationBundle,
+    ).toMatchObject({
+      $ref: "#/components/schemas/ExactSourceVerificationBundleV1",
+    });
     expect(schemas.CustomLaunchResource.required).toEqual(
       expect.arrayContaining([
         "launchId",
@@ -218,13 +224,14 @@ describe("agent-readable public surface", () => {
     expect(schemas.CustomLaunchResource.required).not.toContain(
       "sourceVerification",
     );
-    expect(schemas.CustomLaunchResource.properties.sourceVerification)
-      .toMatchObject({
-        oneOf: expect.arrayContaining([
-          { $ref: "#/components/schemas/SourceVerificationStatusV1" },
-          { type: "null" },
-        ]),
-      });
+    expect(
+      schemas.CustomLaunchResource.properties.sourceVerification,
+    ).toMatchObject({
+      oneOf: expect.arrayContaining([
+        { $ref: "#/components/schemas/SourceVerificationStatusV1" },
+        { type: "null" },
+      ]),
+    });
     expect(schemas.CustomLaunchOutput.oneOf).toEqual([
       { $ref: "#/components/schemas/CustomLaunchPreparedOutput" },
       { $ref: "#/components/schemas/CustomLaunchAuthorizedOutput" },
@@ -232,9 +239,9 @@ describe("agent-readable public surface", () => {
     expect(
       schemas.CustomLaunchOnchainEvidence.properties.requiredConfirmationDepth,
     ).toEqual({ const: "64" });
-    expect(programmablePublicOpenApi["x-programmable-boundary"].market).toContain(
-      "not active liquidity or tradability",
-    );
+    expect(
+      programmablePublicOpenApi["x-programmable-boundary"].market,
+    ).toContain("not active liquidity or tradability");
 
     const standaloneSource = readFileSync(
       new URL("../public/openapi/custom-launch-v1.json", import.meta.url),
@@ -249,9 +256,9 @@ describe("agent-readable public surface", () => {
       standalone.components.schemas.CustomLaunchResourceV1.required,
     ).not.toContain("sourceVerification");
     expect(standaloneSource).toContain('"code": "CUSTOM_LAUNCH_V1_READ_ONLY"');
-    expect(Object.keys(
-      standalone.paths["/v1/custom-launches"].post.responses,
-    )).toEqual(["401", "403", "409"]);
+    expect(
+      Object.keys(standalone.paths["/v1/custom-launches"].post.responses),
+    ).toEqual(["401", "403", "409"]);
     expect(standaloneSource).not.toContain("IDEMPOTENCY_KEY_REUSED");
   });
 
@@ -277,7 +284,8 @@ describe("agent-readable public surface", () => {
       status: "error",
       error: {
         code: "api_route_not_found",
-        message: "No public Programmable API route matches /api/not-a-real-route.",
+        message:
+          "No public Programmable API route matches /api/not-a-real-route.",
       },
     });
   });
@@ -288,14 +296,10 @@ describe("agent-readable public surface", () => {
     expect(negotiatePageRepresentation("text/*")).toBe("html");
     expect(negotiatePageRepresentation("text/markdown")).toBe("markdown");
     expect(
-      negotiatePageRepresentation(
-        "text/html;q=0.4, text/markdown;q=0.9",
-      ),
+      negotiatePageRepresentation("text/html;q=0.4, text/markdown;q=0.9"),
     ).toBe("markdown");
     expect(
-      negotiatePageRepresentation(
-        "text/html;q=0.9, text/markdown;q=0.4",
-      ),
+      negotiatePageRepresentation("text/html;q=0.9, text/markdown;q=0.4"),
     ).toBe("html");
     expect(negotiatePageRepresentation("text/x-component")).toBe("html");
     expect(negotiatePageRepresentation("application/json")).toBe(
@@ -369,9 +373,7 @@ describe("agent-readable public surface", () => {
     ]) {
       expect(response.status).toBe(404);
       expect(response.headers.get("cache-control")).toBe("no-store");
-      expect(response.headers.get("x-robots-tag")).toBe(
-        "noindex, nofollow",
-      );
+      expect(response.headers.get("x-robots-tag")).toBe("noindex, nofollow");
       await expect(response.json()).resolves.toMatchObject({
         schemaVersion: "programmable.api-error.v1",
         status: "error",
@@ -397,14 +399,10 @@ describe("agent-readable public surface", () => {
         "DELETE",
         "OPTIONS",
       ]) {
-        const response = proxy(
-          new NextRequest(`${ORIGIN}${path}`, { method }),
-        );
+        const response = proxy(new NextRequest(`${ORIGIN}${path}`, { method }));
         expect(response.status).toBe(404);
         expect(response.headers.get("cache-control")).toBe("no-store");
-        expect(response.headers.get("x-robots-tag")).toBe(
-          "noindex, nofollow",
-        );
+        expect(response.headers.get("x-robots-tag")).toBe("noindex, nofollow");
         expect(await response.text()).toBe(retiredBody);
       }
     }

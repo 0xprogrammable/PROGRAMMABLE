@@ -221,30 +221,10 @@ jobs:
       name: production
       url: ${{ steps.deploy.outputs.url }}
     outputs:
-      gmgn_account_gate_mode: ${{ steps.public-provider-smoke.outputs.gmgn_account_gate_mode }}
-      gmgn_requests_per_second: ${{ steps.public-provider-smoke.outputs.gmgn_requests_per_second }}
-      discovery_status: ${{ steps.public-provider-smoke.outputs.discovery_status }}
-      discovery_matched_count: ${{ steps.public-provider-smoke.outputs.discovery_matched_count }}
-      discovery_ranking_commitment: ${{ steps.public-provider-smoke.outputs.discovery_ranking_commitment }}
-      discovery_consistency: ${{ steps.public-provider-smoke.outputs.discovery_consistency }}
-      search_status: ${{ steps.public-provider-smoke.outputs.search_status }}
-      search_matched_count: ${{ steps.public-provider-smoke.outputs.search_matched_count }}
-      search_ranking_commitment: ${{ steps.public-provider-smoke.outputs.search_ranking_commitment }}
-      analytics_summary_status: ${{ steps.public-provider-smoke.outputs.analytics_summary_status }}
-      analytics_holders_status: ${{ steps.public-provider-smoke.outputs.analytics_holders_status }}
-      analytics_traders_status: ${{ steps.public-provider-smoke.outputs.analytics_traders_status }}
-      market_cap_desc_source: ${{ steps.public-provider-smoke.outputs.market_cap_desc_source }}
-      market_cap_desc_status: ${{ steps.public-provider-smoke.outputs.market_cap_desc_status }}
-      market_cap_desc_gmgn_status: ${{ steps.public-provider-smoke.outputs.market_cap_desc_gmgn_status }}
-      market_cap_desc_matched_count: ${{ steps.public-provider-smoke.outputs.market_cap_desc_matched_count }}
-      market_cap_desc_gmgn_hydration_qualified_count: ${{ steps.public-provider-smoke.outputs.market_cap_desc_gmgn_hydration_qualified_count }}
-      market_cap_desc_ranking_commitment: ${{ steps.public-provider-smoke.outputs.market_cap_desc_ranking_commitment }}
-      market_cap_asc_source: ${{ steps.public-provider-smoke.outputs.market_cap_asc_source }}
-      market_cap_asc_status: ${{ steps.public-provider-smoke.outputs.market_cap_asc_status }}
-      market_cap_asc_gmgn_status: ${{ steps.public-provider-smoke.outputs.market_cap_asc_gmgn_status }}
-      market_cap_asc_matched_count: ${{ steps.public-provider-smoke.outputs.market_cap_asc_matched_count }}
-      market_cap_asc_gmgn_hydration_qualified_count: ${{ steps.public-provider-smoke.outputs.market_cap_asc_gmgn_hydration_qualified_count }}
-      market_cap_asc_ranking_commitment: ${{ steps.public-provider-smoke.outputs.market_cap_asc_ranking_commitment }}
+      indexing_status: ${{ steps.index-reset-smoke.outputs.indexing_status }}
+      public_routes_checked: ${{ steps.index-reset-smoke.outputs.public_routes_checked }}
+      retired_operations_checked: ${{ steps.index-reset-smoke.outputs.retired_operations_checked }}
+      provider_calls_expected: ${{ steps.index-reset-smoke.outputs.provider_calls_expected }}
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
@@ -325,11 +305,8 @@ jobs:
               --metadata-file "$metadata_file" \
               --vercel-project-id "$VERCEL_PROJECT_ID"
 
-      - name: Validate staged read-model release policy
+      - name: Validate staged Explore index-reset policy
         id: read-model-policy
-        env:
-          PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_ENDPOINT_COMMITMENT }}
-          PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT: ${{ vars.PROGRAMMABLE_WEBSITE_MAINNET_RPC_SECONDARY_ENDPOINT_COMMITMENT }}
         run: >-
           npm run perf:read-model:deploy-policy --
           --env-file .vercel/.env.production.local
@@ -850,7 +827,6 @@ jobs:
             --meta githubCommitSha="$GITHUB_SHA" \
             --env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA" \
             --env PROGRAMMABLE_RELEASE_COMMIT_SHA="$GITHUB_SHA" \
-            --env PROGRAMMABLE_REAL_BLOCK_SLA_FORCE_PROVIDER_RETRY_ONCE=true \
             --token="$VERCEL_TOKEN")"
           case "$deployment_url" in
             https://*) ;;
@@ -870,19 +846,6 @@ jobs:
           npm run perf:read-model:staged-deployment --
           --target-url "$DEPLOYMENT_URL"
           --github-output "$GITHUB_OUTPUT"
-
-      - name: Verify staged QuickNode wake authentication
-        id: wake-canary
-        if: steps.read-model-policy.outputs.wake_canary_required == 'true'
-        env:
-          PROGRAMMABLE_QUICKNODE_STREAM_SECRET: ${{ secrets.PROGRAMMABLE_QUICKNODE_STREAM_SECRET }}
-          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
-        run: |
-          set -euo pipefail
-          npm run perf:read-model:wake-canary -- \
-            --target-url "$STAGED_TARGET_URL"
-          echo "status=passed" >> "$GITHUB_OUTPUT"
 
       - name: Probe staged token image runtime without writes
         env:
@@ -960,164 +923,6 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-      - name: Probe exact staged Envio Classic V3 catalog
-        id: envio-catalog-probe
-        env:
-          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-          STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
-        run: |
-          set -euo pipefail
-          node --input-type=module <<'NODE'
-          import { appendFileSync } from "node:fs";
-          import { readBoundedResponseText } from "./scripts/read-bounded-response.mjs";
-          const target = new URL(
-            "/api/explore?limit=1&page=1&sort=newest",
-            process.env.STAGED_TARGET_URL,
-          );
-          let response;
-          let body;
-          let catalogMode;
-          let exactCatalog = false;
-          for (let attempt = 0; attempt < 5; attempt += 1) {
-            response = undefined;
-            body = undefined;
-            try {
-              response = await fetch(target, {
-                redirect: "error",
-                headers: {
-                  "x-vercel-protection-bypass":
-                    process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
-                  "x-vercel-set-bypass-cookie": "false",
-                },
-                signal: AbortSignal.timeout(30_000),
-              });
-            } catch (error) {
-              if (attempt === 4) throw error;
-              await new Promise((resolve) => setTimeout(resolve, 5_000));
-              continue;
-            }
-            if (response.status === 200) {
-              try {
-                body = JSON.parse(await readBoundedResponseText(response, {
-                  maximumBytes: 4 * 1024 * 1024,
-                  label: "staged Envio catalog probe",
-                }));
-              } catch (error) {
-                if (attempt === 4) throw error;
-              }
-            } else {
-              await response.body?.cancel().catch(() => {});
-            }
-            const registryCustomCurrent =
-              body?.catalog?.completeness?.registryCustom === "current";
-            const routerCustomStatus =
-              body?.catalog?.completeness?.routerCustom;
-            const routerCustomAvailable =
-              routerCustomStatus === "current" ||
-              routerCustomStatus === "last-known-good";
-            const expectedEnvioLaunchSource = registryCustomCurrent
-              ? routerCustomAvailable
-                ? "envio-classic-v3+registry.custom-launched+canonical-launch-stamp-router"
-                : "envio-classic-v3+registry.custom-launched"
-              : routerCustomAvailable
-                ? "envio-classic-v3+canonical-launch-stamp-router"
-                : "envio-classic-v3";
-            const expectedCustomStatus =
-              registryCustomCurrent && routerCustomStatus === "current"
-                ? "current"
-                : registryCustomCurrent && routerCustomStatus === "last-known-good"
-                  ? "last-known-good"
-                  : "unavailable";
-            const classicCurrent =
-              body?.catalog?.completeness?.classic === "current" &&
-              body.catalog.evidence?.kind === "envio-indexer-state" &&
-              body.catalog.evidence?.progressBlock === body.catalog.asOfBlock &&
-              /^sha256:[0-9a-f]{64}$/u.test(
-                body.catalog.evidence?.commitment ?? "",
-              );
-            const routerStamp = body?.catalog?.routerStamp;
-            const routerOnlyFallback =
-              body?.catalog?.launchSource === "canonical-launch-stamp-router" &&
-              body.catalog.status === "last-known-good" &&
-              body.catalog.completeness?.classic === "unavailable" &&
-              body.catalog.completeness?.custom === "unavailable" &&
-              body.catalog.completeness?.registryCustom === "unavailable" &&
-              routerCustomAvailable &&
-              Number.isSafeInteger(body.catalog.identityCount) &&
-              body.catalog.identityCount > 0 &&
-              body.catalog.identityCount === body.total &&
-              JSON.stringify(body.catalog.scope?.included) ===
-                JSON.stringify(["canonical-launch-stamp-router"]) &&
-              JSON.stringify(body.catalog.scope?.excluded) ===
-                JSON.stringify([
-                  "classic-v1",
-                  "classic-v2",
-                  "stock-paired-v1",
-                  "stock-paired-v2",
-                  "stock-paired-v3",
-                ]) &&
-              /^sha256:[0-9a-f]{64}$/u.test(
-                body.catalog.identityCommitment ?? "",
-              ) &&
-              body.catalog.evidence === undefined &&
-              /^[1-9][0-9]*$/u.test(String(body.catalog.asOfBlock ?? "")) &&
-              /^0x[0-9a-f]{64}$/u.test(body.catalog.asOfBlockHash ?? "") &&
-              routerStamp?.source === "canonical-launch-stamp-router" &&
-              routerStamp.status === routerCustomStatus &&
-              routerStamp.finalityConfirmations === 64 &&
-              Number.isSafeInteger(routerStamp.verifiedIdentityCount) &&
-              routerStamp.verifiedIdentityCount >= body.catalog.identityCount &&
-              routerStamp.projectedIdentityCount === body.catalog.identityCount &&
-              routerStamp.generatedAt === body.catalog.lastIndexedAt &&
-              routerStamp.asOfBlock === body.catalog.asOfBlock &&
-              routerStamp.asOfBlockHash === body.catalog.asOfBlockHash &&
-              /^sha256:[0-9a-f]{64}$/u.test(
-                routerStamp.identityCommitment ?? "",
-              ) &&
-              response.headers.get("x-programmable-canonical-read-status") ===
-                "unavailable" &&
-              response.headers.get("x-programmable-router-read-status") ===
-                routerCustomStatus;
-            const expectedLaunchSource = routerOnlyFallback
-              ? "canonical-launch-stamp-router"
-              : expectedEnvioLaunchSource;
-            exactCatalog =
-              body?.status === "ready" &&
-              body?.catalog?.source === "envio-classic-v3" &&
-              body.catalog.launchSource === expectedLaunchSource &&
-              body.catalog.completeness?.custom === expectedCustomStatus &&
-              ["current", "unavailable"].includes(
-                body.catalog.completeness?.registryCustom,
-              ) &&
-              ["current", "last-known-good", "unavailable"].includes(
-                routerCustomStatus,
-              ) &&
-              body.catalog.completeness?.stock === "excluded" &&
-              (classicCurrent || routerOnlyFallback) &&
-              JSON.stringify(body.catalog.scope?.publicCategories) ===
-                JSON.stringify(["classic", "custom"]) &&
-              Number.isSafeInteger(body.total) && body.total >= 1 &&
-              Array.isArray(body.tokens) && body.tokens.length === 1 &&
-              response.headers.get("x-programmable-launch-source") ===
-                expectedLaunchSource;
-            if (exactCatalog) {
-              catalogMode = classicCurrent
-                ? "envio-classic-current"
-                : "bounded-router-only-fallback";
-              break;
-            }
-            if (attempt < 4) {
-              await new Promise((resolve) => setTimeout(resolve, 5_000));
-            }
-          }
-          if (!exactCatalog || !body || !response) {
-            throw new Error("staged Envio Classic V3 catalog probe is invalid");
-          }
-          appendFileSync(
-            process.env.GITHUB_OUTPUT,
-            `block_number=${body.catalog.asOfBlock}\ntoken_count=${body.total}\ncatalog_mode=${catalogMode}\n`,
-          );
-          NODE
 
       - name: Prove clean candidate carries no Generic signer probe authority
         id: generic-signer-probe-clean
@@ -1510,14 +1315,13 @@ jobs:
             --retry 12 --retry-all-errors --retry-delay 5 \
             --max-time 30 "$DEPLOYMENT_URL/" > /dev/null
 
-      - name: Smoke staged static identity and Dex public APIs
-        id: public-provider-smoke
+      - name: Smoke exact staged Explore index reset
+        id: index-reset-smoke
         env:
           STAGED_TARGET_URL: ${{ steps.staged-deployment.outputs.target_url }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-          PROGRAMMABLE_REQUIRE_SHARD_ROUTER_TRADE: "true"
         run: |
-          node scripts/smoke-static-dexscreener-public-apis.mjs
+          node scripts/smoke-explore-index-reset-public-apis.mjs
 
       - name: Reverify staged candidate binding
         env:
@@ -1587,46 +1391,13 @@ jobs:
           PREVIOUS_GIT_HEAD: ${{ steps.production-before.outputs.git_head }}
           READ_MODEL_POLICY_MODE: ${{ steps.read-model-policy.outputs.mode }}
           READ_MODEL_EVIDENCE_REQUIRED: ${{ steps.read-model-policy.outputs.evidence_required }}
-          WAKE_CANARY_REQUIRED: ${{ steps.read-model-policy.outputs.wake_canary_required }}
-          WAKE_CANARY_STATUS: ${{ steps.wake-canary.outputs.status }}
-          GMGN_ACCOUNT_GATE_MODE: ${{ steps.public-provider-smoke.outputs.gmgn_account_gate_mode }}
-          GMGN_REQUESTS_PER_SECOND: ${{ steps.public-provider-smoke.outputs.gmgn_requests_per_second }}
+          PROVIDER_CREDENTIALS_REQUIRED: ${{ steps.read-model-policy.outputs.provider_credentials_required }}
+          INDEXING_STATUS: ${{ steps.index-reset-smoke.outputs.indexing_status }}
+          PUBLIC_ROUTES_CHECKED: ${{ steps.index-reset-smoke.outputs.public_routes_checked }}
+          RETIRED_OPERATIONS_CHECKED: ${{ steps.index-reset-smoke.outputs.retired_operations_checked }}
+          PROVIDER_CALLS_EXPECTED: ${{ steps.index-reset-smoke.outputs.provider_calls_expected }}
           CUSTOM_V2_REQUIRED: ${{ needs.release-gate.outputs.verified_custom_v2 }}
           CUSTOM_LAUNCH_V3_RELEASE: ${{ inputs.custom_launch_v3_release }}
-          MARKET_PROVIDER: ${{ steps.public-provider-smoke.outputs.market_provider }}
-          MARKET_READ_STATUS: ${{ steps.public-provider-smoke.outputs.market_read_status }}
-          DETAIL_MARKET_PROVIDER: ${{ steps.public-provider-smoke.outputs.detail_market_provider }}
-          DETAIL_SMOKE_STATUS: ${{ steps.public-provider-smoke.outputs.detail_status }}
-          DISCOVERY_STATUS: ${{ steps.public-provider-smoke.outputs.discovery_status }}
-          DISCOVERY_MATCHED_COUNT: ${{ steps.public-provider-smoke.outputs.discovery_matched_count }}
-          DISCOVERY_RANKING_COMMITMENT: ${{ steps.public-provider-smoke.outputs.discovery_ranking_commitment }}
-          DISCOVERY_CONSISTENCY: ${{ steps.public-provider-smoke.outputs.discovery_consistency }}
-          SEARCH_STATUS: ${{ steps.public-provider-smoke.outputs.search_status }}
-          SEARCH_MATCHED_COUNT: ${{ steps.public-provider-smoke.outputs.search_matched_count }}
-          SEARCH_RANKING_COMMITMENT: ${{ steps.public-provider-smoke.outputs.search_ranking_commitment }}
-          ANALYTICS_SUMMARY_STATUS: ${{ steps.public-provider-smoke.outputs.analytics_summary_status }}
-          ANALYTICS_HOLDERS_STATUS: ${{ steps.public-provider-smoke.outputs.analytics_holders_status }}
-          ANALYTICS_TRADERS_STATUS: ${{ steps.public-provider-smoke.outputs.analytics_traders_status }}
-          MARKET_CAP_DESC_SOURCE: ${{ steps.public-provider-smoke.outputs.market_cap_desc_source }}
-          MARKET_CAP_DESC_STATUS: ${{ steps.public-provider-smoke.outputs.market_cap_desc_status }}
-          MARKET_CAP_DESC_GMGN_STATUS: ${{ steps.public-provider-smoke.outputs.market_cap_desc_gmgn_status }}
-          MARKET_CAP_DESC_MATCHED_COUNT: ${{ steps.public-provider-smoke.outputs.market_cap_desc_matched_count }}
-          MARKET_CAP_DESC_GMGN_HYDRATION_QUALIFIED_COUNT: ${{ steps.public-provider-smoke.outputs.market_cap_desc_gmgn_hydration_qualified_count }}
-          MARKET_CAP_DESC_RANKING_COMMITMENT: ${{ steps.public-provider-smoke.outputs.market_cap_desc_ranking_commitment }}
-          MARKET_CAP_ASC_SOURCE: ${{ steps.public-provider-smoke.outputs.market_cap_asc_source }}
-          MARKET_CAP_ASC_STATUS: ${{ steps.public-provider-smoke.outputs.market_cap_asc_status }}
-          MARKET_CAP_ASC_GMGN_STATUS: ${{ steps.public-provider-smoke.outputs.market_cap_asc_gmgn_status }}
-          MARKET_CAP_ASC_MATCHED_COUNT: ${{ steps.public-provider-smoke.outputs.market_cap_asc_matched_count }}
-          MARKET_CAP_ASC_GMGN_HYDRATION_QUALIFIED_COUNT: ${{ steps.public-provider-smoke.outputs.market_cap_asc_gmgn_hydration_qualified_count }}
-          MARKET_CAP_ASC_RANKING_COMMITMENT: ${{ steps.public-provider-smoke.outputs.market_cap_asc_ranking_commitment }}
-          SHARD_TRADE_STATUS: ${{ steps.public-provider-smoke.outputs.shard_trade_status }}
-          CHART_PROVIDER: ${{ steps.public-provider-smoke.outputs.chart_provider }}
-          CHART_SCOPE: ${{ steps.public-provider-smoke.outputs.chart_scope }}
-          CHART_POOL_ATTRIBUTION: ${{ steps.public-provider-smoke.outputs.chart_pool_attribution }}
-          CHART_SMOKE_STATUS: ${{ steps.public-provider-smoke.outputs.chart_status }}
-          CATALOG_BLOCK_NUMBER: ${{ steps.envio-catalog-probe.outputs.block_number }}
-          CATALOG_TOKEN_COUNT: ${{ steps.envio-catalog-probe.outputs.token_count }}
-          CATALOG_MODE: ${{ steps.envio-catalog-probe.outputs.catalog_mode }}
         run: |
           {
             echo "## Staged production candidate"
@@ -1640,36 +1411,11 @@ jobs:
             echo "- Previous production commit: \`$PREVIOUS_GIT_HEAD\`"
             echo "- Read-model policy mode: \`$READ_MODEL_POLICY_MODE\`"
             echo "- Read-model evidence required: \`$READ_MODEL_EVIDENCE_REQUIRED\`"
-            echo "- QuickNode wake canary required: \`$WAKE_CANARY_REQUIRED\`"
-            echo "- QuickNode wake canary: \`${WAKE_CANARY_STATUS:-not-required}\`"
-            echo "- Candidate-only provider retry flag: \`true\`"
-            echo "- GMGN account gate mode: \`${GMGN_ACCOUNT_GATE_MODE:-not-run}\`"
-            echo "- Effective GMGN requests per second: \`${GMGN_REQUESTS_PER_SECOND:-not-run}\`"
-            echo "- Launch identities: validated current Classic or bounded Router fallback"
-            echo "- Catalog mode: \`$CATALOG_MODE\`"
-            echo "- Catalog progress block: \`$CATALOG_BLOCK_NUMBER\`"
-            echo "- Catalog identity count: \`$CATALOG_TOKEN_COUNT\`"
-            echo "- Visible market provider: \`${MARKET_PROVIDER:-not-run}\`"
-            echo "- Explore market read status: \`${MARKET_READ_STATUS:-not-run}\`"
-            echo "- Token detail market provider: \`${DETAIL_MARKET_PROVIDER:-not-run}\`"
-            echo "- Token detail smoke: \`${DETAIL_SMOKE_STATUS:-not-run}\`"
-            echo "- GMGN discovery status: \`${DISCOVERY_STATUS:-not-run}\`"
-            echo "- GMGN discovery matched canonical entries: \`${DISCOVERY_MATCHED_COUNT:-not-run}\`"
-            echo "- GMGN discovery ranking commitment: \`${DISCOVERY_RANKING_COMMITMENT:-not-run}\`"
-            echo "- GMGN discovery consistency: \`${DISCOVERY_CONSISTENCY:-not-run}\`"
-            echo "- GMGN search status: \`${SEARCH_STATUS:-not-run}\`"
-            echo "- GMGN search matched canonical entries: \`${SEARCH_MATCHED_COUNT:-not-run}\`"
-            echo "- GMGN search ranking commitment: \`${SEARCH_RANKING_COMMITMENT:-not-run}\`"
-            echo "- GMGN analytics summary: \`${ANALYTICS_SUMMARY_STATUS:-not-run}\`"
-            echo "- GMGN analytics holders: \`${ANALYTICS_HOLDERS_STATUS:-not-run}\`"
-            echo "- GMGN analytics traders: \`${ANALYTICS_TRADERS_STATUS:-not-run}\`"
-            echo "- Descending market-cap ranking: source \`${MARKET_CAP_DESC_SOURCE:-not-run}\`, status \`${MARKET_CAP_DESC_STATUS:-not-run}\`, GMGN \`${MARKET_CAP_DESC_GMGN_STATUS:-not-run}\`, canonical rank matches \`${MARKET_CAP_DESC_MATCHED_COUNT:-not-run}\`, token_info qualifications \`${MARKET_CAP_DESC_GMGN_HYDRATION_QUALIFIED_COUNT:-not-run}\`, commitment \`${MARKET_CAP_DESC_RANKING_COMMITMENT:-not-run}\`"
-            echo "- Ascending market-cap ranking: source \`${MARKET_CAP_ASC_SOURCE:-not-run}\`, status \`${MARKET_CAP_ASC_STATUS:-not-run}\`, GMGN \`${MARKET_CAP_ASC_GMGN_STATUS:-not-run}\`, canonical rank matches \`${MARKET_CAP_ASC_MATCHED_COUNT:-not-run}\`, token_info qualifications \`${MARKET_CAP_ASC_GMGN_HYDRATION_QUALIFIED_COUNT:-not-run}\`, commitment \`${MARKET_CAP_ASC_RANKING_COMMITMENT:-not-run}\`"
-            echo "- SHARD trade adapter smoke: \`${SHARD_TRADE_STATUS:-not-run}\`"
-            echo "- Market chart provider: \`${CHART_PROVIDER:-not-run}\`"
-            echo "- Market chart series scope: \`${CHART_SCOPE:-not-run}\`"
-            echo "- Market chart pool attribution: \`${CHART_POOL_ATTRIBUTION:-not-run}\`"
-            echo "- Market chart smoke: \`${CHART_SMOKE_STATUS:-not-run}\`"
+            echo "- Provider credentials required: \`$PROVIDER_CREDENTIALS_REQUIRED\`"
+            echo "- Explore indexing status: \`$INDEXING_STATUS\`"
+            echo "- Public reset routes checked: \`$PUBLIC_ROUTES_CHECKED\`"
+            echo "- Retired operations checked: \`$RETIRED_OPERATIONS_CHECKED\`"
+            echo "- Expected external indexing calls: \`$PROVIDER_CALLS_EXPECTED\`"
             echo "- Custom V2 verification required by this commit: \`$CUSTOM_V2_REQUIRED\`"
             if [ "$CUSTOM_V2_REQUIRED" = true ]; then
               echo "- Custom V2 evidence: \`${{ steps.custom-v2-stage.outputs.evidence_sha256 }}\`"

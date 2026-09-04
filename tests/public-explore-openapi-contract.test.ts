@@ -4,367 +4,85 @@ import { describe, expect, it } from "vitest";
 
 import { programmablePublicOpenApi } from "../lib/public-openapi";
 
-const robinhoodEntry = {
-  exploreKind: "token",
-  id: "4663:0x1111111111111111111111111111111111111111",
-  name: "Robinhood Custom Release",
-  symbol: "RHCR",
-  description: "A finalized Programmable Custom launch on Robinhood Chain.",
-  imageUrl: "https://ipfs.io/ipfs/bafybeigdyrzt5sfp7udm7hu76br3m5pnpytwhq",
-  links: [
-    { kind: "website", url: "https://programmable.market" },
-    { kind: "x", url: "https://x.com/programmable" },
-  ],
-  tokenAddress: "0x1111111111111111111111111111111111111111",
-  hookAddress: "0xa3b48907aCDD42A1Ec74E1D9208122eC34af4A88",
-  poolId: `0x${"11".repeat(32)}`,
-  launchedAt: "2026-09-02T18:30:00.000Z",
-  launchModel: "custom-graph",
-  launchModelVersion: "programmable-launch-stamp-router-v1",
-  liquidityPath: "programmable-v4",
-  totalSwapFeeBps: null,
-  valuation: { status: "unavailable", reason: "source-unavailable" },
-  launchCategoryProvenance: {
-    category: "custom",
-    source: "canonical-launch-stamp-router",
-  },
-};
-
-const robinhoodCatalog = {
-  source: "robinhood-finalized-custom-launch-feed-v4",
-  launchSource:
-    "robinhood-finalized-custom-launch-feed-v4+canonical-launch-stamp-router",
-  status: "current",
-  lastIndexedAt: "2026-09-03T07:30:00.000Z",
-  asOfBlock: "52929919",
-  asOfBlockHash: `0x${"22".repeat(32)}`,
-  identityCount: 1,
-  identityCommitment: `sha256:${"33".repeat(32)}`,
-  completeness: {
-    classic: "unavailable",
-    stock: "excluded",
-    custom: "current",
-    registryCustom: "unavailable",
-    routerCustom: "current",
-  },
-  scope: {
-    included: ["canonical-launch-stamp-router"],
-    excluded: [
-      "classic-v1",
-      "classic-v2",
-      "stock-paired-v1",
-      "stock-paired-v2",
-      "stock-paired-v3",
-    ],
-    publicCategories: ["classic", "custom"],
-  },
-  routerStamp: {
-    source: "canonical-launch-stamp-router",
-    status: "current",
-    finalityConfirmations: 64,
-    verifiedIdentityCount: 1,
-    projectedIdentityCount: 1,
-    generatedAt: "2026-09-03T07:30:00.000Z",
-    asOfBlock: "52929919",
-    asOfBlockHash: `0x${"22".repeat(32)}`,
-    identityCommitment: `sha256:${"33".repeat(32)}`,
-  },
-};
-
-function responseValidator(name: "ExploreListResponse" | "TokenDetailResponse") {
+function validator(name: "ExploreIndexResetError") {
   const ajv = new Ajv2020({ allErrors: true, strict: false });
   addFormats(ajv);
   return ajv.compile({
     $schema: programmablePublicOpenApi.jsonSchemaDialect,
     ...programmablePublicOpenApi.components.schemas[name],
-    components: {
-      schemas: programmablePublicOpenApi.components.schemas,
-    },
+    components: { schemas: programmablePublicOpenApi.components.schemas },
   });
 }
 
-describe("public Explore OpenAPI contract", () => {
-  it("documents exact-bound GMGN observations without treating them as identity authority", () => {
-    const entrySchema = programmablePublicOpenApi.components.schemas.ExploreEntry;
-    const gmgnSchema = programmablePublicOpenApi.components.schemas.GmgnMarketSnapshot;
+const explorePaths = [
+  "/api/explore",
+  "/api/explore/token",
+  "/api/explore/token/analytics",
+] as const;
 
-    expect(entrySchema.properties.gmgnMarketData).toEqual({
-      $ref: "#/components/schemas/GmgnMarketSnapshot",
-    });
-    expect(gmgnSchema).toMatchObject({
-      properties: {
-        source: { const: "gmgn" },
-        marketScope: { const: "token" },
-        poolAttribution: {
-          type: "string",
-          enum: ["exact", "unavailable"],
+describe("public Explore indexing-reset OpenAPI contract", () => {
+  it("documents one deterministic reset error for every JSON Explore read", () => {
+    const validate = validator("ExploreIndexResetError");
+
+    expect(
+      validate({
+        error: "Token data is temporarily unavailable",
+      }),
+      JSON.stringify(validate.errors),
+    ).toBe(true);
+    expect(
+      validate({
+        error: "Token data is temporarily unavailable",
+        status: "index_rebuilding",
+      }),
+      JSON.stringify(validate.errors),
+    ).toBe(true);
+    expect(
+      validate({
+        error: "Token data is temporarily unavailable",
+        status: "ready",
+      }),
+    ).toBe(false);
+    expect(
+      validate({
+        error: "Token data is temporarily unavailable",
+        provider: "unexpected",
+      }),
+    ).toBe(false);
+
+    for (const path of explorePaths) {
+      const operation = programmablePublicOpenApi.paths[path].get;
+      expect(Object.keys(operation.responses).sort()).toEqual(["400", "503"]);
+      expect(operation.responses["503"]).toMatchObject({
+        content: {
+          "application/json": {
+            schema: {
+              $ref: "#/components/schemas/ExploreIndexResetError",
+            },
+          },
         },
-        identity: { $ref: "#/components/schemas/GmgnMarketIdentity" },
-      },
-      additionalProperties: false,
-    });
-    expect(gmgnSchema.required).toEqual(expect.arrayContaining([
-      "marketScope",
-      "poolAttribution",
-    ]));
-    expect(gmgnSchema.description).toContain("GMGN token-level");
-    expect(gmgnSchema.description).toContain("20-byte pool locators");
-    expect(gmgnSchema.description).toContain("canonical request PoolId");
-  });
-
-  it("documents concrete Dexscreener and GMGN market-read variants", () => {
-    const schemas = programmablePublicOpenApi.components.schemas;
-
-    expect(schemas.ExploreMarketRead.oneOf).toEqual([
-      { $ref: "#/components/schemas/DexscreenerExploreMarketRead" },
-      { $ref: "#/components/schemas/GmgnExploreMarketRead" },
-    ]);
-    expect(schemas.DexscreenerExploreMarketRead).toMatchObject({
-      required: [
-        "provider",
-        "status",
-        "currency",
-        "requestedCount",
-        "observedCount",
-        "qualifiedCount",
-        "unavailableCount",
-        "oldestFetchedAt",
-        "newestFetchedAt",
-      ],
-      properties: {
-        provider: { const: "dexscreener" },
-      },
-      additionalProperties: false,
-    });
-    expect(schemas.GmgnExploreMarketRead).toMatchObject({
-      properties: {
-        provider: { const: "gmgn" },
-        fallbackProvider: { const: "dexscreener" },
-        gmgnObservedCount: { type: "integer", minimum: 0 },
-        fallbackRequestedCount: { type: "integer", minimum: 0 },
-        fallbackObservedCount: { type: "integer", minimum: 0 },
-      },
-      additionalProperties: false,
-    });
-    expect(schemas.ExploreReadyListResponse.required).toContain("marketRead");
-    expect(schemas.ExploreReadyListResponse.properties.marketRead).toEqual({
-      $ref: "#/components/schemas/ExploreMarketRead",
-    });
-  });
-
-  it("documents GMGN-primary market-cap ranking without claiming full coverage", () => {
-    const schema = programmablePublicOpenApi.components.schemas
-      .ExploreMarketCapRanking;
-    expect(schema).toMatchObject({
-      required: expect.arrayContaining([
-        "primaryProvider",
-        "source",
-        "rankingCommitment",
-        "status",
-        "gmgnStatus",
-        "matchedTokenCount",
-        "metricOrder",
-        "gmgnHydrationRequestedCount",
-        "gmgnHydrationQualifiedCount",
-        "fallbackRequestedCount",
-        "canonicalTailCount",
-      ]),
-      properties: {
-        requested: { const: "market-cap" },
-        primaryProvider: { const: "gmgn" },
-        fallbackProvider: { const: "dexscreener" },
-        rankingCommitment: {
-          type: "string",
-          pattern: "^sha256:[0-9a-f]{64}$",
+        headers: {
+          "Cache-Control": { schema: { const: "no-store" } },
+          "Retry-After": { schema: { const: "3600" } },
+          "X-Programmable-Indexing-Status": {
+            schema: { const: "reset" },
+          },
         },
-      },
-      additionalProperties: false,
-    });
-    expect(schema.description).toContain("never compared across tiers");
-    const ready = programmablePublicOpenApi.components.schemas
-      .ExploreReadyListResponse;
-    expect(ready.properties.ranking).toEqual({
-      $ref: "#/components/schemas/ExploreMarketCapRanking",
-    });
-    expect(ready.properties.sortMetric.enum).toContain(
-      "gmgn-market-cap+gmgn-token-info-fdv+dexscreener-fdv-fallback",
-    );
-    const headers = programmablePublicOpenApi.paths["/api/explore"].get
-      .responses["200"].headers;
-    expect(headers["X-Programmable-Ranking-Primary-Provider"].schema).toEqual({
-      const: "gmgn",
-    });
-    expect(headers["X-Programmable-Ranking-Commitment"].schema).toEqual({
-      type: "string",
-      pattern: "^sha256:[0-9a-f]{64}$",
-    });
-    expect(schema.properties.asOfTime.description).toContain(
-      "exactly that rank snapshot time",
-    );
-  });
-
-  it("documents canonical GMGN search intersection and headers", () => {
-    const schemas = programmablePublicOpenApi.components.schemas;
-    const response = programmablePublicOpenApi.paths["/api/explore"].get
-      .responses["200"];
-    const query = programmablePublicOpenApi.paths["/api/explore"].get
-      .parameters.find((parameter) => parameter.name === "q");
-
-    expect(query).toMatchObject({
-      schema: { type: "string", minLength: 1, maxLength: 100 },
-    });
-    expect(query?.description).toContain("foreign coins and wallet rows");
-    expect(schemas.ExploreReadyListResponse.properties.search).toEqual({
-      $ref: "#/components/schemas/ExploreSearchRanking",
-    });
-    expect(schemas.ExploreSearchRanking).toMatchObject({
-      required: expect.arrayContaining([
-        "rankingCommitment",
-        "matchedUniqueTokenCount",
-        "providerOnlyCanonicalTokenCount",
-        "duplicateProviderItemCount",
-      ]),
-      properties: {
-        provider: { const: "gmgn" },
-        requested: { const: "search" },
-        orderBy: { const: "weight" },
-      },
-      additionalProperties: false,
-    });
-    expect(schemas.ExploreSearchRanking.description).toContain(
-      "canonical Ethereum Programmable catalog",
-    );
-    expect(response.headers["X-Programmable-Search-Provider"].schema)
-      .toEqual({ const: "gmgn" });
-    expect(response.headers["X-Programmable-Search-Read-Status"].schema.enum)
-      .toEqual(["complete", "partial", "unavailable"]);
-    expect(response.headers["X-Programmable-Search-Ranking-Commitment"].schema)
-      .toEqual({
-        type: "string",
-        pattern: "^sha256:[0-9a-f]{64}$",
       });
+      expect(Object.keys(operation.responses["503"].headers).sort()).toEqual([
+        "Cache-Control",
+        "Retry-After",
+        "X-Programmable-Indexing-Status",
+      ]);
+    }
   });
 
-  it("validates both provider reads and rejects cross-provider fields", () => {
-    const validate = responseValidator("ExploreListResponse");
-    const ready = {
-      status: "ready",
-      chainId: 1,
-      tokens: [],
-      page: 1,
-      pageSize: 9,
-      total: 0,
-      totalPages: 0,
-      sort: "newest",
-      query: "",
-      catalog: {
-        source: "envio-classic-v3",
-        launchSource: "envio-classic-v3",
-        status: "current",
-        lastIndexedAt: "2026-08-31T12:00:00.000Z",
-        identityCount: 1,
-      },
-    };
-    const dexscreener = {
-      provider: "dexscreener",
-      status: "unavailable",
-      currency: "USD",
-      requestedCount: 0,
-      observedCount: 0,
-      qualifiedCount: 0,
-      unavailableCount: 0,
-      oldestFetchedAt: null,
-      newestFetchedAt: null,
-    };
-    const gmgn = {
-      provider: "gmgn",
-      fallbackProvider: "dexscreener",
-      status: "partial",
-      currency: "USD",
-      requestedCount: 1,
-      observedCount: 1,
-      qualifiedCount: 1,
-      unavailableCount: 0,
-      gmgnObservedCount: 1,
-      gmgnQualifiedCount: 1,
-      fallbackRequestedCount: 0,
-      fallbackObservedCount: 0,
-      fallbackQualifiedCount: 0,
-      oldestFetchedAt: "2026-08-31T12:00:00.000Z",
-      newestFetchedAt: "2026-08-31T12:00:00.000Z",
-    };
-
-    expect(
-      validate({ ...ready, marketRead: dexscreener }),
-      JSON.stringify(validate.errors),
-    ).toBe(true);
-    expect(
-      validate({ ...ready, marketRead: gmgn }),
-      JSON.stringify(validate.errors),
-    ).toBe(true);
-    expect(validate({
-      ...ready,
-      marketRead: { ...dexscreener, fallbackProvider: "dexscreener" },
-    })).toBe(false);
-    const incompleteGmgn = Object.fromEntries(
-      Object.entries(gmgn).filter(([name]) => name !== "gmgnObservedCount"),
+  it("retains the accepted query shapes without advertising a live result", () => {
+    const list = programmablePublicOpenApi.paths["/api/explore"].get;
+    const listParameters = new Map(
+      list.parameters.map((parameter) => [parameter.name, parameter]),
     );
-    expect(validate({ ...ready, marketRead: incompleteGmgn })).toBe(false);
-  });
-
-  it("validates the finalized Robinhood ready list without a market read", () => {
-    const validate = responseValidator("ExploreListResponse");
-    const ready = {
-      status: "ready",
-      chainId: 4663,
-      tokens: [robinhoodEntry],
-      page: 1,
-      pageSize: 9,
-      total: 1,
-      totalPages: 1,
-      sort: "newest",
-      query: "",
-      catalog: robinhoodCatalog,
-    };
-
-    expect(validate(ready), JSON.stringify(validate.errors)).toBe(true);
-    expect(ready).not.toHaveProperty("marketRead");
-    expect(validate({ ...ready, marketRead: null })).toBe(true);
-    expect(validate({ ...ready, sort: "oldest" })).toBe(false);
-  });
-
-  it("documents the market response headers emitted by ready Explore reads", () => {
-    const response = programmablePublicOpenApi.paths["/api/explore"].get
-      .responses["200"];
-
-    expect(response.headers["X-Programmable-Market-Provider"].schema.enum)
-      .toEqual(["dexscreener", "gmgn", "gmgn+dexscreener"]);
-    expect(response.headers["X-Programmable-Market-Read-Status"].schema.enum)
-      .toEqual(["complete", "partial", "unavailable"]);
-    expect(response.headers["X-Programmable-Market-Source"].description)
-      .toContain("Omitted when no provider observation was accepted");
-    expect(response.headers["X-Programmable-Price-Source"].description)
-      .toContain("Omitted when no valuation qualified");
-    expect(response.headers["X-Programmable-Market-As-Of"].schema)
-      .toEqual({ type: "string", format: "date-time" });
-    expect(response.headers["X-Programmable-Chain-Id"]).toBeDefined();
-    expect(response.headers["X-Programmable-Launch-Source"]).toBeDefined();
-    expect(response.headers["X-Programmable-Read-Source"]).toBeDefined();
-    expect(response.headers["X-Programmable-Canonical-Read-Status"])
-      .toBeDefined();
-    expect(response.headers["X-Programmable-Router-Read-Status"])
-      .toBeDefined();
-    expect(response.headers["X-Programmable-Identity-Last-Indexed-At"])
-      .toBeDefined();
-  });
-
-  it("documents every accepted list query including chain and model", () => {
-    const operation = programmablePublicOpenApi.paths["/api/explore"].get;
-    const parameters = new Map(
-      operation.parameters.map((parameter) => [parameter.name, parameter]),
-    );
-
-    expect([...parameters.keys()]).toEqual([
+    expect([...listParameters.keys()]).toEqual([
       "chain",
       "page",
       "limit",
@@ -374,192 +92,83 @@ describe("public Explore OpenAPI contract", () => {
       "sort",
       "rankingCommitment",
     ]);
-    expect(parameters.get("chain")?.schema).toEqual({
+    expect(listParameters.get("chain")?.schema).toEqual({
       type: "integer",
       enum: [1, 4663],
       default: 1,
     });
-    expect(parameters.get("model")?.schema).toEqual({
+    expect(listParameters.get("model")?.schema).toEqual({
       type: "string",
       enum: ["classic", "custom"],
     });
-    expect(parameters.get("sort")?.schema).toEqual({
-      type: "string",
-      enum: [
-        "newest",
-        "oldest",
-        "trending",
-        "market-cap",
-        "market-cap-asc",
-        "highest-market-cap",
-        "lowest-market-cap",
-      ],
-      default: "newest",
-    });
-    expect(parameters.get("sort")?.description).toContain("chain=1");
-    expect(parameters.get("rankingCommitment")).toMatchObject({
-      in: "query",
-      schema: {
-        type: "string",
-        pattern: "^sha256:[0-9a-f]{64}$",
-      },
-    });
-    expect(parameters.get("rankingCommitment")?.description).toContain(
-      "Required for page > 1",
-    );
-    expect(operation.responses["409"].description).toContain(
-      "restart pagination from page 1",
-    );
-  });
 
-  it("documents canonical-intersected Trending metadata and headers", () => {
-    const schemas = programmablePublicOpenApi.components.schemas;
-    const response = programmablePublicOpenApi.paths["/api/explore"].get
-      .responses["200"];
-
-    expect(schemas.ExploreReadyListResponse.properties.sort.enum).toContain(
-      "trending",
-    );
-    expect(schemas.ExploreReadyListResponse.properties.discovery).toEqual({
-      $ref: "#/components/schemas/ExploreDiscoveryRanking",
-    });
-    expect(schemas.ExploreDiscoveryRanking).toMatchObject({
-      properties: {
-        provider: { const: "gmgn" },
-        requested: { const: "trending" },
-        rankingCommitment: {
-          description: expect.stringContaining(
-            "Observed freshness is reported separately by asOfTime",
-          ),
-        },
-        snapshotCount: { type: "integer", minimum: 0, maximum: 2 },
-        observedTokenCount: { type: "integer", minimum: 0, maximum: 200 },
-      },
-      additionalProperties: false,
-    });
-    expect(schemas.ExploreDiscoveryRanking.description).toContain(
-      "filtered canonical Programmable catalog",
-    );
-    expect(response.headers["X-Programmable-Discovery-Provider"].schema)
-      .toEqual({ const: "gmgn" });
-    expect(response.headers["X-Programmable-Discovery-Read-Status"].schema.enum)
-      .toEqual(["complete", "partial", "unavailable"]);
-    expect(response.headers["X-Programmable-Discovery-Matched-Count"])
-      .toBeDefined();
-  });
-
-  it("validates the real catalog-free planned list response", () => {
-    const validate = responseValidator("ExploreListResponse");
-    const planned = {
-      status: "not-deployed",
-      activationStage: "planned-not-deployed",
-      chainId: 4663,
-      tokens: [],
-      page: 1,
-      pageSize: 9,
-      total: 0,
-      totalPages: 0,
-      sort: "newest",
-      query: "",
-    };
-
-    expect(validate(planned), JSON.stringify(validate.errors)).toBe(true);
-    expect(validate({ ...planned, catalog: {} })).toBe(false);
-    expect(validate({ ...planned, sort: "oldest" })).toBe(false);
-  });
-
-  it("documents chain-scoped token reads and their planned response", () => {
-    const operation = programmablePublicOpenApi.paths["/api/explore/token"].get;
-    const parameters = new Map(
-      operation.parameters.map((parameter) => [parameter.name, parameter]),
-    );
-    expect([...parameters.keys()]).toEqual(["chain", "address"]);
-    expect(parameters.get("chain")?.schema).toEqual({
-      type: "integer",
-      enum: [1, 4663],
-      default: 1,
-    });
-
-    const validate = responseValidator("TokenDetailResponse");
-    const planned = {
-      status: "not-deployed",
-      activationStage: "planned-not-deployed",
-      chainId: 4663,
-      token: null,
-      customProject: null,
-      routerTradeProject: null,
-      platformFeeCertification: null,
-      sourceVerification: null,
-      creatorArticle: null,
-      snapshot: null,
-    };
-    expect(validate(planned), JSON.stringify(validate.errors)).toBe(true);
-    expect(validate({ ...planned, catalog: {} })).toBe(false);
-  });
-
-  it("validates a finalized Robinhood ready token detail", () => {
-    const validate = responseValidator("TokenDetailResponse");
-    const detail = {
-      status: "ready",
-      token: robinhoodEntry,
-      customProject: null,
-      routerTradeProject: null,
-      platformFeeCertification: null,
-      sourceVerification: {
-        schemaVersion: "programmable.source-verification-display.v1",
-        status: "verified",
-        label: "Source verified",
-        updatedAt: "2026-09-03T07:29:00.000Z",
-      },
-      creatorArticle: null,
-      snapshot: { chainId: 4663 },
-      catalog: robinhoodCatalog,
-    };
-
-    expect(validate(detail), JSON.stringify(validate.errors)).toBe(true);
-    expect(validate({
-      ...detail,
-      token: null,
-      sourceVerification: null,
-      snapshot: null,
-    }), JSON.stringify(validate.errors)).toBe(true);
+    const detail = programmablePublicOpenApi.paths["/api/explore/token"].get;
+    expect(detail.parameters.map((parameter) => parameter.name)).toEqual([
+      "chain",
+      "address",
+    ]);
     expect(
-      programmablePublicOpenApi.paths["/api/explore/token"].get
-        .responses["404"].content["application/json"].schema,
-    ).toEqual({
-      $ref: "#/components/schemas/TokenDetailLookupReadyResponse",
-    });
-    expect(programmablePublicOpenApi.components.schemas.TokenDetailReadyResponse
-      .properties.catalog).toEqual({
-        $ref: "#/components/schemas/CatalogBoundary",
-      });
-    expect(validate({
-      ...detail,
-      catalog: { ...robinhoodCatalog, source: "unverified" },
-    })).toBe(false);
+      detail.parameters.find((parameter) => parameter.name === "address"),
+    ).toMatchObject({ required: true, in: "query" });
+
+    const analytics =
+      programmablePublicOpenApi.paths["/api/explore/token/analytics"].get;
+    expect(analytics.parameters.map((parameter) => parameter.name)).toEqual([
+      "chain",
+      "address",
+      "section",
+      "limit",
+    ]);
+    expect(
+      analytics.parameters.find((parameter) => parameter.name === "limit")
+        ?.schema,
+    ).toEqual({ type: "integer", const: 20, default: 20 });
   });
 
-  it("documents token market headers only where a market read can occur", () => {
-    const responses = programmablePublicOpenApi.paths["/api/explore/token"].get
-      .responses;
-    const readyHeaders = responses["200"].headers;
-    const notFoundHeaders = responses["404"].headers;
+  it("publishes an explicit provider-free reset boundary", () => {
+    expect(
+      programmablePublicOpenApi["x-programmable-availability"].exploreIndexing,
+    ).toEqual({
+      status: "reset",
+      publicReadStatus: 503,
+      providerCalls: false,
+      fallbacks: false,
+      backgroundWorkers: false,
+    });
+    expect(
+      programmablePublicOpenApi["x-programmable-boundary"].identity,
+    ).toContain("no token identity is served");
+    expect(
+      programmablePublicOpenApi["x-programmable-boundary"].marketData,
+    ).toContain("No token market, ranking, search, analytics or chart data");
 
-    expect(readyHeaders["X-Programmable-Market-Provider"].schema.enum)
-      .toEqual(["dexscreener", "gmgn", "gmgn+dexscreener"]);
-    expect(readyHeaders["X-Programmable-Market-Read-Status"].schema.enum)
-      .toEqual(["complete", "partial", "unavailable"]);
-    expect(readyHeaders["X-Programmable-Market-Source"]).toBeDefined();
-    expect(readyHeaders["X-Programmable-Price-Source"]).toBeDefined();
-    expect(readyHeaders["X-Programmable-Market-As-Of"]).toBeDefined();
-
-    expect(notFoundHeaders["X-Programmable-Read-Source"].description)
-      .toContain("identity sources only");
-    expect(notFoundHeaders).not.toHaveProperty(
-      "X-Programmable-Market-Provider",
+    const serialized = JSON.stringify(programmablePublicOpenApi);
+    expect(serialized).not.toMatch(/gmgn|dexscreener|bitquery/iu);
+    expect(serialized).not.toContain("X-Programmable-Market-Provider");
+    expect(serialized).not.toContain("X-Programmable-Read-Source");
+    expect(programmablePublicOpenApi.components.schemas).not.toHaveProperty(
+      "ExploreListResponse",
     );
-    expect(notFoundHeaders).not.toHaveProperty(
-      "X-Programmable-Market-Read-Status",
+    expect(programmablePublicOpenApi.components.schemas).not.toHaveProperty(
+      "TokenDetailResponse",
+    );
+    expect(programmablePublicOpenApi.components.schemas).not.toHaveProperty(
+      "TokenAnalyticsResponse",
+    );
+  });
+
+  it("keeps Custom Launch and API-key contracts intact", () => {
+    expect(programmablePublicOpenApi.paths).toHaveProperty(
+      "/v1/custom-launches",
+    );
+    expect(programmablePublicOpenApi.paths).toHaveProperty(
+      "/v1/custom-launches/{launchId}",
+    );
+    expect(programmablePublicOpenApi.paths).toHaveProperty(
+      "/api/custom-launch/registry/v2/readiness",
+    );
+    expect(programmablePublicOpenApi.components.securitySchemes).toHaveProperty(
+      "CustomLaunchApiKey",
     );
   });
 });

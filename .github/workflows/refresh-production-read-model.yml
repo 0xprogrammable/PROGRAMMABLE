@@ -1,4 +1,4 @@
-name: Legacy durable read-model refresh (manual)
+name: Explore index reset status (manual)
 
 on:
   workflow_dispatch:
@@ -6,278 +6,27 @@ on:
 permissions: {}
 
 concurrency:
-  group: production-read-model-refresh
-  cancel-in-progress: false
+  group: production-explore-index-reset-status
+  cancel-in-progress: true
 
 jobs:
-  refresh:
-    name: Refresh legacy durable production read model
+  reset-status:
+    name: Confirm the production Explore index remains reset
     if: >-
       github.repository_id == 1314365508 &&
       github.ref == 'refs/heads/production'
     runs-on: ubuntu-latest
-    timeout-minutes: 9
-    environment:
-      name: production
+    timeout-minutes: 2
 
     steps:
-      - name: Install pinned Node.js runtime
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.14.0
-          package-manager-cache: false
-
-      - name: Refresh and prove durable freshness
-        shell: bash
-        env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          TARGET_ORIGIN: https://programmable.market
-          SCHEDULER_RUN_ID: ${{ github.run_id }}
-          SCHEDULER_RUN_ATTEMPT: ${{ github.run_attempt }}
+      - name: Record retired refresh authority
         run: |
-          set -euo pipefail
-          node --input-type=module <<'NODE'
-          import { appendFile } from "node:fs/promises";
-
-          const MAXIMUM_JSON_BYTES = 64 * 1024;
-          const MAXIMUM_FRESH_AGE_SECONDS = 10 * 60;
-          const HEALTH_ATTEMPTS = 18;
-          const HEALTH_RETRY_DELAY_MS = 5_000;
-          const CANONICAL_UINT = /^(?:0|[1-9][0-9]{0,77})$/u;
-          const HEX32 = /^0x[0-9a-f]{64}$/u;
-          const MAXIMUM_UINT64 = (1n << 64n) - 1n;
-
-          const targetOrigin = process.env.TARGET_ORIGIN;
-          const cronSecret = process.env.CRON_SECRET;
-          const runId = process.env.SCHEDULER_RUN_ID;
-          const runAttempt = process.env.SCHEDULER_RUN_ATTEMPT;
-          const summaryPath = process.env.GITHUB_STEP_SUMMARY;
-
-          if (targetOrigin !== "https://programmable.market") {
-            throw new Error("production read-model target is invalid");
-          }
-          const secretBytes = Buffer.byteLength(cronSecret ?? "", "utf8");
-          if (
-            secretBytes < 32 ||
-            secretBytes > 1_024 ||
-            /[\r\n]/u.test(cronSecret ?? "")
-          ) {
-            throw new Error("production cron credential is unavailable");
-          }
-          if (
-            !/^[1-9][0-9]*$/u.test(runId ?? "") ||
-            !/^[1-9][0-9]*$/u.test(runAttempt ?? "")
-          ) {
-            throw new Error("scheduler run identity is invalid");
-          }
-
-          async function boundedJson(response) {
-            const contentType = response.headers.get("content-type") ?? "";
-            if (!contentType.toLowerCase().startsWith("application/json")) {
-              throw new Error(`unexpected response content type (${response.status})`);
-            }
-            const declaredLength = response.headers.get("content-length");
-            if (
-              declaredLength !== null &&
-              (!/^(?:0|[1-9][0-9]*)$/u.test(declaredLength) ||
-                BigInt(declaredLength) > BigInt(MAXIMUM_JSON_BYTES))
-            ) {
-              throw new Error(`response exceeded size limit (${response.status})`);
-            }
-            if (!response.body) {
-              throw new Error(`response body is missing (${response.status})`);
-            }
-            const reader = response.body.getReader();
-            const chunks = [];
-            let bytes = 0;
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              bytes += value.byteLength;
-              if (bytes > MAXIMUM_JSON_BYTES) {
-                await reader.cancel();
-                throw new Error(`response exceeded size limit (${response.status})`);
-              }
-              chunks.push(value);
-            }
-            const payload = Buffer.concat(
-              chunks.map((chunk) => Buffer.from(chunk)),
-              bytes,
-            ).toString("utf8");
-            try {
-              return JSON.parse(payload);
-            } catch {
-              throw new Error(`response was not valid JSON (${response.status})`);
-            }
-          }
-
-          async function getJson(path, { authorized = false, timeoutMs }) {
-            const headers = {
-              accept: "application/json",
-              "cache-control": "no-cache",
-              "user-agent": "programmable-production-read-model-scheduler/1",
-            };
-            if (authorized) headers.authorization = `Bearer ${cronSecret}`;
-            const response = await fetch(new URL(path, targetOrigin), {
-              method: "GET",
-              headers,
-              redirect: "error",
-              signal: AbortSignal.timeout(timeoutMs),
-            });
-            const body = await boundedJson(response);
-            return { response, body };
-          }
-
-          const refresh = await getJson("/api/ops/index-v2", {
-            authorized: true,
-            timeoutMs: 330_000,
-          });
-          if (
-            refresh.response.status !== 200 ||
-            !refresh.response.headers
-              .get("cache-control")
-              ?.toLowerCase()
-              .includes("no-store") ||
-            refresh.body?.ok !== true ||
-            !CANONICAL_UINT.test(refresh.body.blockNumber) ||
-            !Number.isSafeInteger(refresh.body.tokenCount) ||
-            refresh.body.tokenCount < 0 ||
-            typeof refresh.body.updated !== "boolean" ||
-            !["recorded", "already-recorded", "empty"].includes(
-              refresh.body.portfolioHistory?.status,
-            ) ||
-            !CANONICAL_UINT.test(refresh.body.portfolioHistory?.blockNumber) ||
-            refresh.body.portfolioHistory.blockNumber !==
-              refresh.body.blockNumber ||
-            !Number.isSafeInteger(refresh.body.portfolioHistory?.tokenCount) ||
-            refresh.body.portfolioHistory.tokenCount !==
-              refresh.body.tokenCount ||
-            (refresh.body.portfolioHistory.status === "empty"
-              ? refresh.body.tokenCount !== 0 ||
-                refresh.body.portfolioHistory.path !== null
-              : typeof refresh.body.portfolioHistory.path !== "string" ||
-                refresh.body.portfolioHistory.path.length < 1 ||
-                refresh.body.portfolioHistory.path.length > 1_024)
-          ) {
-            throw new Error(`production read-model refresh failed (${refresh.response.status})`);
-          }
-
-          const refreshBlock = BigInt(refresh.body.blockNumber);
-          let proof = null;
-          for (let attempt = 1; attempt <= HEALTH_ATTEMPTS; attempt += 1) {
-            const nonce = encodeURIComponent(`${runId}-${runAttempt}-${attempt}`);
-            const health = await getJson(
-              `/api/ops/health?scheduler_proof=${nonce}`,
-              { authorized: false, timeoutMs: 30_000 },
-            );
-            const index = health.body?.index;
-            const healthBlock = CANONICAL_UINT.test(index?.blockNumber)
-              ? BigInt(index.blockNumber)
-              : null;
-            const rpc = health.body?.rpc;
-            const confirmedBlock = rpc?.confirmedBlock;
-            const confirmedBlockNumber = CANONICAL_UINT.test(
-              confirmedBlock?.number,
-            )
-              ? BigInt(confirmedBlock.number)
-              : null;
-            const primary = rpc?.providers?.primary;
-            const secondary = rpc?.providers?.secondary;
-            const primaryHead = CANONICAL_UINT.test(primary?.head)
-              ? BigInt(primary.head)
-              : null;
-            const secondaryHead = CANONICAL_UINT.test(secondary?.head)
-              ? BigInt(secondary.head)
-              : null;
-            if (
-              health.response.status === 200 &&
-              health.body?.status === "healthy" &&
-              health.body.chainId === 1 &&
-              health.body.indexSource === "durable" &&
-              health.body.indexedReadModel?.status === "disabled" &&
-              healthBlock !== null &&
-              healthBlock <= MAXIMUM_UINT64 &&
-              healthBlock >= refreshBlock &&
-              Number.isSafeInteger(index?.ageSeconds) &&
-              index.ageSeconds >= 0 &&
-              index.ageSeconds <= MAXIMUM_FRESH_AGE_SECONDS &&
-              Number.isSafeInteger(index?.tokenCount) &&
-              index.tokenCount >= 0 &&
-              rpc?.status === "healthy" &&
-              rpc?.chainId === 1 &&
-              rpc?.read?.status === "available" &&
-              rpc?.quorum?.status === "verified" &&
-              confirmedBlockNumber !== null &&
-              confirmedBlockNumber <= MAXIMUM_UINT64 &&
-              confirmedBlockNumber >= healthBlock &&
-              confirmedBlockNumber >= refreshBlock &&
-              HEX32.test(confirmedBlock?.hash) &&
-              confirmedBlock.hash !== `0x${"00".repeat(32)}` &&
-              rpc?.freshness?.maxHeadAgeSeconds === 300 &&
-              primary?.status === "available" &&
-              secondary?.status === "available" &&
-              primaryHead !== null &&
-              secondaryHead !== null &&
-              primaryHead <= MAXIMUM_UINT64 &&
-              secondaryHead <= MAXIMUM_UINT64 &&
-              primaryHead >= confirmedBlockNumber &&
-              secondaryHead >= confirmedBlockNumber &&
-              Number.isSafeInteger(primary?.headAgeSeconds) &&
-              Number.isSafeInteger(secondary?.headAgeSeconds) &&
-              primary.headAgeSeconds >= 0 &&
-              secondary.headAgeSeconds >= 0 &&
-              primary.headAgeSeconds <= rpc.freshness.maxHeadAgeSeconds &&
-              secondary.headAgeSeconds <= rpc.freshness.maxHeadAgeSeconds
-            ) {
-              proof = {
-                blockNumber: index.blockNumber,
-                tokenCount: index.tokenCount,
-                ageSeconds: index.ageSeconds,
-                confirmedBlockNumber: confirmedBlock.number,
-                confirmedBlockHash: confirmedBlock.hash,
-              };
-              break;
-            }
-            if (attempt < HEALTH_ATTEMPTS) {
-              await new Promise((resolve) =>
-                setTimeout(resolve, HEALTH_RETRY_DELAY_MS),
-              );
-            }
-          }
-          if (proof === null) {
-            throw new Error("production read-model freshness proof failed");
-          }
-
-          const safeResult = {
-            target: targetOrigin,
-            refreshBlockNumber: refresh.body.blockNumber,
-            visibleBlockNumber: proof.blockNumber,
-            confirmedBlockNumber: proof.confirmedBlockNumber,
-            confirmedBlockHash: proof.confirmedBlockHash,
-            tokenCount: proof.tokenCount,
-            ageSeconds: proof.ageSeconds,
-            updated: refresh.body.updated,
-            portfolioHistoryStatus: refresh.body.portfolioHistory.status,
-          };
-          console.log(JSON.stringify(safeResult));
-          if (summaryPath) {
-            await appendFile(
-              summaryPath,
-              [
-                "## Production read-model refresh",
-                "",
-                `- Target: \`${safeResult.target}\``,
-                `- Refreshed block: \`${safeResult.refreshBlockNumber}\``,
-                `- Visible block: \`${safeResult.visibleBlockNumber}\``,
-                `- RPC-confirmed block: \`${safeResult.confirmedBlockNumber}\``,
-                `- RPC-confirmed hash: \`${safeResult.confirmedBlockHash}\``,
-                `- Freshness: \`${safeResult.ageSeconds}s\``,
-                `- Tokens: \`${safeResult.tokenCount}\``,
-                `- Durable write advanced: \`${safeResult.updated}\``,
-                `- Portfolio history: \`${safeResult.portfolioHistoryStatus}\``,
-                "",
-              ].join("\n"),
-              "utf8",
-            );
-          }
-          NODE
+          {
+            echo "## Explore index reset"
+            echo
+            echo "- Status: \`index-reset\`"
+            echo "- Refresh workers: \`retired\`"
+            echo "- External indexing calls: \`0\`"
+            echo
+            echo "This workflow is intentionally a no-op while the replacement indexer is designed."
+          } >> "$GITHUB_STEP_SUMMARY"

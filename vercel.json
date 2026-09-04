@@ -58,19 +58,7 @@
   ],
   "crons": [
     {
-      "path": "/api/ops/projector",
-      "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/ops/market-projector",
-      "schedule": "* * * * *"
-    },
-    {
       "path": "/api/ops/protocol-revenue",
-      "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/ops/alchemy-launch-refresh",
       "schedule": "* * * * *"
     },
     {

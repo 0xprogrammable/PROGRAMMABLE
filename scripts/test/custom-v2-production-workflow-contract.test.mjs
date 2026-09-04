@@ -161,9 +161,9 @@ test("Custom V2 evidence is immutable while the workflow remains stage-only", ()
     sourceBuild,
     /vercel deploy --prod --skip-domain --archive=tgz/u,
   );
-  assert.match(
+  assert.doesNotMatch(
     sourceBuild,
-    /--env PROGRAMMABLE_REAL_BLOCK_SLA_FORCE_PROVIDER_RETRY_ONCE=true/u,
+    /PROGRAMMABLE_REAL_BLOCK_SLA_FORCE_PROVIDER_RETRY_ONCE|PROGRAMMABLE_REQUIRE_GMGN_MARKET/u,
   );
   assert.doesNotMatch(deploy, /vercel build --prod|--prebuilt/u);
   assert.doesNotMatch(
@@ -216,8 +216,8 @@ test("Custom V2 evidence is immutable while the workflow remains stage-only", ()
   );
 });
 
-test("staging validates release policy and conditionally proves wake authentication", () => {
-  const policy = stepBlock(deploy, "Validate staged read-model release policy");
+test("staging enforces the provider-free index-reset policy", () => {
+  const policy = stepBlock(deploy, "Validate staged Explore index-reset policy");
   assert.match(policy, /id: read-model-policy/u);
   assert.match(policy, /npm run perf:read-model:deploy-policy --/u);
   assert.match(policy, /--env-file \.vercel\/\.env\.production\.local/u);
@@ -226,25 +226,9 @@ test("staging validates release policy and conditionally proves wake authenticat
     /--sensitive-env-metadata "\$RUNNER_TEMP\/vercel-production-env-metadata\.json"/u,
   );
   assert.doesNotMatch(policy, /continue-on-error/u);
-
-  const canary = stepBlock(
+  assert.doesNotMatch(
     deploy,
-    "Verify staged QuickNode wake authentication",
-  );
-  assert.match(
-    canary,
-    /if: steps\.read-model-policy\.outputs\.wake_canary_required == 'true'/u,
-  );
-  assert.match(
-    canary,
-    /PROGRAMMABLE_QUICKNODE_STREAM_SECRET: \$\{\{ secrets\.PROGRAMMABLE_QUICKNODE_STREAM_SECRET \}\}/u,
-  );
-  assert.match(canary, /npm run perf:read-model:wake-canary --/u);
-  assert.match(canary, /--target-url "\$STAGED_TARGET_URL"/u);
-  assert.doesNotMatch(canary, /continue-on-error/u);
-  assert.ok(
-    deploy.indexOf("Resolve exact staged deployment") <
-      deploy.indexOf("Verify staged QuickNode wake authentication"),
+    /Verify staged QuickNode wake authentication|perf:read-model:wake-canary|wake_canary_required/u,
   );
 });
 
@@ -436,49 +420,7 @@ test("new stage and cleanup HTTP consumers share the bounded streaming reader", 
   assert.doesNotMatch(reconciler, /response\.(?:json|text)\(\)/u);
 });
 
-test("every staged candidate proves the Envio catalog before public data smoke", () => {
-  const probe = stepBlock(
-    deploy,
-    "Probe exact staged Envio Classic V3 catalog",
-  );
-  assert.match(probe, /VERCEL_AUTOMATION_BYPASS_SECRET:/u);
-  assert.match(probe, /\/api\/explore\?limit=1&page=1&sort=newest/u);
-  assert.match(probe, /catalog\?\.source === "envio-classic-v3"/u);
-  assert.match(probe, /const classicCurrent =/u);
-  assert.match(probe, /completeness\?\.classic === "current"/u);
-  assert.match(probe, /const routerOnlyFallback =/u);
-  assert.match(probe, /launchSource === "canonical-launch-stamp-router"/u);
-  assert.match(probe, /completeness\?\.classic === "unavailable"/u);
-  assert.match(
-    probe,
-    /routerStamp\.projectedIdentityCount === body\.catalog\.identityCount/u,
-  );
-  assert.match(probe, /const expectedEnvioLaunchSource =/u);
-  assert.match(
-    probe,
-    /const expectedLaunchSource = routerOnlyFallback\s+\? "canonical-launch-stamp-router"\s+: expectedEnvioLaunchSource/u,
-  );
-  assert.match(probe, /classicCurrent \|\| routerOnlyFallback/u);
-  assert.match(probe, /completeness\?\.stock === "excluded"/u);
-  assert.match(probe, /completeness\?\.registryCustom === "current"/u);
-  assert.match(probe, /routerCustomStatus === "last-known-good"/u);
-  assert.match(
-    probe,
-    /envio-classic-v3\+registry\.custom-launched\+canonical-launch-stamp-router/u,
-  );
-  assert.match(probe, /expectedCustomStatus/u);
-  assert.match(probe, /routerCustomAvailable/u);
-  assert.doesNotMatch(probe, /tokens\[0\].*launchModel/u);
-  assert.match(probe, /body\.total >= 1/u);
-  assert.match(probe, /let exactCatalog = false/u);
-  assert.match(probe, /attempt < 5/u);
-  assert.match(probe, /response = undefined/u);
-  assert.match(probe, /if \(attempt === 4\) throw error/u);
-  assert.match(probe, /continue/u);
-  assert.match(probe, /if \(exactCatalog\) \{/u);
-  assert.doesNotMatch(probe, /CRON_SECRET|\/api\/ops\/index-v2/u);
-  assert.doesNotMatch(probe, /\n        if:/u);
-
+test("every staged candidate proves the exact Explore index reset", () => {
   const metadataBinding = stepBlock(
     deploy,
     "Bind staged production environment metadata",
@@ -490,7 +432,7 @@ test("every staged candidate proves the Envio catalog before public data smoke",
   );
   assert.ok(
     deploy.indexOf("Bind staged production environment metadata") <
-      deploy.indexOf("Smoke staged static identity and Dex public APIs"),
+      deploy.indexOf("Validate staged Explore index-reset policy"),
   );
   assert.match(
     deploy,
@@ -501,142 +443,86 @@ test("every staged candidate proves the Envio catalog before public data smoke",
     metadataBinding,
     /vercel env ls production --format json --token="\$VERCEL_TOKEN" \|\n\s+node scripts\/bind-vercel-sensitive-production-metadata\.mjs \\\n\s+--metadata-file "\$metadata_file" \\\n\s+--vercel-project-id "\$VERCEL_PROJECT_ID"/u,
   );
-  assert.match(
-    metadataBinding,
-    /node scripts\/bind-vercel-sensitive-production-metadata\.mjs/u,
-  );
-  assert.match(metadataBinding, /--metadata-file "\$metadata_file"/u);
   assert.doesNotMatch(
     metadataBinding,
-    /\.vercel\/\.env\.production\.local|process\.env\.GMGN_API_KEY|set -x|console\.log/u,
+    /\.vercel\/\.env\.production\.local|set -x|console\.log/u,
   );
   assert.doesNotMatch(metadataBinding, /vercel env ls production[^\n]*>[^|]/u);
   assert.match(metadataBinding, /set -euo pipefail/u);
   assert.doesNotMatch(metadataBinding, /continue-on-error:/u);
-  assert.doesNotMatch(
-    metadataBinding,
-    /resolve-gmgn-production-requirement|require_gmgn_market|requireGmgnMarket|GITHUB_OUTPUT/u,
-  );
-  assert.doesNotMatch(
-    deploy,
-    /Resolve staged GMGN market requirement|gmgn-market-requirement|PROGRAMMABLE_REQUIRE_GMGN_MARKET|GMGN_MARKET_REQUIRED/u,
-  );
 
   const smoke = stepBlock(
     deploy,
-    "Smoke staged static identity and Dex public APIs",
+    "Smoke exact staged Explore index reset",
   );
-  assert.doesNotMatch(smoke, /\n        if:/u);
-  assert.doesNotMatch(smoke, /continue-on-error:/u);
+  assert.match(smoke, /id: index-reset-smoke/u);
   assert.match(
     smoke,
-    /node scripts\/smoke-static-dexscreener-public-apis\.mjs/u,
+    /STAGED_TARGET_URL: \$\{\{ steps\.staged-deployment\.outputs\.target_url \}\}/u,
   );
-  assert.match(smoke, /PROGRAMMABLE_REQUIRE_SHARD_ROUTER_TRADE: "true"/u);
-  assert.doesNotMatch(smoke, /PROGRAMMABLE_REQUIRE_GMGN_MARKET/u);
+  assert.match(
+    smoke,
+    /VERCEL_AUTOMATION_BYPASS_SECRET: \$\{\{ secrets\.VERCEL_AUTOMATION_BYPASS_SECRET \}\}/u,
+  );
+  assert.match(
+    smoke,
+    /node scripts\/smoke-explore-index-reset-public-apis\.mjs/u,
+  );
+  assert.doesNotMatch(smoke, /\n        if:|continue-on-error:/u);
   assert.equal(
-    smoke.match(/smoke-static-dexscreener-public-apis\.mjs/gu)?.length,
+    deploy.match(/smoke-explore-index-reset-public-apis\.mjs/gu)?.length,
     1,
   );
-  assert.doesNotMatch(smoke, /node --input-type=module|bitquery|drpc/iu);
   assert.ok(
-    deploy.indexOf("Probe exact staged Envio Classic V3 catalog") <
-      deploy.indexOf("Smoke staged static identity and Dex public APIs"),
+    deploy.indexOf("Resolve exact staged deployment") <
+      deploy.indexOf("Smoke exact staged Explore index reset"),
+  );
+  assert.ok(
+    deploy.indexOf("Smoke exact staged Explore index reset") <
+      deploy.indexOf("Reverify staged candidate binding"),
   );
 
-  const handoff = stepBlock(deploy, "Record staged candidate handoff");
   for (const output of [
-    "gmgn_account_gate_mode",
-    "gmgn_requests_per_second",
-    "discovery_status",
-    "discovery_matched_count",
-    "discovery_ranking_commitment",
-    "discovery_consistency",
-    "analytics_summary_status",
-    "analytics_holders_status",
-    "analytics_traders_status",
-    "market_cap_desc_source",
-    "market_cap_desc_status",
-    "market_cap_desc_gmgn_status",
-    "market_cap_desc_matched_count",
-    "market_cap_desc_ranking_commitment",
-    "market_cap_asc_source",
-    "market_cap_asc_status",
-    "market_cap_asc_gmgn_status",
-    "market_cap_asc_matched_count",
-    "market_cap_asc_ranking_commitment",
+    "indexing_status",
+    "public_routes_checked",
+    "retired_operations_checked",
+    "provider_calls_expected",
   ]) {
     assert.match(
       deploy,
       new RegExp(
-        `${output}: \\$\\{\\{ steps\\.public-provider-smoke\\.outputs\\.${output} \\}\\}`,
+        `${output}: \\\$\\{\\{ steps\\.index-reset-smoke\\.outputs\\.${output} \\}\\}`,
         "u",
       ),
     );
   }
-  assert.match(
-    handoff,
-    /GMGN_ACCOUNT_GATE_MODE: \$\{\{ steps\.public-provider-smoke\.outputs\.gmgn_account_gate_mode \}\}/u,
-  );
-  assert.match(
-    handoff,
-    /GMGN_REQUESTS_PER_SECOND: \$\{\{ steps\.public-provider-smoke\.outputs\.gmgn_requests_per_second \}\}/u,
-  );
-  assert.match(handoff, /GMGN account gate mode:/u);
-  assert.match(handoff, /Effective GMGN requests per second:/u);
-  assert.match(
-    handoff,
-    /PREVIOUS_DEPLOYMENT_URL: \$\{\{ steps\.production-before\.outputs\.deployment_url \}\}/u,
-  );
+
+  const handoff = stepBlock(deploy, "Record staged candidate handoff");
   assert.match(
     handoff,
     /READ_MODEL_POLICY_MODE: \$\{\{ steps\.read-model-policy\.outputs\.mode \}\}/u,
   );
   assert.match(
     handoff,
-    /WAKE_CANARY_REQUIRED: \$\{\{ steps\.read-model-policy\.outputs\.wake_canary_required \}\}/u,
+    /PROVIDER_CREDENTIALS_REQUIRED: \$\{\{ steps\.read-model-policy\.outputs\.provider_credentials_required \}\}/u,
   );
-  assert.match(handoff, /Candidate-only provider retry flag:/u);
   assert.match(
     handoff,
-    /Launch identities: validated current Classic or bounded Router fallback/u,
+    /INDEXING_STATUS: \$\{\{ steps\.index-reset-smoke\.outputs\.indexing_status \}\}/u,
   );
-  assert.match(handoff, /Catalog mode:/u);
-  assert.match(handoff, /Catalog progress block:/u);
-  assert.match(handoff, /Catalog identity count:/u);
-  assert.match(
-    handoff,
-    /MARKET_PROVIDER: \$\{\{ steps\.public-provider-smoke\.outputs\.market_provider \}\}/u,
+  assert.match(handoff, /Explore indexing status:/u);
+  assert.match(handoff, /Public reset routes checked:/u);
+  assert.match(handoff, /Retired operations checked:/u);
+  assert.match(handoff, /Expected external indexing calls:/u);
+
+  assert.doesNotMatch(
+    deploy,
+    /Probe exact staged Envio Classic V3 catalog|smoke-static-dexscreener-public-apis|public-provider-smoke|wake-canary|wake_canary_required|PROGRAMMABLE_REAL_BLOCK_SLA_FORCE_PROVIDER_RETRY_ONCE/iu,
   );
-  assert.match(handoff, /Visible market provider:/u);
-  assert.match(handoff, /Explore market read status:/u);
-  assert.match(
-    handoff,
-    /DETAIL_MARKET_PROVIDER: \$\{\{ steps\.public-provider-smoke\.outputs\.detail_market_provider \}\}/u,
+  assert.doesNotMatch(
+    deploy,
+    /GMGN|DexScreener|Bitquery|Envio Classic V3|market-cap ranking|Visible market provider/iu,
   );
-  assert.match(handoff, /Token detail market provider:/u);
-  assert.match(handoff, /Token detail smoke:/u);
-  for (const output of [
-    "discovery_status",
-    "discovery_matched_count",
-    "discovery_ranking_commitment",
-    "discovery_consistency",
-    "analytics_summary_status",
-    "analytics_holders_status",
-    "analytics_traders_status",
-  ]) {
-    assert.match(
-      handoff,
-      new RegExp(`public-provider-smoke\\.outputs\\.${output}`, "u"),
-    );
-  }
-  assert.match(handoff, /GMGN discovery ranking commitment:/u);
-  assert.match(handoff, /GMGN discovery consistency:/u);
-  assert.match(handoff, /GMGN analytics summary:/u);
-  assert.match(handoff, /Descending market-cap ranking: source/u);
-  assert.match(handoff, /Ascending market-cap ranking: source/u);
-  assert.match(handoff, /SHARD trade adapter smoke:/u);
-  assert.match(handoff, /Market chart smoke:/u);
 
   for (const retired of [
     "Resolve read-model release policy",
@@ -646,60 +532,46 @@ test("every staged candidate proves the Envio catalog before public data smoke",
     "Refresh and prove exact staged durable read model",
     "Smoke staged public market APIs",
     "Gate exact staged operational health",
-    "Resolve staged GMGN market requirement",
   ]) {
     assert.equal(deploy.includes("      - name: " + retired), false);
   }
 });
 
-test("the staged public smoke is a separate bounded script", () => {
+test("the staged reset smoke is separate, bounded, and provider-free", () => {
   const source = readFileSync(
-    "scripts/smoke-static-dexscreener-public-apis.mjs",
+    "scripts/smoke-explore-index-reset-public-apis.mjs",
     "utf8",
   );
   assert.match(source, /readBoundedResponseText/u);
-  assert.match(source, /response.status === 503 && attempt === 0/u);
-  assert.match(source, /exactSamePageOrder\(highest, newest\)/u);
+  assert.match(source, /MAXIMUM_RESPONSE_BYTES = 64 \* 1024/u);
+  assert.match(source, /REQUEST_TIMEOUT_MS = 15_000/u);
+  assert.match(source, /redirect: "error"/u);
+  assert.match(source, /cache: "no-store"/u);
+  assert.match(source, /requestUrl\.origin !== input\.target\.origin/u);
+  assert.match(source, /PUBLIC_PROBES\.map/u);
+  assert.match(source, /RETIRED_OPERATION_PROBES\.map/u);
+  assert.match(source, /PAUSED_TRIGGER_PROBES\.map/u);
+  assert.match(source, /await Promise\.all/u);
   assert.match(
     source,
-    /exactVisibleMarketRead\(newest, newestTokens, validationNowMs\)/u,
+    /export function runStagedExploreIndexResetSmokeV1/u,
   );
   assert.match(
     source,
-    /exactMarketCapRanking\(\s*highest,\s*completeCatalogTokens,\s*"desc"/u,
+    /export function runProductionExploreIndexResetSmokeV1/u,
   );
-  assert.match(
-    source,
-    /sortMetric !==\s*"gmgn-market-cap\+gmgn-token-info-fdv\+dexscreener-fdv-fallback"/u,
-  );
-  assert.match(source, /exactDetailMarketRead\(/u);
-  assert.match(source, /environment\.PROGRAMMABLE_REQUIRE_GMGN_MARKET/u);
-  assert.match(source, /if \(requireGmgnMarket\)/u);
-  assert.match(source, /exactGmgnDetailProof/u);
-  assert.match(
-    source,
-    /qualifiedGmgnFdv\(candidate\.detailToken, now\(\)\.getTime\(\)\)/u,
-  );
-  assert.match(source, /VISIBLE_EXPLORE_PAGE_SIZE = 9/u);
-  assert.match(source, /model=classic/u);
-  assert.match(source, /exactGmgnEligibleCanonicalToken/u);
-  assert.match(
-    source,
-    /marketProvider: newest\.headers\.get\("x-programmable-market-provider"\)/u,
-  );
-  assert.match(source, /marketReadStatus: newest\.body\.marketRead\.status/u);
-  assert.match(source, /`market_provider=\$\{marketProvider\}`/u);
-  assert.match(source, /`gmgn_account_gate_mode=\$\{gmgnAccountGateMode\}`/u);
-  assert.match(
-    source,
-    /`gmgn_requests_per_second=\$\{gmgnRequestsPerSecond\}`/u,
-  );
-  assert.match(source, /`detail_market_provider=\$\{detailMarketProvider\}`/u);
+  for (const output of [
+    "indexing_status=index-reset",
+    "public_routes_checked=",
+    "retired_operations_checked=",
+    "provider_calls_expected=0",
+  ]) {
+    assert.match(source, new RegExp(output, "u"));
+  }
   assert.doesNotMatch(
     source,
-    /PROGRAMMABLE_WEBSITE_MAINNET_RPC|BITQUERY_API_KEY|runtimeProductionProviderEndpoints|readPrimaryRpc|readBitquery|fetchBitquery/iu,
+    /smoke-static-dexscreener|PROGRAMMABLE_REQUIRE_GMGN_MARKET|BITQUERY_API_KEY|runtimeProductionProviderEndpoints|readPrimaryRpc|readBitquery|fetchBitquery/iu,
   );
-  assert.doesNotMatch(source, /https?:\/\/[^"'`]*(?:drpc|bitquery)/iu);
   assert.doesNotMatch(
     source,
     /\/api\/explore\/profile\/claim|\/api\/trade\/prepare/u,
