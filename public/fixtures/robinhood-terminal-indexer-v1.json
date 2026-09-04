@@ -27,7 +27,8 @@
     },
     "feeBehaviorClaim": false,
     "marketSupportClaim": false,
-    "releaseBlockersSource": "live readiness reasonCodes only",
+    "releaseBlockersAuthority": "https://api.programmable.market/v4/chains/4663/capabilities",
+    "releaseBlockersPath": "readiness.reasonCodes",
     "publicItemPresenceSource": "live finalized feed only",
     "note": "This fixture is a parser and fail-closed test vector. It carries no production activation, runtime, blocker or item-presence status. Fetch every live authority URL before creating, ingesting or displaying a launch."
   },

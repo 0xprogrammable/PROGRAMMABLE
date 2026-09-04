@@ -56,7 +56,8 @@ type TerminalFixture = {
     publicItemAuthority: string;
     liveCreateGate: { paths: string[]; expected: boolean[] };
     feeBehaviorClaim: boolean;
-    releaseBlockersSource: string;
+    releaseBlockersAuthority: string;
+    releaseBlockersPath: string;
     publicItemPresenceSource: string;
   };
   chain: { chainId: string; caip2: string; provenanceStartBlock: string };
@@ -213,7 +214,9 @@ describe("Robinhood terminal and indexer documentation", () => {
       publicItemAuthority:
         "https://api.programmable.market/v4/chains/4663/finalized-custom-launches",
       feeBehaviorClaim: false,
-      releaseBlockersSource: "live readiness reasonCodes only",
+      releaseBlockersAuthority:
+        "https://api.programmable.market/v4/chains/4663/capabilities",
+      releaseBlockersPath: "readiness.reasonCodes",
       publicItemPresenceSource: "live finalized feed only",
       liveCreateGate: {
         paths: [
