@@ -49,19 +49,15 @@ const vercelConfig = JSON.parse(
 type TerminalFixture = {
   integrationBoundary: {
     target: string;
-    activationStatus: string;
-    runtimeStatus: string;
+    stateAuthority: string;
+    fixtureCarriesProductionState: boolean;
+    activationAuthority: string;
+    runtimeAuthority: string;
+    publicItemAuthority: string;
     liveCreateGate: { paths: string[]; expected: boolean[] };
     feeBehaviorClaim: boolean;
-    currentReleaseBlockers: {
-      cleanRoomBinding: string;
-      cleanRoomReason: string;
-      publicItemEvidence: string;
-      existingPublicItemClaim: boolean;
-      providerOutageClaim: boolean;
-      sourcifyProviderReleaseAuthority: boolean;
-      robinhoodBlockscoutRequired: boolean;
-    };
+    releaseBlockersSource: string;
+    publicItemPresenceSource: string;
   };
   chain: { chainId: string; caip2: string; provenanceStartBlock: string };
   classification: {
@@ -87,6 +83,9 @@ type TerminalFixture = {
     requiredTerminalEvidence: Record<string, unknown>;
     openApiValidation: {
       url: string;
+      digestAuthorityUrl: string;
+      digestAuthorityPath: string;
+      digestAlgorithm: string;
       responseSchema: string;
       itemSchema: string;
       rule: string;
@@ -124,16 +123,14 @@ type TerminalFixture = {
     qualitySemantics: Record<string, string>;
   };
   feePolicy: {
-    required: boolean;
-    status: string;
-    defaultConfiguration: Record<string, unknown>;
-    enforcement: string;
+    authority: { url: string; path: string };
+    currentValueSource: string;
+    fixtureCarriesCurrentValues: boolean;
+    requiredFields: string[];
     feeBehaviorClaim: boolean;
     universalFeeBehaviorClaim: boolean;
     genericClaimingLive: boolean;
     chargedFeeResult: string;
-    canonicalOnchainEnforcementProven: boolean;
-    guaranteedRevenue: boolean;
     perLaunchApplicabilityWithoutExplicitBackendBinding: string;
   };
   resultAxes: {
@@ -204,23 +201,20 @@ describe("Robinhood terminal and indexer documentation", () => {
     }
   });
 
-  it("pins the chain, Router identity, activation gate and fee policy boundary", () => {
+  it("pins the chain and Router while resolving mutable state live", () => {
     expect(fixture.integrationBoundary).toMatchObject({
       target: "public-self-serve",
-      activationStatus: "pending-public-discovery-promotion",
-      runtimeStatus: "deployed-ready",
+      stateAuthority: "live-only",
+      fixtureCarriesProductionState: false,
+      activationAuthority:
+        "https://programmable.market/.well-known/programmable.json",
+      runtimeAuthority:
+        "https://api.programmable.market/v4/chains/4663/readiness",
+      publicItemAuthority:
+        "https://api.programmable.market/v4/chains/4663/finalized-custom-launches",
       feeBehaviorClaim: false,
-      currentReleaseBlockers: {
-        cleanRoomBinding: "V4_RELEASE_BINDING_NOT_READY",
-        cleanRoomReason:
-          "Machine-contract hashes are refreshed. The release binding remains incomplete until chain deployment, profile, release manifest, source closure, finality and backend release evidence are all present.",
-        publicItemEvidence:
-          "pending-per-launch-authoritative-exact-source-capture-persistence-promotion",
-        existingPublicItemClaim: false,
-        providerOutageClaim: false,
-        sourcifyProviderReleaseAuthority: false,
-        robinhoodBlockscoutRequired: false,
-      },
+      releaseBlockersSource: "live readiness reasonCodes only",
+      publicItemPresenceSource: "live finalized feed only",
       liveCreateGate: {
         paths: [
           "customLaunchApi.versions.v4.publicWrites",
@@ -248,23 +242,27 @@ describe("Robinhood terminal and indexer documentation", () => {
         "0x1dbbdaaad901ea3c6134dca0d4872a4789b3c071bf8ccfb44edd65d26d817388",
     });
     expect(fixture.feePolicy).toMatchObject({
-      required: true,
-      status: "required-default-configuration",
-      enforcement: "not-guaranteed-onchain",
+      authority: {
+        url: "https://programmable.market/.well-known/programmable.json",
+        path: "customLaunchApi.versions.v4.platformFeePolicy",
+      },
+      currentValueSource: "live-discovery-only",
+      fixtureCarriesCurrentValues: false,
       directRouterOrOutsideApiBindingClaim: false,
       perLaunchApplicabilityWithoutExplicitBackendBinding: "UNVERIFIED",
       feeBehaviorClaim: false,
       universalFeeBehaviorClaim: false,
       genericClaimingLive: false,
       chargedFeeResult: "UNAVAILABLE",
-      canonicalOnchainEnforcementProven: false,
-      guaranteedRevenue: false,
-      defaultConfiguration: {
-        rateBps: 20,
-        ratePpm: 2000,
-        recipient: "0xD88539d3c4C460136a733A3Fd60cf6BF269079da",
-      },
     });
+    expect(fixture.feePolicy.requiredFields).toEqual(
+      expect.arrayContaining([
+        "rateBps",
+        "ratePercent",
+        "recipient",
+        "enforcement",
+      ]),
+    );
   });
 
   it("hashes the exact downloadable ABI bytes and derives every event topic", () => {
@@ -344,11 +342,15 @@ describe("Robinhood terminal and indexer documentation", () => {
     });
     expect(fixture.feed.openApiValidation).toMatchObject({
       url: "https://programmable.market/openapi/custom-launch-v4.json",
+      digestAuthorityUrl:
+        "https://api.programmable.market/v4/chains/4663/readiness",
+      digestAuthorityPath: "openApiSha256",
+      digestAlgorithm: "sha256-exact-response-bytes",
       responseSchema: "#/components/schemas/CustomLaunchFinalizedListV4",
       itemSchema: "#/components/schemas/CustomLaunchFinalizedMetadataV4",
     });
     expect(fixture.feed.openApiValidation.rule).toMatch(
-      /complete response and every launches\[\] item/u,
+      /exact hosted OpenAPI response bytes.*readiness\.openApiSha256.*fail closed.*complete response.*launches\[\] item/u,
     );
     expect(fixture.feed.minimumIdentityEvidence.constantAssertions).toEqual({
       platformId: "programmable",
@@ -445,6 +447,7 @@ describe("Robinhood terminal and indexer documentation", () => {
       /successful response has status ready.*quarantinedRowCount equal to zero/u,
     );
     expect(pageSource).toContain("verifyCompleteRouterBinding");
+    expect(pageSource).toContain("readiness.openApiSha256 !== openApiSha256");
     expect(pageSource).toContain("await robinhoodClient.getChainId() !== 4663");
     expect(pageSource).toContain("ETHEREUM_DRPC_RPC_URL");
     expect(pageSource).toContain("ETHEREUM_QUICKNODE_RPC_URL");
@@ -479,6 +482,9 @@ describe("Robinhood terminal and indexer documentation", () => {
       'launch.sourceVerification.status !== "exact_match"',
     );
     expect(pageSource).toContain('feePolicyApplicability: "UNVERIFIED"');
+    expect(pageSource).not.toContain(
+      "0xD88539d3c4C460136a733A3Fd60cf6BF269079da",
+    );
     expect(pageSource).not.toContain("platformFeePolicy: {");
     expect(pageSource).not.toMatch(
       /const stamp = await publicClient\.readContract/u,

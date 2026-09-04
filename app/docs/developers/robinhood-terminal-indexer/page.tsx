@@ -117,6 +117,26 @@ import {
  * Never replace that function with a kind-only launchStamp read.
  */
 const origin = "${API_ORIGIN}";
+const readinessResponse = await fetch("${READINESS_URL}", {
+  headers: { accept: "application/json" },
+});
+if (!readinessResponse.ok) throw new Error("UNAVAILABLE: release readiness");
+const readiness = await readinessResponse.json() as {
+  status?: string;
+  openApiSha256?: string;
+};
+if (readiness.status !== "ready") {
+  throw new Error("UNAVAILABLE: release readiness is not ready");
+}
+
+const openApiResponse = await fetch(new URL("${OPENAPI_URL}", "https://programmable.market"));
+if (!openApiResponse.ok) throw new Error("UNAVAILABLE: V4 OpenAPI");
+const openApiBytes = new Uint8Array(await openApiResponse.arrayBuffer());
+const openApiSha256 = "sha256:" + createHash("sha256").update(openApiBytes).digest("hex");
+if (readiness.openApiSha256 !== openApiSha256) {
+  throw new Error("UNAVAILABLE: V4 OpenAPI/readiness digest mismatch");
+}
+
 const abiUrl = new URL("${ABI_URL}", "https://programmable.market");
 const abiResponse = await fetch(abiUrl);
 if (!abiResponse.ok) throw new Error("UNAVAILABLE: Router ABI");
@@ -352,8 +372,8 @@ export default function RobinhoodTerminalIndexerPage() {
           <div>
             <dt>Required fee policy</dt>
             <dd>
-              <code>20 bps</code> · <code>2,000 ppm</code> · recipient{" "}
-              <code>0xD88539d3c4C460136a733A3Fd60cf6BF269079da</code>
+              Resolve the complete current value from live discovery at{" "}
+              <code>customLaunchApi.versions.v4.platformFeePolicy</code>
             </dd>
           </div>
           <div>
@@ -379,8 +399,8 @@ export default function RobinhoodTerminalIndexerPage() {
             Before creating, fetch{" "}
             <a href={WELL_KNOWN_URL}>the live discovery document</a> and the
             readiness authority. A <code>ready</code> runtime response proves
-            service composition, not write activation. The required 20 bps
-            default configuration is policy; it is not proof of canonical
+            service composition, not write activation. The current global fee
+            configuration comes from discovery; it is not proof of canonical
             onchain enforcement, a charged fee or platform revenue.
           </p>
         </aside>
@@ -658,7 +678,8 @@ export default function RobinhoodTerminalIndexerPage() {
           <li>
             <a href={OPENAPI_URL}>Robinhood V4 OpenAPI</a>
             <span>
-              Validate the full response envelope and nested evidence.
+              Hash the exact bytes, require equality with readiness{" "}
+              <code>openApiSha256</code>, then validate the full response.
             </span>
           </li>
           <li>
@@ -666,13 +687,20 @@ export default function RobinhoodTerminalIndexerPage() {
               Download the terminal integration fixture
             </a>
             <span>
-              Exact bindings, topics, lifecycle, activation gate, required fee
-              policy and a schema-valid empty-feed vector for fail-closed tests.
+              Exact bindings, topics, lifecycle, live-authority paths and a
+              schema-valid empty-feed vector for fail-closed tests. It carries
+              no production status or current fee values.
             </span>
           </li>
         </ul>
 
         <ol className={styles.steps}>
+          <li>
+            Before generating types or validating data, hash the exact hosted
+            OpenAPI bytes and require equality with the top-level{" "}
+            <code>openApiSha256</code> in a <code>ready</code> response. A
+            missing or mismatched digest is <code>UNAVAILABLE</code>.
+          </li>
           <li>
             Fetch <code>?limit=25</code>. Do not cache beyond the
             response&apos;s HTTP policy without preserving an explicit observed
@@ -892,19 +920,20 @@ export default function RobinhoodTerminalIndexerPage() {
           <article>
             <h3>Platform fee</h3>
             <p className={styles.bodyCopy}>
-              The required policy and default configuration for new Robinhood V4
-              API Custom launches is <code>20 bps</code> to{" "}
-              <code>0xD88539d3c4C460136a733A3Fd60cf6BF269079da</code>. It does
-              not change existing launches or Ethereum. Report actual fee
-              behavior as <code>UNAVAILABLE</code> unless separately proven:
-              basis, currency, accounting, rounding, accrual and claim mechanics
-              remain null, while canonical onchain enforcement and revenue are
-              not guaranteed. Do not copy this global new-launch default onto a
-              finalized feed row: per-launch applicability remains{" "}
-              <code>UNVERIFIED</code> unless the backend publishes an explicit
-              launch binding. Do not infer that a direct Router transaction or
-              any path outside the V4 API carries the policy. Fee-path absence
-              is not a write-activation blocker.
+              Do not hardcode a rate or recipient from this page or the fixture.
+              Resolve the current global requirement from live discovery at{" "}
+              <code>customLaunchApi.versions.v4.platformFeePolicy</code> and
+              preserve its rate, percentage, recipient, scope and enforcement
+              fields together. Report actual fee behavior as{" "}
+              <code>UNAVAILABLE</code> unless separately proven: basis,
+              currency, accounting, rounding, accrual and claim mechanics may
+              remain unknown, while canonical onchain enforcement and revenue
+              are not guaranteed. Do not copy the global policy onto a finalized
+              feed row: per-launch applicability remains <code>UNVERIFIED</code>{" "}
+              unless the backend publishes an explicit launch binding. Do not
+              infer that a direct Router transaction or any path outside the V4
+              API carries the policy. Fee-path absence is not a write-activation
+              blocker.
             </p>
           </article>
         </div>
@@ -949,10 +978,12 @@ export default function RobinhoodTerminalIndexerPage() {
         <aside className={styles.callout}>
           <strong>Production rule</strong>
           <p>
-            Validate the complete OpenAPI schema, not only the fields shown in
-            the short example. The current list and item schemas are closed:
-            reject unknown fields and regenerate your parser for a published
-            schema change. A missing required binding must fail closed.
+            First require the exact hosted OpenAPI byte digest to equal
+            readiness <code>openApiSha256</code>. Then validate the complete
+            schema, not only the fields shown in the short example. The current
+            list and item schemas are closed: reject unknown fields and
+            regenerate your parser for a published schema change. A missing
+            required binding must fail closed.
           </p>
         </aside>
       </section>

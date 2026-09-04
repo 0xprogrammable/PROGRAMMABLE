@@ -22,14 +22,16 @@ transaction, Router log or fixture alone. Require the complete feed, finality, R
 | Robinhood deployment manifest | [`GET /v4/chains/4663/capabilities`](https://api.programmable.market/v4/chains/4663/capabilities)                                      | Read `chainDeployment` and `chainDeploymentDescriptorDigest`, including contracts, runtime hashes, deployment evidence and finality policy. |
 | Release readiness             | [`GET /v4/chains/4663/readiness`](https://api.programmable.market/v4/chains/4663/readiness)                                            | Verify the matching source commit, source tree, policy and deployment release identity.                                                     |
 | Finalized feed                | [`GET /v4/chains/4663/finalized-custom-launches`](https://api.programmable.market/v4/chains/4663/finalized-custom-launches)            | Discover only schema-valid, terminal, Ethereum-finalized candidates.                                                                        |
-| OpenAPI                       | [`custom-launch-v4.json`](https://programmable.market/openapi/custom-launch-v4.json)                                                   | Generate types and validate the complete list and item schemas.                                                                             |
+| OpenAPI                       | [`custom-launch-v4.json`](https://programmable.market/openapi/custom-launch-v4.json)                                                   | Hash the exact response bytes, require equality with readiness `openApiSha256`, then generate types and validate the complete schemas.      |
 | Integration fixture           | [`robinhood-terminal-indexer-v1.json`](https://programmable.market/fixtures/robinhood-terminal-indexer-v1.json)                        | Test exact constants, event topics, pagination, finality and fail-closed result states. It is not production data.                          |
 | Router ABI                    | [`ProgrammableLaunchStampRouterV1.abi.json`](https://programmable.market/contracts/robinhood/ProgrammableLaunchStampRouterV1.abi.json) | Decode logs and perform the canonical registry reads.                                                                                       |
 | Router explorer               | [`0x3496...C98a`](https://robinhoodchain.blockscout.com/address/0x34965F2A2ee9254522232C32F02056E92BE0C98a)                            | Inspect the address as supporting evidence. Explorer availability is not a release or source-verification authority.                        |
 
 The top-level `manifestUrl` in discovery belongs to the Ethereum V2 developer surface. It is not the Robinhood V4
 manifest. For chain 4663, use the `chainDeployment` object and its descriptor digest from the capabilities response,
-then require the same binding in readiness and in each finalized item.
+then require the same binding in readiness and in each finalized item. Download the V4 OpenAPI as exact bytes, compute
+`sha256:<lowercase hex>` and require equality with the top-level `openApiSha256` in the ready response before generating
+types or validating a feed. A missing or mismatched digest is `UNAVAILABLE`; do not silently trust either side.
 
 Resolve write activation independently from indexing. Report `ACTIVE` only when
 `customLaunchApi.versions.v4.publicWrites`, `publicAuthorization` and `releaseReady` are all exactly `true` in live
@@ -101,8 +103,9 @@ and stamp commitments. Graph Factory logs are execution diagnostics and cannot r
 
 The feed is public and keyless. Authentication-protected request history is not a terminal discovery feed.
 
-1. Validate the full response against `CustomLaunchFinalizedListV4` and every item against
-   `CustomLaunchFinalizedMetadataV4` in the [V4 OpenAPI](https://programmable.market/openapi/custom-launch-v4.json).
+1. Hash the exact hosted [V4 OpenAPI](https://programmable.market/openapi/custom-launch-v4.json) bytes and require the
+   digest to equal readiness `openApiSha256`. Then validate the full response against `CustomLaunchFinalizedListV4` and
+   every item against `CustomLaunchFinalizedMetadataV4` in that bound schema.
 2. Request `limit` from `1` to `25`. The default is `10`.
 3. Process the page, then pass each non-null `nextCursor` back unchanged as `cursor`. Never decode, construct or
    normalize a cursor. Track all non-null cursors and return `INDETERMINATE` if one repeats.
@@ -170,11 +173,12 @@ does not assert that such an item currently exists. Only the live feed can estab
 
 ## Fee policy is a separate fact
 
-The required default configuration for new Robinhood V4 API Custom launches is `20 bps` to
-`0xD88539d3c4C460136a733A3Fd60cf6BF269079da`. This requirement does not change older launches and is not, by itself,
-proof of immutable onchain enforcement, a charged fee or platform revenue. Do not copy the global default onto a
-terminal row. Report fee behavior only when the live record explicitly proves the applicable rate, basis, currency,
-recipient, accounting and claim path for that exact launch.
+Do not hardcode a rate or recipient from this guide or the fixture. Resolve the current global requirement from
+`customLaunchApi.versions.v4.platformFeePolicy` in live discovery and preserve its `rateBps`, `ratePpm`, `ratePercent`,
+`recipient`, scope and enforcement fields together. A global API requirement does not change older launches and is not,
+by itself, proof of immutable onchain enforcement, a charged fee or platform revenue. Do not copy it onto a terminal
+row. Report fee behavior only when the live record explicitly proves the applicable rate, basis, currency, recipient,
+accounting and claim path for that exact launch.
 
 ## Third-party indexing is not guaranteed
 
@@ -187,12 +191,14 @@ executable trade route.
 ## Integration sequence
 
 1. Fetch discovery, capabilities and readiness. Resolve live state and require one matching chain-deployment binding.
-2. Download and hash the ABI. Verify chain, Router, dependencies, runtime hashes and immutable getters.
-3. Fetch and OpenAPI-validate every finalized-feed page through a null cursor.
-4. Verify each item's nested finality coordinates, receipt, Router events, registry reads and exact-source components.
-5. Emit the **Programmable Custom** label only after provenance, finality and source verification pass. Preserve all
+2. Download the OpenAPI, hash its exact bytes and require equality with readiness `openApiSha256`. Fail closed on a
+   missing or mismatched digest.
+3. Download and hash the ABI. Verify chain, Router, dependencies, runtime hashes and immutable getters.
+4. Fetch and OpenAPI-validate every finalized-feed page through a null cursor.
+5. Verify each item's nested finality coordinates, receipt, Router events, registry reads and exact-source components.
+6. Emit the **Programmable Custom** label only after provenance, finality and source verification pass. Preserve all
    other result axes independently.
-6. Record the endpoint, UTC observation time, response status, manifest digest, Router, V3 coordinates and provider
+7. Record the endpoint, UTC observation time, response status, manifest digest, Router, V3 coordinates and provider
    identities for reproducibility. Never include an API key, signed transaction or private request body.
 
 For non-sensitive integration failures, [open a GitHub issue](https://github.com/programmablehq/PROGRAMMABLE/issues).

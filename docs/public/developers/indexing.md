@@ -18,9 +18,11 @@ The Ethereum public status endpoint reports feed freshness, chain head, scan cov
 
 ## Integrate Robinhood V4
 
-Robinhood Chain Mainnet uses `chainId: 4663` and `eip155:4663`. Generate types from the stable
-[V4 OpenAPI contract](https://programmable.market/openapi/custom-launch-v4.json), validate the fixture, and map the
-published ABI topics. Resolve current activation from
+Robinhood Chain Mainnet uses `chainId: 4663` and `eip155:4663`. Download the exact bytes of the
+[V4 OpenAPI contract](https://programmable.market/openapi/custom-launch-v4.json), compute their SHA-256 digest and
+require equality with the top-level `openApiSha256` in a ready chain response before generating types or validating
+data. A missing or mismatched digest must fail closed. Then validate the fixture and map the published ABI topics.
+Resolve current activation from
 [Programmable discovery](https://programmable.market/.well-known/programmable.json),
 `GET /v4/chains/4663/capabilities` and `GET /v4/chains/4663/readiness`; those are separate live authorities. Treat
 creation as active only when discovery reports `publicWrites: true`, `publicAuthorization: true` and

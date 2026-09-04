@@ -6,13 +6,16 @@
     "wellKnownUrl": "https://programmable.market/.well-known/programmable.json",
     "capabilitiesUrl": "https://api.programmable.market/v4/chains/4663/capabilities",
     "readinessUrl": "https://api.programmable.market/v4/chains/4663/readiness",
-    "finalizedLaunchesUrl": "https://api.programmable.market/v4/chains/4663/finalized-custom-launches"
+    "finalizedLaunchesUrl": "https://api.programmable.market/v4/chains/4663/finalized-custom-launches",
+    "openApiUrl": "https://programmable.market/openapi/custom-launch-v4.json"
   },
   "integrationBoundary": {
     "target": "public-self-serve",
-    "activationStatus": "pending-public-discovery-promotion",
-    "runtimeStatus": "deployed-ready",
+    "stateAuthority": "live-only",
+    "fixtureCarriesProductionState": false,
     "activationAuthority": "https://programmable.market/.well-known/programmable.json",
+    "runtimeAuthority": "https://api.programmable.market/v4/chains/4663/readiness",
+    "publicItemAuthority": "https://api.programmable.market/v4/chains/4663/finalized-custom-launches",
     "liveCreateGate": {
       "required": true,
       "paths": [
@@ -24,17 +27,9 @@
     },
     "feeBehaviorClaim": false,
     "marketSupportClaim": false,
-    "currentReleaseBlockers": {
-      "cleanRoomBinding": "V4_RELEASE_BINDING_NOT_READY",
-      "cleanRoomReason": "Machine-contract hashes are refreshed. The release binding remains incomplete until chain deployment, profile, release manifest, source closure, finality and backend release evidence are all present.",
-      "publicItemEvidence": "pending-per-launch-authoritative-exact-source-capture-persistence-promotion",
-      "existingPublicItemClaim": false,
-      "providerOutageClaim": false,
-      "sourcifyProviderReleaseAuthority": false,
-      "robinhoodBlockscoutRequired": false,
-      "note": "Public finalized eligibility requires a protected per-launch source closure, reproducible hosted build and compiler settings, finalized creation transaction, and exact creation/runtime bytecode binding for every component. Provider observation alone cannot promote an item or revise finality."
-    },
-    "note": "This fixture is a parser and fail-closed test vector, not proof that production writes are active. Fetch every live authority URL before creating, ingesting or displaying a launch."
+    "releaseBlockersSource": "live readiness reasonCodes only",
+    "publicItemPresenceSource": "live finalized feed only",
+    "note": "This fixture is a parser and fail-closed test vector. It carries no production activation, runtime, blocker or item-presence status. Fetch every live authority URL before creating, ingesting or displaying a launch."
   },
   "chain": {
     "chainId": "4663",
@@ -170,9 +165,12 @@
     },
     "openApiValidation": {
       "url": "https://programmable.market/openapi/custom-launch-v4.json",
+      "digestAuthorityUrl": "https://api.programmable.market/v4/chains/4663/readiness",
+      "digestAuthorityPath": "openApiSha256",
+      "digestAlgorithm": "sha256-exact-response-bytes",
       "responseSchema": "#/components/schemas/CustomLaunchFinalizedListV4",
       "itemSchema": "#/components/schemas/CustomLaunchFinalizedMetadataV4",
-      "rule": "Validate the complete response and every launches[] item against the authoritative OpenAPI schemas before using this minimum identity evidence. The list below is not the full DTO contract."
+      "rule": "Hash the exact hosted OpenAPI response bytes and require the sha256-prefixed digest to equal readiness.openApiSha256 before generating types or validating data. A missing or mismatched digest is UNAVAILABLE and must fail closed. Then validate the complete response and every launches[] item against the bound OpenAPI schemas before using this minimum identity evidence. The list below is not the full DTO contract."
     },
     "minimumIdentityEvidence": {
       "source": "minimum identity and finality paths from one OpenAPI-validated launches[] item",
@@ -299,20 +297,28 @@
     "terminalFinalityStage": "ethereum_finalized"
   },
   "feePolicy": {
-    "required": true,
-    "status": "required-default-configuration",
-    "scope": "new Robinhood V4 API Custom launches only",
-    "changesExistingLaunches": false,
-    "changesEthereumLaunches": false,
+    "authority": {
+      "url": "https://programmable.market/.well-known/programmable.json",
+      "path": "customLaunchApi.versions.v4.platformFeePolicy"
+    },
+    "currentValueSource": "live-discovery-only",
+    "fixtureCarriesCurrentValues": false,
+    "requiredFields": [
+      "required",
+      "status",
+      "appliesTo",
+      "rateBps",
+      "ratePpm",
+      "ratePercent",
+      "recipient",
+      "enforcement",
+      "canonicalOnchainEnforcementProven",
+      "guaranteedRevenue",
+      "feeBehaviorClaim",
+      "universalFeeBehaviorClaim"
+    ],
     "directRouterOrOutsideApiBindingClaim": false,
     "perLaunchApplicabilityWithoutExplicitBackendBinding": "UNVERIFIED",
-    "defaultConfiguration": {
-      "rateBps": 20,
-      "ratePpm": 2000,
-      "ratePercent": "0.20%",
-      "recipient": "0xD88539d3c4C460136a733A3Fd60cf6BF269079da"
-    },
-    "enforcement": "not-guaranteed-onchain",
     "feeBehaviorClaim": false,
     "universalFeeBehaviorClaim": false,
     "genericClaimingLive": false,
@@ -323,8 +329,7 @@
     "rounding": null,
     "accrual": null,
     "claimMechanism": null,
-    "canonicalOnchainEnforcementProven": false,
-    "guaranteedRevenue": false
+    "claimRule": "Do not copy the current global policy onto a launch row. Report per-launch fee behavior only from an explicit authoritative launch binding and separately proven execution and claim mechanics."
   },
   "resultAxes": {
     "provenance": {
