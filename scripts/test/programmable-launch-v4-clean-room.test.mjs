@@ -337,7 +337,7 @@ test("prepare stage refuses to coexist with the production API credential", asyn
   }
 });
 
-test("prepare stage normalizes a stale OpenAPI binding without hiding its audit reason", async () => {
+test("prepare stage rejects the audited closed-but-not-release-ready binding", async () => {
   const previous = process.env.PROGRAMMABLE_API_KEY;
   delete process.env.PROGRAMMABLE_API_KEY;
   try {
@@ -345,11 +345,7 @@ test("prepare stage normalizes a stale OpenAPI binding without hiding its audit 
       prepareCleanRoom({}),
       (error) => {
         assert.equal(error?.code, "V4_RELEASE_BINDING_NOT_READY");
-        assert.ok(error.cause instanceof Error);
-        assert.match(
-          error.cause.message,
-          /openapi\.sha256 does not match the closed V4 release binding/u,
-        );
+        assert.equal(error.cause, undefined);
         return true;
       },
     );
