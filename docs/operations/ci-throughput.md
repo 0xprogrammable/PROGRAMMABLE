@@ -38,7 +38,7 @@ unchanged; an old deployed revision continues to use its own workflow and verifi
 
 Only a plain guide-URL replacement in the two fixed existing literals listed in
 `scripts/ci/classify-verify-paths.mjs` can replace the global lint, full Interface
-Vitest batch, and unrelated browser suites with scoped lint and 14 direct test
+Vitest batch, and unrelated browser suites with scoped lint and 15 direct test
 files. The trusted-base classifier reads actual before/after Git blobs and proves
 that every byte outside the single URL is unchanged, including a UTF-8 BOM.
 Missing history, unknown or mixed functional paths, invalid UTF-8, escapes,
@@ -46,7 +46,8 @@ renaming, deletion and mode changes select full coverage. The two fixed companio
 Markdown files may accompany a literal edit; Markdown alone does not select it.
 All existing Interface Node contracts, the complete production build and both
 activation audits remain. A base classifier without this output also runs full
-coverage. The direct 14-file suite passed 130 tests locally.
+coverage. The existing information-architecture test remains a direct consumer
+of companion Markdown and is included in this focused inventory.
 
 When full Interface and Custom V2 are both required, the final gates require both
 results while running identical global lint, 12 shared Vitest files and the Next

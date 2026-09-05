@@ -274,6 +274,7 @@ test("guidance coverage keeps the full build and rejects every functional mixed 
     "tests/developer-api-keys-ui.test.ts",
     "tests/developer-docs-contract-parity.test.ts",
     "tests/developer-docs-experience.test.ts",
+    "tests/docs-information-architecture.test.ts",
     "tests/launch-stamp-docs.test.ts",
     "tests/partner-discovery-contract.test.ts",
     "tests/public-robinhood-v41-agent-docs.test.ts",

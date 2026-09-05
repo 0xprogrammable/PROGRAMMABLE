@@ -15,7 +15,7 @@ mutable build output. The full local entry point is `npm run verify:interface:ci
 
 One narrow exception replaces the global lint, full Vitest batch (439 files at
 introduction), and 74 unrelated wallet/late-migration browser cases with scoped
-lint and 14 direct docs, discovery, and API-key UI test files. It requires an
+lint and 15 direct docs, discovery, and API-key UI test files. It requires an
 actual URL-only change in one or both of these existing literals:
 
 - `guideUrl` in `lib/custom-launch/v4-public-contract-discovery.ts`
@@ -32,7 +32,8 @@ accompany the literal edit. Markdown alone does not select this exception.
 Every functional mixed scope, including Custom V2, selects full Interface
 coverage. A trusted base without the new output also selects full coverage.
 `npm run verify:interface:guidance:ci` retains all existing Interface Node
-contracts and runs the 14 direct Vitest files. The browser/build worker still
+contracts and runs the 15 direct Vitest files, including the information-architecture
+contract that reads the allowed companion Markdown. The browser/build worker still
 runs the entire production build, complete-history V4 clean-room gate, and
 both V4 and V4.1 activation audits. The aggregate explicitly rejects a guidance
 claim combined with any functional scope.
