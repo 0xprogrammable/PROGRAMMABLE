@@ -1,5 +1,217 @@
 {
   "schemaVersion": "programmable.robinhood-v4-api-activation.v2",
   "scope": "api-until-wallet",
-  "proof": null
+  "proof": {
+    "releaseBinding": {
+      "sha256": "sha256:d8c36266908b2f1c7f0d9ac517fbf2547541f81ab09f8eb8377e625d8eccc75e",
+      "jsonSha256": "sha256:b57cb32fb0034f75cd2e937e2e60295a6b4e93b99fbd5cff94c335990f0039db"
+    },
+    "cliCoordinate": {
+      "sha256": "sha256:4a9fe2a9e87ebac7bc56cbdcde6547466c88e06e070d2eebf37819d35d4c03e3",
+      "jsonSha256": "sha256:575a03a1dacab72b931435fe297bfd7643216f332960eb79b1cc3ad11dace40f"
+    },
+    "cleanRoom": {
+      "path": "release/robinhood-chain-4663/v4.1/programmable-launch-v41-clean-room-evidence.json",
+      "sha256": "sha256:3d99ec83324e1eeb28650ad97f733c561683ba7427b129fcd5c4ba274f15662d",
+      "attestationPath": "release/robinhood-chain-4663/v4.1/programmable-launch-v41-clean-room-evidence.attestation.json",
+      "attestationSha256": "sha256:7ea43aea8f78c214552d6449b13bd6fe76199ec2757df01e8442aab4d301a8af",
+      "artifact": {
+        "id": "9972587215",
+        "digest": "sha256:2e0b80853e4178359b4c20dfc330be3254c6e9c00af35ef3c41b8fb6a06a7570"
+      },
+      "evidence": {
+        "evidenceDigest": "sha256:20810d43901f737bc8183d769f4bda71ea8fe6c0d7232ac33e5c8e77e7fa96f5",
+        "feeReview": {
+          "artifactReleaseSha256": "sha256:917c03d59c7b6c051d6aa238cd0b2a91aa02c8993ccbfce6421d5c6341d5380e",
+          "assessmentBase": "gross-native-leg-once-per-successful-swap",
+          "childRuntimeObservation": "required-after-deployment",
+          "creatorBuyFeeBps": 0,
+          "creatorFeeRecipient": "0x245099E77F8F0Cad9a75B1B56db8FDE7C948d5B1",
+          "creatorSellFeeBps": 0,
+          "customSettlementDeltas": "unsupported",
+          "denominator": 10000,
+          "evidenceDigest": "sha256:77996a960b28351616749483feb41e66c498da0a44743d172df5a9152ed9b5f2",
+          "feeAccrual": "pool-manager-native-claims",
+          "feeCurrency": "native-ETH",
+          "graphSha256": "sha256:723d20378c08f0f909c7a23c577ff800fb0bfcb0f1b8585914bbea80d13444b6",
+          "kernelAddress": "0x4b6668214B2EAE6703204BC35a1A6fBA21EF60Cc",
+          "kernelRuntimeCodeHash": "0xb760d920a637ac572fff7b738b56f28b7a67051617dd1584a785661d77f539b7",
+          "kernelTargetId": "hook",
+          "lpFeeMode": "static",
+          "lpFeePips": 0,
+          "maxModuleLpFeePips": 0,
+          "moduleRuntimeCodeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "moduleTargetId": null,
+          "platformClaim": "permissionless-fixed-recipient",
+          "platformFeeBps": 20,
+          "platformRecipient": "0xD88539d3c4C460136a733A3Fd60cf6BF269079da",
+          "poolKey": {
+            "currency0": "0x0000000000000000000000000000000000000000",
+            "currency1": "0xA49217CD2bef0b96313D62a58423F2c778147e9C",
+            "fee": 0,
+            "hooks": "0x4b6668214B2EAE6703204BC35a1A6fBA21EF60Cc",
+            "tickSpacing": 60
+          },
+          "preparedArtifactHash": "sha256:fe413f990a1da93a35c8ac9b084da9664dfc944f1857474c3cfb7177e609382d",
+          "rounding": "ceil-per-trade",
+          "safetyClaim": false,
+          "schemaVersion": "programmable.robinhood-native-fee-kernel-proof.v1",
+          "vaultAddress": "0xbe2427a4e2d100EEafe9a7b1586d46Cf776Ceb62",
+          "vaultRuntimeCodeHash": "0xa3195affb0816b2839ef432cf35baefcf7c943347a7b0ff944e4c5e1f0633566",
+          "verificationBundleSha256": "sha256:09553b82976388ad9ba99da951dda397013bfe25d22fd6f7e85e317b89cd5152"
+        },
+        "fundingPlan": {
+          "capitalSource": "buyer-funded",
+          "launchMode": "fund-and-launch",
+          "maxGasCostWei": "10000000000000000",
+          "maxLaunchValueWei": "1000000000000000",
+          "nativeAllocations": {
+            "initialBuyWei": "1000000000000000",
+            "initialLiquidityWei": "0",
+            "otherLaunchValueWei": "0",
+            "reserveWei": "0"
+          },
+          "pricingModel": "concentrated-liquidity",
+          "schemaVersion": "programmable.robinhood-funding-plan.v1"
+        },
+        "initialBuyReview": {
+          "assessmentTime": "permit-authorization",
+          "evidenceDigest": "sha256:eb07998583b201399d5c8ecb8a6fc88dd5cded1d18e981ff0e8181a8f59305e6",
+          "execution": {
+            "artifactReleaseSha256": "sha256:c88991b7987bdbee930ead63f5ac4b880858051b334e02ff25fe533793a2d7c4",
+            "buyer": "0x245099E77F8F0Cad9a75B1B56db8FDE7C948d5B1",
+            "evidenceDigest": "sha256:16cd1359da53a4af6e04557d019dc3eff7ebe40bff8c494e2b5bbe12a27677c3",
+            "graphSha256": "sha256:723d20378c08f0f909c7a23c577ff800fb0bfcb0f1b8585914bbea80d13444b6",
+            "initialBuyExecution": "atomic-full-native-input-and-minimum-token-output",
+            "initialBuyWei": "1000000000000000",
+            "initialSqrtPriceX96": "1747735933952748037356115466503453",
+            "initialTokenInventoryRaw": "1000000000000000000000000000",
+            "initializerAddress": "0xB52a4B1283f7e6fb44FD7E54B25D1262D9406d70",
+            "initializerTargetId": "initializer",
+            "kernelEvidenceDigest": "sha256:77996a960b28351616749483feb41e66c498da0a44743d172df5a9152ed9b5f2",
+            "minimumTokensOut": "480591230035732663351898",
+            "nativeSeedWei": "0",
+            "positionOwner": "0xB52a4B1283f7e6fb44FD7E54B25D1262D9406d70",
+            "preparedArtifactHash": "sha256:fe413f990a1da93a35c8ac9b084da9664dfc944f1857474c3cfb7177e609382d",
+            "principalPolicy": "no-remove-approve-or-execute-entrypoint",
+            "schemaVersion": "programmable.robinhood-native20-seed-proof.v1",
+            "tickLower": 160020,
+            "tickUpper": 200040,
+            "tokenAddress": "0xA49217CD2bef0b96313D62a58423F2c778147e9C",
+            "tokenTargetId": "token",
+            "verificationBundleSha256": "sha256:09553b82976388ad9ba99da951dda397013bfe25d22fd6f7e85e317b89cd5152"
+          },
+          "quote": {
+            "answer": "246080020000",
+            "answeredInRound": "129127208515966894648",
+            "assessmentBase": "gross-native-initial-buy-at-admission",
+            "blockHash": "0x364138b843b63fbb892525589b74189d0439d66b56b815716e8651477feb759d",
+            "blockNumber": "25912222",
+            "blockTimestamp": "1788624443",
+            "evidenceDigest": "sha256:a406f784a3d992b5ad6a05cc0729234db6a29360dda8914716dc0fd06d264dec",
+            "executionChainId": "4663",
+            "expiresAt": "2026-09-05T16:08:38.394Z",
+            "feedAddress": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
+            "feedDecimals": 8,
+            "minimumInitialBuyWei": "406371878545849",
+            "minimumUsdWad": "1000000000000000000",
+            "nativeCurrency": "ETH",
+            "observedAt": "2026-09-05T16:07:38.394Z",
+            "providers": [
+              {
+                "providerId": "drpc",
+                "trustDomain": "drpc.org"
+              },
+              {
+                "providerId": "quicknode",
+                "trustDomain": "quicknode.com"
+              }
+            ],
+            "quoteCurrency": "USD",
+            "referenceChainId": "1",
+            "roundId": "129127208515966894648",
+            "schemaVersion": "programmable.robinhood-initial-buy-usd-quote.v1",
+            "startedAt": "1788624265",
+            "updatedAt": "1788624287"
+          },
+          "schemaVersion": "programmable.robinhood-initial-buy-review.v1"
+        },
+        "observedAt": "2026-09-05T16:07:49.992Z",
+        "producer": {
+          "actor": "hazarxyz",
+          "actorId": "258789013",
+          "environment": "production",
+          "repository": "programmablehq/PROGRAMMABLE",
+          "repositoryId": "1314365508",
+          "runAttempt": "1",
+          "runId": "33976755694",
+          "schemaVersion": "programmable.launch-v4-clean-room-producer.v2",
+          "sourceSha": "ec01b7b278dd1ae580c94575152986dc49764244",
+          "workflowPath": ".github/workflows/programmable-launch-v41-clean-room.yml",
+          "workflowRef": "programmablehq/PROGRAMMABLE/.github/workflows/programmable-launch-v41-clean-room.yml@refs/heads/production",
+          "workflowSha": "ec01b7b278dd1ae580c94575152986dc49764244"
+        },
+        "recovery": {
+          "recoveryDigest": "sha256:7a6024a5741a75805f7dc2b7662fbb92f9150b10457b9d6c448962015a752c4e"
+        },
+        "release": {
+          "attestationsVerified": true,
+          "checksumSha256": "sha256:7074478e3f73da0f3db84114717046e60a71e259e867ef5416d33ef651dfc0a8",
+          "machineContractBindingSha256": "sha256:d8c36266908b2f1c7f0d9ac517fbf2547541f81ab09f8eb8377e625d8eccc75e",
+          "manifestSha256": "sha256:8bbfb2864db15e3657a5cff0139b00a9aa950aaff248dcf515a3ed7ca9998460",
+          "repository": "programmablehq/PROGRAMMABLE",
+          "reviewedCoordinateSha256": "sha256:4a9fe2a9e87ebac7bc56cbdcde6547466c88e06e070d2eebf37819d35d4c03e3",
+          "sbomSha256": "sha256:8382eb1fc17c45ea744806409528c8509bcb01b676f39848b8f060934450bcf7",
+          "signerWorkflow": "programmablehq/PROGRAMMABLE/.github/workflows/release-programmable-launch.yml",
+          "sourceCommit": "b17e40b9ff20bb16feb857bf77451b0a590e7105",
+          "sourceTree": "373bceebe355e4f26eb8ffb265bff91630224ab6",
+          "tag": "programmable-launch-v4.1.0",
+          "tarballSha256": "sha256:9d7d26a74b0b4aaa3b3d8acddc80f821cbd79511ee1ada6acc7b935aeb21cac5",
+          "version": "4.1.0"
+        },
+        "replay": {
+          "identicalIdempotencyKey": true,
+          "sameLaunchId": true,
+          "sameRequestDigest": true
+        },
+        "request": {
+          "caip2": "eip155:4663",
+          "chainId": "4663",
+          "idempotencyKeySha256": "sha256:78aa732036d92496aff43922ec2daff5f4c55956dba8d706213b091565738ae7",
+          "rawRequestSha256": "sha256:863b8517351628b43fd12f4b00afab6eccf320e3ba4ae0da1d9f56832fcb9ee9",
+          "requestDigest": "sha256:ced97601cfd94994b8b3606c1c9d6627ec54f31c1997bd51a9cf1a8538dacf9a"
+        },
+        "safety": {
+          "apiCredentialRecorded": false,
+          "onchainEvidenceObserved": false,
+          "rawRequestRecorded": false,
+          "rawTransactionRecorded": false,
+          "transactionBroadcastObserved": false,
+          "walletSignatureObserved": false
+        },
+        "schemaVersion": "programmable.launch-v4-clean-room-evidence.v2",
+        "walletHandoff": {
+          "admissionIssuedAt": "2026-09-05T16:07:38.395Z",
+          "admissionReceiptDigest": "sha256:d12cbd064be162ac86101f61e653864a4fb587ab48a4e51a3a50b0ee08051609",
+          "chainDeploymentDescriptorDigest": "0x4bde6e26b6630aa684b4ac2a987d6322755896b249a189843bd3a58fe313694c",
+          "chainDeploymentId": "robinhood-mainnet-custom-launch-v1",
+          "feeReviewDigest": "sha256:77996a960b28351616749483feb41e66c498da0a44743d172df5a9152ed9b5f2",
+          "graphSha256": "sha256:723d20378c08f0f909c7a23c577ff800fb0bfcb0f1b8585914bbea80d13444b6",
+          "initialBuyReviewDigest": "sha256:eb07998583b201399d5c8ecb8a6fc88dd5cded1d18e981ff0e8181a8f59305e6",
+          "launchId": "baac4f21-ce60-4914-8b0f-9e1869da68d8",
+          "launchIntentHash": "sha256:d1e49245ad7b6ab93df36c67386c368205c533ab9f3d880912c832c54312e661",
+          "launchWallet": "0x245099E77F8F0Cad9a75B1B56db8FDE7C948d5B1",
+          "preparedArtifactHash": "sha256:fe413f990a1da93a35c8ac9b084da9664dfc944f1857474c3cfb7177e609382d",
+          "profileDigest": "sha256:b0fca91264a49d358ed1a9eec2a679b59a48d716b71475bef583c2545e1ee502",
+          "requestId": "7d699388-52f5-4abf-98ef-77cf61a7eae7",
+          "status": "wallet_action_required",
+          "transactionCalldataSha256": "sha256:1cf44562a4289d2cf4cf3ea5b6f1326c9c3b082026657b00fbe06b04c674a6ec",
+          "transactionPreimageHash": "sha256:9057a656118ace967a35a64d69457f6b557bd08e5a7e2d0184a5245ae479af10",
+          "transactionTarget": "0x34965F2A2ee9254522232C32F02056E92BE0C98a",
+          "transactionValueWei": "1000000000000000",
+          "verificationBundleSha256": "sha256:09553b82976388ad9ba99da951dda397013bfe25d22fd6f7e85e317b89cd5152"
+        }
+      }
+    }
+  }
 }
