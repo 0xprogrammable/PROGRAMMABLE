@@ -21,6 +21,8 @@ The exact canonical `RobinhoodNativeFeeHookV1` and `RobinhoodNativeFeeVaultV1` s
 
 Every completed supported swap through this exact PoolKey funds a separate **20 BPS / 0.2% native-ETH platform obligation** to Treasury **`0xD88539d3c4C460136a733A3Fd60cf6BF269079da`**. This example selects 0% creator fees and no optional module. Alternative routers entering the same pool execute the same fee hook.
 
+The initializer also accepts the canonical kernel's nonzero, immutable directional creator fees. Buy and sell rates may differ; each is added to the fixed platform allocation and disclosed before launch. These fees do not grant the creator access to the permanently held initial position. The optional module remains disabled for this reference initializer, and all other exact pool and source bindings remain required.
+
 The new profile defines its own gross-native volume: on buys it includes the hook fee; on sells it is the gross ETH proceeds before that fee. Platform fees round up per trade by less than one wei. The `NativeFeesAccrued` event supplies this exact volume base; the core Swap event's post-hook input is different on buys. A complete fee-only dust execution is rejected.
 
 Fees accrue as native ERC-6909 claims in PoolManager, backed by each swap's settlement. Anyone may pay the gas for `feeVault.claimPlatform()`, but the ETH transfer always goes to Treasury. Accrual and actual claimed wallet proceeds are distinct. The vault cannot withdraw the initial liquidity position or transfer funds to a caller-selected address.
@@ -57,6 +59,6 @@ Before building a real launch, the agent must obtain the selected chain, funding
 
 ## Local verification and limits
 
-The dedicated tests execute the pinned real v4-core PoolManager locally, including its constructor at the canonical address. They verify a token-only initial position, zero ETH seeding, buy/sell execution and Treasury claims, plus unauthorized/repeated initialization, forged callbacks and unavailable withdrawal/approval routes.
+The dedicated tests execute the pinned real v4-core PoolManager locally, including its constructor at the canonical address. They verify a token-only initial position, zero ETH seeding, buy/sell execution and Treasury claims, including separate nonzero directional creator fees with unchanged platform allocation and position liquidity, plus unauthorized/repeated initialization, forged callbacks and unavailable withdrawal/approval routes.
 
 The tests impersonate the canonical graph factory locally. They are not a live fork, a signed production launch, finalized deployment evidence, source-verification evidence or proof that a third-party terminal can route this pool. Those release stages remain separate.

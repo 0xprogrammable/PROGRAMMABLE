@@ -42,7 +42,10 @@ contract RobinhoodNative20LaunchTest is Test, IUnlockCallback {
         vm.deal(address(this), 100 ether);
         deployCodeTo("PoolManager.sol:PoolManager", abi.encode(address(this)), MANAGER);
         manager = IPoolManager(MANAGER);
+        _deployExample(0, 0);
+    }
 
+    function _deployExample(uint16 creatorBuyFeeBps, uint16 creatorSellFeeBps) internal {
         initializer = new RobinhoodNative20Initializer(manager, FACTORY);
         token = new RobinhoodNative20Token(address(initializer));
         RobinhoodNativeFeeHookV1.PoolConfig memory config = RobinhoodNativeFeeHookV1.PoolConfig({
@@ -52,8 +55,8 @@ contract RobinhoodNative20LaunchTest is Test, IUnlockCallback {
             initialSqrtPriceX96: TickMath.getSqrtPriceAtTick(200_040),
             initializer: address(initializer),
             creatorFeeRecipient: address(this),
-            creatorBuyFeeBps: 0,
-            creatorSellFeeBps: 0,
+            creatorBuyFeeBps: creatorBuyFeeBps,
+            creatorSellFeeBps: creatorSellFeeBps,
             module: address(0),
             maxModuleLpFeePips: 0
         });
@@ -75,7 +78,7 @@ contract RobinhoodNative20LaunchTest is Test, IUnlockCallback {
     }
 
     function test_launchSeedsActualLockedPositionWithZeroNativeCapital() public {
-        assertEq(initializer.initialSqrtPriceX96(), 1747735933952748037356115466503453);
+        assertEq(initializer.initialSqrtPriceX96(), 1_747_735_933_952_748_037_356_115_466_503_453);
         _launch();
         (uint128 liquidity,,) = manager.getPositionInfo(key.toId(), address(initializer), 160_020, 200_040, bytes32(0));
         assertGt(liquidity, 0);
@@ -126,6 +129,53 @@ contract RobinhoodNative20LaunchTest is Test, IUnlockCallback {
 
         (uint128 liquidity,,) = manager.getPositionInfo(key.toId(), address(initializer), 160_020, 200_040, bytes32(0));
         assertGt(liquidity, 0);
+    }
+
+    function test_directionalCreatorFeesPreservePlatformShareAndLockedPrincipal() public {
+        _deployExample(300, 700);
+        _launch();
+        (uint128 initialLiquidity,,) =
+            manager.getPositionInfo(key.toId(), address(initializer), 160_020, 200_040, bytes32(0));
+        assertGt(initialLiquidity, 0);
+        assertEq(MANAGER.balance, 0);
+
+        uint256 grossBuy = 0.01 ether;
+        BalanceDelta buy = _swap(true, -int256(grossBuy));
+        uint256 platformBuy = _ceil(grossBuy * 20, 10_000);
+        uint256 creatorBuy = _ceil(grossBuy * 320, 10_000) - platformBuy;
+        assertEq(-int256(buy.amount0()), int256(grossBuy));
+        assertGt(buy.amount1(), 0);
+        RobinhoodNativeFeeVaultV1 vault = hook.feeVault();
+        assertEq(vault.platformAccrued(), platformBuy);
+        assertEq(vault.creatorAccrued(), creatorBuy);
+
+        uint256 tokensSold = uint256(int256(buy.amount1())) / 2;
+        BalanceDelta sell = _swap(false, -int256(tokensSold));
+        uint256 platformSell = vault.platformAccrued() - platformBuy;
+        uint256 creatorSell = vault.creatorAccrued() - creatorBuy;
+        uint256 grossSell = uint256(int256(sell.amount0())) + platformSell + creatorSell;
+        assertGt(sell.amount0(), 0);
+        assertEq(-int256(sell.amount1()), int256(tokensSold));
+        assertEq(platformSell, _ceil(grossSell * 20, 10_000));
+        assertEq(creatorSell, _ceil(grossSell * 720, 10_000) - platformSell);
+
+        uint256 treasuryBefore = TREASURY.balance;
+        uint256 creatorBefore = address(this).balance;
+        vm.startPrank(makeAddr("directionalFeeClaimCaller"));
+        assertEq(vault.claimCreator(), creatorBuy + creatorSell);
+        assertEq(manager.balanceOf(address(vault), 0), platformBuy + platformSell);
+        assertEq(vault.claimPlatform(), platformBuy + platformSell);
+        vm.stopPrank();
+        assertEq(TREASURY.balance - treasuryBefore, platformBuy + platformSell);
+        assertEq(address(this).balance - creatorBefore, creatorBuy + creatorSell);
+        assertEq(manager.balanceOf(address(vault), 0), 0);
+
+        (uint128 finalLiquidity,,) =
+            manager.getPositionInfo(key.toId(), address(initializer), 160_020, 200_040, bytes32(0));
+        assertEq(finalLiquidity, initialLiquidity);
+        assertEq(token.allowance(address(initializer), address(this)), 0);
+        assertFalse(manager.isOperator(address(initializer), FACTORY));
+        assertGt(MANAGER.balance, 0);
     }
 
     function test_untrustedCallerCannotInitialize() public {

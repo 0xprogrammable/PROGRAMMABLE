@@ -74,7 +74,7 @@ contract RobinhoodNative20Initializer is IUnlockCallback {
             address(feeHook.poolManager()) != address(poolManager) || feeHook.token() != token_
                 || feeHook.initializer() != address(this) || feeHook.initialSqrtPriceX96() != initialSqrtPriceX96()
                 || feeHook.lpFee() != LP_FEE_PIPS || feeHook.tickSpacing() != TICK_SPACING
-                || feeHook.creatorBuyFeeBps() != 0 || feeHook.creatorSellFeeBps() != 0 || feeHook.module() != address(0)
+                || feeHook.module() != address(0)
         ) revert InvalidHookBinding();
 
         uint256 liquidity = FullMath.mulDiv(
