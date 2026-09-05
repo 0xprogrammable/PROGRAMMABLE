@@ -9,8 +9,9 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 describe("Robinhood view-chain scope gate", () => {
   it("gates only Ethereum-bound product data routes", () => {
-    expect(isRobinhoodUnavailableRoute("/profile")).toBe(true);
-    expect(isRobinhoodUnavailableRoute("/profile/settings")).toBe(true);
+    expect(isRobinhoodUnavailableRoute("/profile")).toBe(false);
+    expect(isRobinhoodUnavailableRoute("/profile/settings")).toBe(false);
+    expect(read("app/profile/layout.tsx")).not.toContain("ResolvedViewChainLayout");
     expect(isRobinhoodUnavailableRoute("/launch")).toBe(false);
     expect(isRobinhoodUnavailableRoute("/launch/history")).toBe(false);
     expect(isRobinhoodUnavailableRoute("/token/0x1234")).toBe(false);

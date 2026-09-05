@@ -5,6 +5,8 @@ import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 
 import { useWallet } from "@/components/wallet-provider";
+import { useViewChain, type ViewChainId } from "@/components/view-chain";
+import { ProfileChainSelector } from "@/components/profile-chain-selector";
 
 import styles from "./profile-entry.module.css";
 
@@ -42,10 +44,14 @@ function ProfileEntryFrame({
   loading,
   onConnect,
   onPrepareProfile,
+  viewChainId = 1,
+  onChangeChain,
 }: Readonly<{
   loading: boolean;
   onConnect?: () => void;
   onPrepareProfile?: () => void;
+  viewChainId?: ViewChainId;
+  onChangeChain?: (chain: ViewChainId) => void;
 }>) {
   const titleId = loading
     ? "profile-entry-loading-title"
@@ -72,6 +78,7 @@ function ProfileEntryFrame({
           priority
         />
         <h1 id={titleId}>Profile</h1>
+        {onChangeChain ? <ProfileChainSelector value={viewChainId} onChange={onChangeChain} /> : null}
         {loading ? (
           <>
             <span
@@ -113,6 +120,7 @@ export function ProfileEntryLoadingState() {
 export function ProfileEntry() {
   const searchParams = useSearchParams();
   const { connecting, openWallet, wallet } = useWallet();
+  const { viewChainId, setViewChainId } = useViewChain();
   const publicProfileRequested = profileEntryHasPublicAccount(
     searchParams?.getAll("account") ?? [],
   );
@@ -121,10 +129,10 @@ export function ProfileEntry() {
     account: wallet?.account,
     publicProfileRequested,
   })) {
-    return <ProfileView />;
+    return <ProfileView viewChainId={viewChainId} onChangeChain={setViewChainId} />;
   }
 
-  if (connecting) return <ProfileEntryLoadingState />;
+  if (connecting) return <ProfileEntryFrame loading viewChainId={viewChainId} onChangeChain={setViewChainId} />;
 
   function connectWallet() {
     preloadProfileView();
@@ -136,6 +144,8 @@ export function ProfileEntry() {
       loading={false}
       onConnect={connectWallet}
       onPrepareProfile={preloadProfileView}
+      viewChainId={viewChainId}
+      onChangeChain={setViewChainId}
     />
   );
 }

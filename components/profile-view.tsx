@@ -18,6 +18,9 @@ import {
 } from "react";
 
 import { useWallet } from "@/components/wallet-provider";
+import type { ViewChainId } from "@/lib/view-chain";
+import { ProfileChainSelector } from "@/components/profile-chain-selector";
+import { RobinhoodProfileLaunches } from "@/components/robinhood-profile-launches";
 import {
   ProfileProjects,
   ProfileProjectsLoadingState,
@@ -351,6 +354,8 @@ export function stockPairedCheckpointAfterReceipt(
 
 export type ProfileViewProps = {
   onchainData?: ProfileOnchainData;
+  viewChainId?: ViewChainId;
+  onChangeChain?: (chain: ViewChainId) => void;
 };
 
 type ProfileWorkspaceSourceStatus =
@@ -1396,7 +1401,8 @@ export function formatBannerPositionStatus(position: {
   )}, ${formatBannerPositionValue("vertical", position.y)}.`;
 }
 
-export function ProfileView({ onchainData }: ProfileViewProps = {}) {
+export function ProfileView({ onchainData, viewChainId = 1, onChangeChain }: ProfileViewProps = {}) {
+  const ethereumView = viewChainId === 1;
   const {
     wallet,
     openWallet,
@@ -1469,7 +1475,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     message: "",
   });
   const liveProfileRefresh = useLiveDataRefresh({
-    enabled: Boolean(account),
+    enabled: Boolean(account) && ethereumView,
     intervalMs: PROFILE_LIVE_REFRESH_INTERVAL_MS,
   });
   const [terminalErrorReadyKey, setTerminalErrorReadyKey] = useState("");
@@ -1628,6 +1634,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     };
   }, [abortTransactionPolls, account]);
 
+  // A view change must not interrupt receipt tracking for an already submitted transaction.
   useEffect(
     () => () => {
       abortTransactionPolls();
@@ -1663,7 +1670,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
 
   useEffect(() => {
     if (onchainData) return;
-    if (!account) return;
+    if (!account || !ethereumView) return;
 
     const controller = new AbortController();
     const confirmedTransactions = new Map(
@@ -1732,10 +1739,11 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     liveProfileRefresh,
     onchainData,
     profileRefresh,
+    ethereumView,
   ]);
 
   useEffect(() => {
-    if (!account || !classicV3ReleaseAvailable) return;
+    if (!account || !ethereumView || !classicV3ReleaseAvailable) return;
     const controller = new AbortController();
     let cancelled = false;
     const cachedProfile = readCachedClassicV3Profile(account);
@@ -1840,10 +1848,11 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     completeProfileRefreshSource,
     liveProfileRefresh,
     profileRefresh,
+    ethereumView,
   ]);
 
   useEffect(() => {
-    if (!account || !deepReleaseAvailable) return;
+    if (!account || !ethereumView || !deepReleaseAvailable) return;
     const controller = new AbortController();
     const confirmedTransactions = new Map(
       confirmedProfileTransactionsRef.current.deep,
@@ -1902,10 +1911,11 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     completeProfileRefreshSource,
     liveProfileRefresh,
     profileRefresh,
+    ethereumView,
   ]);
 
   useEffect(() => {
-    if (!account || !deepV3ReleaseAvailable) return;
+    if (!account || !ethereumView || !deepV3ReleaseAvailable) return;
     const controller = new AbortController();
     void fetchDeepV3CreatorProfile(account, controller.signal)
       .then((data) => {
@@ -1937,10 +1947,11 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     completeProfileRefreshSource,
     liveProfileRefresh,
     profileRefresh,
+    ethereumView,
   ]);
 
   useEffect(() => {
-    if (!account || !stockPairedReleaseAvailable) return;
+    if (!account || !ethereumView || !stockPairedReleaseAvailable) return;
     const controller = new AbortController();
     const confirmedTransactions = new Map(
       confirmedProfileTransactionsRef.current["stock-paired"],
@@ -2000,6 +2011,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     completeProfileRefreshSource,
     liveProfileRefresh,
     profileRefresh,
+    ethereumView,
   ]);
 
   function populateProfileDrafts(profile: typeof savedProfile) {
@@ -2398,7 +2410,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   );
 
   useEffect(() => {
-    if (!account) return;
+    if (!account || !ethereumView) return;
     let pending: PendingProfileTransactionRecord[] = [];
     try {
       pending = readPendingProfileTransactions(window.localStorage, account);
@@ -2466,6 +2478,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     account,
     liveProfileRefresh,
     profileRefresh,
+    ethereumView,
     settleSubmittedTransaction,
   ]);
 
@@ -3419,6 +3432,8 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
       <PublicCreatorProfile
         account={publicProfileAccount}
         onConnect={openWallet}
+        viewChainId={viewChainId}
+        onChangeChain={onChangeChain}
       />
     );
   }
@@ -3785,7 +3800,9 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         </div>
       </section>
 
-      <ProfileProjects
+      <ProfileChainSelector value={viewChainId} onChange={onChangeChain} />
+
+      {ethereumView ? <><ProfileProjects
         key={account?.toLowerCase() ?? "disconnected"}
         classicRewards={
           scopedClassicV3Rewards.status === "ready"
@@ -3829,6 +3846,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         refreshStatusMessage={profileRefreshStatusMessage}
         terminalErrorReady={terminalErrorReady}
       />
+      </> : <RobinhoodProfileLaunches key={account.toLowerCase()} account={account} />}
     </div>
   );
 }
@@ -4677,9 +4695,13 @@ export function ProfileRouterLaunches({
 function PublicCreatorProfile({
   account,
   onConnect,
+  viewChainId,
+  onChangeChain,
 }: {
   account: string;
   onConnect: () => void;
+  viewChainId: ViewChainId;
+  onChangeChain?: (chain: ViewChainId) => void;
 }) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [data, setData] = useState<ProfileOnchainData>(() =>
@@ -4687,6 +4709,7 @@ function PublicCreatorProfile({
   );
 
   useEffect(() => {
+    if (viewChainId !== 1) return;
     const controller = new AbortController();
     queueMicrotask(() => {
       if (!controller.signal.aborted) setData(loadingProfileData(account));
@@ -4710,7 +4733,7 @@ function PublicCreatorProfile({
       },
     );
     return () => controller.abort();
-  }, [account, refreshKey]);
+  }, [account, refreshKey, viewChainId]);
 
   const entries = data.status === "ready"
     ? profileRouterLaunchEntries(
@@ -4743,7 +4766,8 @@ function PublicCreatorProfile({
         </div>
       </section>
 
-      {data.status === "loading" ? (
+      <ProfileChainSelector value={viewChainId} onChange={onChangeChain} />
+      {viewChainId === 4663 ? <RobinhoodProfileLaunches key={account.toLowerCase()} account={account} /> : data.status === "loading" ? (
         <section
           className={`${styles.launchesPanel} ${styles.publicProfileState}`}
           aria-busy="true"
