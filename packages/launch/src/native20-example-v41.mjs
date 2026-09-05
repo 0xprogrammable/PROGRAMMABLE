@@ -90,7 +90,7 @@ export async function buildRobinhoodNative20ExampleV41({ projectRoot, capabiliti
         initializerValueWei: initialBuyWei,
         componentKind: "other", runtimeImmutables: initializerImmutables },
       { ...common, targetId: "token", compilationUnitId: "native20", artifact: "out/token.json",
-        applicantSalt: `0x${"02".repeat(32)}`, constructorArguments: [{ target: "initializer" }],
+        applicantSalt: `0x${"02".repeat(32)}`, constructorArguments: [{ target: "initializer" }, input.projectMetadata.token.name, input.projectMetadata.token.symbol],
         componentKind: "token", runtimeImmutables: [] },
       { ...common, targetId: "hook", compilationUnitId: "kernel", artifact: "out/hook.json",
         applicantSalt: { mode: "deterministic-hook-permission-grind-v1", start: "0", maxAttempts: "262144" },

@@ -26733,7 +26733,7 @@
                         "const": "programmable.robinhood-native20-seed-proof.v1"
                       },
                       "artifactReleaseSha256": {
-                        "const": "sha256:5a3136f3d89b648f016162e6a65bff40432e8e869919beae48eb3b2cd2be1fcc"
+                        "const": "sha256:c88991b7987bdbee930ead63f5ac4b880858051b334e02ff25fe533793a2d7c4"
                       },
                       "graphSha256": {
                         "type": "string",
@@ -64420,7 +64420,7 @@
                               "const": "programmable.robinhood-native20-seed-proof.v1"
                             },
                             "artifactReleaseSha256": {
-                              "const": "sha256:5a3136f3d89b648f016162e6a65bff40432e8e869919beae48eb3b2cd2be1fcc"
+                              "const": "sha256:c88991b7987bdbee930ead63f5ac4b880858051b334e02ff25fe533793a2d7c4"
                             },
                             "graphSha256": {
                               "type": "string",
@@ -78660,7 +78660,7 @@
                 "const": "programmable.robinhood-native20-seed-proof.v1"
               },
               "artifactReleaseSha256": {
-                "const": "sha256:5a3136f3d89b648f016162e6a65bff40432e8e869919beae48eb3b2cd2be1fcc"
+                "const": "sha256:c88991b7987bdbee930ead63f5ac4b880858051b334e02ff25fe533793a2d7c4"
               },
               "graphSha256": {
                 "type": "string",

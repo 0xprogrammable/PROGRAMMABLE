@@ -8,7 +8,7 @@ const positive = { type: "string", pattern: "^[1-9][0-9]{0,77}$" };
 const id = { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$" };
 const closed = properties => ({ type: "object", additionalProperties: false, required: Object.keys(properties), properties });
 export const ROBINHOOD_NATIVE20_EXECUTION_PROOF_SCHEMA_V1 = closed({
-  schemaVersion: { const: "programmable.robinhood-native20-seed-proof.v1" }, artifactReleaseSha256: { const: "sha256:5a3136f3d89b648f016162e6a65bff40432e8e869919beae48eb3b2cd2be1fcc" },
+  schemaVersion: { const: "programmable.robinhood-native20-seed-proof.v1" }, artifactReleaseSha256: { const: "sha256:c88991b7987bdbee930ead63f5ac4b880858051b334e02ff25fe533793a2d7c4" },
   graphSha256: sha, verificationBundleSha256: sha, preparedArtifactHash: sha, kernelEvidenceDigest: sha,
   tokenTargetId: id, tokenAddress: address, initializerTargetId: id, initializerAddress: address,
   initialSqrtPriceX96: { const: "1747735933952748037356115466503453" },

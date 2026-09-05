@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import solc from "solc";
+import { getContractAddress } from "viem";
+import { buildLaunch } from "../src/pack.mjs";
 import Ajv2020 from "ajv/dist/2020.js";
 import { normalizeRobinhoodFundingPlanV1, assertRobinhoodFundingPlanDeployableV1 } from "../src/funding-plan-v1.mjs";
 import { ROBINHOOD_PROFILE_V41 } from "../src/profile-v41.mjs";
@@ -59,15 +61,22 @@ test("native20 exact two-unit source kit packs, derives the child vault and bind
       publicOrigin: { url: "https://github.com/programmablehq/PROGRAMMABLE", revision: "11".repeat(20) },
       checkedAt: "2026-09-05T12:00:00.000Z", fundingPlan: testFundingPlan, minimumTokensOut: "1",
       projectMetadata: { schemaVersion: "programmable.project-metadata-input.v1",
-        token: { name: "Robinhood Native20 Example", symbol: "RHN20" }, presentation: {
+        token: { name: "Orbit Protocol", symbol: "ORBIT" }, presentation: {
           description: "Locked token inventory example with native ETH platform fee and explicit gas budget.",
           image: { sourcePath: "assets/token.png", uri: "https://example.com/token.png" }, links: [
             { kind: "website", uri: "https://example.com/" }, { kind: "x", uri: "https://x.com/native20_example" },
           ] } } };
-    const result = await buildRobinhoodNative20ExampleV41({ projectRoot: root, solc,
+    const compilerOutputs = [];
+    const recipeCompiler = { version: () => solc.version(), compile: (input) => {
+      const output = solc.compile(input);
+      compilerOutputs.push(JSON.parse(output));
+      return output;
+    } };
+    const result = await buildRobinhoodNative20ExampleV41({ projectRoot: root, solc: recipeCompiler,
       capabilities: validV4Capabilities({ profile: ROBINHOOD_PROFILE_V41 }), input,
       permitWindow: { validAfter: "1", deadline: "2" } });
     const request = result.built.request;
+    assert.equal(compilerOutputs.length, 2, "compile the canonical kernel and shared token/initializer units once each");
     await writeFile(path.join(root, "launch.json"), result.built.requestBytes);
     assert.equal((await validateLaunchFile({ launchPath: path.join(root, "launch.json"), configPath: result.configPath })).launchIntentHash, request.launchIntentHash);
     assert.equal(request.chainDeploymentDescriptorDigest, hashV4ChainDeployment(v4ChainDeployment));
@@ -85,6 +94,10 @@ test("native20 exact two-unit source kit packs, derives the child vault and bind
       const missing = structuredClone(value); delete missing.fundingPlan;
       assert.equal(validate(missing), false);
     }
+    assert.deepEqual(request.projectMetadata.token, { name: "Orbit Protocol", symbol: "ORBIT" });
+    assert.equal(request.projectMetadata.tokenMetadataBinding.name.staticSource, "constructor-argument");
+    assert.equal(request.projectMetadata.tokenMetadataBinding.name.argumentIndex, 1);
+    assert.equal(request.projectMetadata.tokenMetadataBinding.symbol.argumentIndex, 2);
     const changed = structuredClone(request);
     changed.fundingPlan.maxGasCostWei = "2000000000000000";
     await writeFile(path.join(root, "changed.json"), JSON.stringify(changed));
@@ -92,6 +105,42 @@ test("native20 exact two-unit source kit packs, derives the child vault and bind
     if (process.env.PROGRAMMABLE_LOCAL_RECIPE_OUTPUT) {
       await cp(root, process.env.PROGRAMMABLE_LOCAL_RECIPE_OUTPUT, { recursive: true });
       await writeFile(path.join(process.env.PROGRAMMABLE_LOCAL_RECIPE_OUTPUT, "launch.json"), result.built.requestBytes);
+      await writeFile(path.join(process.env.PROGRAMMABLE_LOCAL_RECIPE_OUTPUT, "compiler-output-native20.json"), JSON.stringify(compilerOutputs[1]));
     }
+    // A second project uses the same compiled artifacts, with independently bound constructor strings.
+    const secondConfig = structuredClone(result.config);
+    secondConfig.projectMetadata.token = { name: "Coffee Guild", symbol: "BEANS" };
+    secondConfig.targets[1].constructorArguments = [{ target: "initializer" }, "Coffee Guild", "BEANS"];
+    await writeFile(result.configPath, JSON.stringify(secondConfig));
+    const provisional = await buildLaunch({ configPath: result.configPath });
+    const hookArtifact = JSON.parse(await readFile(path.join(root, "out/hook.json")));
+    const vaultRanges = ROBINHOOD_NATIVE_FEE_ARTIFACT_V1.kernel.immutables.feeVault.ranges;
+    const [vaultId] = Object.entries(hookArtifact.deployedBytecode.immutableReferences)
+      .find(([, ranges]) => JSON.stringify(ranges) === JSON.stringify(vaultRanges));
+    secondConfig.targets[2].runtimeImmutables.find(entry => entry.immutableId === vaultId).literal = getContractAddress({
+      from: provisional.predictions.find(target => target.targetId === "hook").predictedAddress, opcode: "CREATE", nonce: 1n });
+    await writeFile(result.configPath, JSON.stringify(secondConfig));
+    const second = await buildLaunch({ configPath: result.configPath });
+    assert.deepEqual(second.request.projectMetadata.token, { name: "Coffee Guild", symbol: "BEANS" });
+    assert.notEqual(second.request.launchIntentHash, request.launchIntentHash);
+    assert.notEqual(second.predictions[1].predictedAddress, result.built.predictions[1].predictedAddress);
+    assert.equal(second.request.graphBundle.targets[1].creationBytecode, request.graphBundle.targets[1].creationBytecode);
+    if (process.env.PROGRAMMABLE_LOCAL_RECIPE_OUTPUT) {
+      const secondRoot = `${process.env.PROGRAMMABLE_LOCAL_RECIPE_OUTPUT}-second`;
+      await cp(root, secondRoot, { recursive: true });
+      await writeFile(path.join(secondRoot, "launch.json"), second.requestBytes);
+      await writeFile(path.join(secondRoot, "compiler-output-native20.json"), JSON.stringify(compilerOutputs[1]));
+    }
+    for (const [name, symbol] of [["", "OK"], ["Valid", ""], ["A".repeat(65), "OK"], ["Valid", "BAD SYMBOL"]]) {
+      const invalid = structuredClone(secondConfig);
+      invalid.projectMetadata.token = { name, symbol };
+      invalid.targets[1].constructorArguments = [{ target: "initializer" }, name, symbol];
+      await writeFile(result.configPath, JSON.stringify(invalid));
+      await assert.rejects(buildLaunch({ configPath: result.configPath }), /projectMetadata.token/);
+    }
+    const mismatch = structuredClone(secondConfig);
+    mismatch.projectMetadata.token.name = "Different Display Name";
+    await writeFile(result.configPath, JSON.stringify(mismatch));
+    await assert.rejects(buildLaunch({ configPath: result.configPath }), /does not match constructor-argument/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
