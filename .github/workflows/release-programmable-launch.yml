@@ -334,6 +334,8 @@ jobs:
         if: ${{ startsWith(inputs.version, '4.') }}
         id: fresh-v4-release
         env:
+          PROGRAMMABLE_PRODUCTION_VERIFY_PROOF: ${{ runner.temp }}/production-verify-proof/production-verify-proof.json
+          PROGRAMMABLE_ROBINHOOD_BACKEND_AUTHORIZATION: ${{ github.workspace }}/release/robinhood-chain-4663/programmable-backend-authorization.json
           ETHEREUM_MAINNET_RPC_URL_PRIMARY: ${{ secrets.ETHEREUM_MAINNET_RPC_URL_PRIMARY }}
           ETHEREUM_MAINNET_RPC_URL_SECONDARY: ${{ secrets.ETHEREUM_MAINNET_RPC_URL_SECONDARY }}
           FLY_API_TOKEN: ${{ secrets.PROGRAMMABLE_CUSTOM_LAUNCH_API_FLY_READ_TOKEN }}
@@ -347,6 +349,8 @@ jobs:
           test -n "$ETHEREUM_MAINNET_RPC_URL_PRIMARY"
           test -n "$ETHEREUM_MAINNET_RPC_URL_SECONDARY"
           test -n "$FLY_API_TOKEN"
+          test -f "$PROGRAMMABLE_PRODUCTION_VERIFY_PROOF"
+          test -f "$PROGRAMMABLE_ROBINHOOD_BACKEND_AUTHORIZATION"
           evidence="$GITHUB_WORKSPACE/release/robinhood-chain-4663"
           coordinates="$evidence/production-verify-coordinates.json"
           result="$RUNNER_TEMP/programmable-launch-v4-fresh-apply.json"
