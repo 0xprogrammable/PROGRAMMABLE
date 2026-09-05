@@ -2,6 +2,8 @@
 
 Status: architecture specification, 5 September 2026. The general stateful module lifecycle below is **not implemented** by `IClassicModuleV1`. The new common identity reader is implemented separately in `IProgrammableClassicLaunchV1`. Existing launch/fee tests do not establish the proposed lifecycle's correctness. The current two-effect ABI is a limited prototype and must not be frozen as the public open-module foundation.
 
+The subsequent [configuration and contribution gap review](classic-configurable-packages.md) specifies template/instance separation, typed roles and structured inputs, canonical financial allocation, the CTO/module-funding conflict, generic post-launch actions and source-first contribution acceptance. Those requirements are part of this architecture; a descriptor with arbitrary business names alone does not satisfy them.
+
 ## Product contract
 
 A Classic launch has one canonical token and primary bonding-curve pool. Its launch-time recipe may bind multiple modules and supporting contracts. Adding a reusable module using supported execution primitives must not require changing the token, launcher, hook, common identity reader, indexer identity schema, or a handwritten frontend form. Catalogue size is not a runtime instruction to execute every entry.
