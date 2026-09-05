@@ -1,41 +1,16 @@
-import { getAddress, getContractAddress } from "viem";
+import { getContractAddress } from "viem";
 import { canonicalBrowserSha256V2 } from "../../lib/custom-launch/browser-authority-v2";
 
-import { CUSTOM_LAUNCH_ROBINHOOD_PROFILE_V41, exactWalletTransactionPreimageHashV4 } from "../../lib/custom-launch/wallet-handoff-v4";
-// @ts-expect-error -- repository-local JavaScript fixture has no declaration file.
-import * as fixtures from "../../packages/launch/test/fixtures/v4.mjs";
+import walletFixture from "./robinhood-initial-buy-wallet-v41.json";
 
-/** Full synthetic parser/UI resource. Freeze the QA clock within its permit window. */
+/** Offline service-generated resource: real compiled artifact, invalid test signature and mocked RPC/simulation. */
 export function robinhoodWalletReadyResourceFixtureV41() {
-  const account = getAddress("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-  const request = fixtures.validV4Request({ launchWallet: account });
-  const received = fixtures.validV4Resource(request);
-  received.metadataCommitment = canonicalBrowserSha256V2("programmable.project-metadata.v1", received.projectMetadata);
-  received.commitments.metadata = received.metadataCommitment;
-  received.graphCommitment = canonicalBrowserSha256V2("programmable.custom-graph-project-metadata.v1", {
-    graphBundleHash: `sha256:${"8".repeat(64)}`, projectMetadataHash: received.metadataCommitment,
-  });
-  received.commitments.graph = received.graphCommitment;
-  const { preparedArtifact, walletTransaction: generated } = fixtures.validCoordinatedGraphSubstitutionV4(received.commitments);
-  const walletTransaction = fixtures.validExactWalletTransaction({ calldata: generated.calldata,
-    commitments: received.commitments, from: account,
-    launchSummary: { ...generated.launchSummary, controller: account } });
-  const resource = fixtures.validV4Resource(request, undefined, { status: "wallet_action_required",
-    preparedArtifact, walletTransaction, walletTransactionPreimageHash: walletTransaction.transactionPreimageHash,
-    metadataCommitment: received.metadataCommitment, graphCommitment: received.graphCommitment,
-    commitments: received.commitments });
-  resource.profile = CUSTOM_LAUNCH_ROBINHOOD_PROFILE_V41;
-  resource.walletTransaction.profile = CUSTOM_LAUNCH_ROBINHOOD_PROFILE_V41;
-  const withoutHash = { ...resource.walletTransaction };
-  delete withoutHash.transactionPreimageHash;
-  resource.walletTransaction.transactionPreimageHash = exactWalletTransactionPreimageHashV4(withoutHash);
-  resource.walletTransactionPreimageHash = resource.walletTransaction.transactionPreimageHash;
-  resource.fundingPlan = { schemaVersion: "programmable.robinhood-funding-plan.v1",
-    capitalSource: "buyer-funded", pricingModel: "concentrated-liquidity",
-    nativeAllocations: { initialLiquidityWei: "0", initialBuyWei: "0", reserveWei: "0", otherLaunchValueWei: "0" },
-    maxLaunchValueWei: "0", maxGasCostWei: "1000", launchMode: "fund-and-launch" };
-  return attachRobinhoodFeeReviewFixtureV41(resource);
+  return JSON.parse(JSON.stringify(walletFixture.resource));
 }
+export function robinhoodInitialBuyCapabilitiesFixtureV41() {
+  return JSON.parse(JSON.stringify(walletFixture.capabilities));
+}
+export const robinhoodInitialBuyFixtureNowV41 = walletFixture.now;
 
 /** Synthetic server receipt for parser tests; never a deployment or audit proof. */
 export function attachRobinhoodFeeReviewFixtureV41<T extends Record<string, unknown>>(resource: T) {
@@ -76,7 +51,7 @@ export function attachRobinhoodFeeReviewFixtureV41<T extends Record<string, unkn
     staticAnalysisDigest: `sha256:${"55".repeat(32)}`, externalContractEvidenceDigest: `sha256:${"66".repeat(32)}`,
     disposition: "supported", evidenceTier: "launch_mechanics_verified", hardBlockFindingCodes: [],
     needsEvidenceFindingCodes: [], warningFindingCodes: [], issuedAt: "2026-08-29T12:00:00.000Z",
-    feeReviewDigest: feeReview.evidenceDigest,
+    feeReviewDigest: feeReview.evidenceDigest, initialBuyReviewDigest: null,
   };
   return { ...resource, feeReview, admissionReceipt: { ...receipt,
     receiptDigest: canonicalBrowserSha256V2("programmable.custom-launch-admission-receipt.v4", receipt) } };

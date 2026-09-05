@@ -3,7 +3,7 @@ import { canonicalBrowserJsonV2, canonicalBrowserSha256V2 } from "./browser-auth
 
 const SCHEMA = "programmable.robinhood-native-fee-kernel-proof.v1";
 const RECEIPT_SCHEMA = "programmable.custom-launch-admission-receipt.v4";
-const PROFILE_DIGEST = "sha256:5bd194ce769e825231d94e16c7e874f36935931224bca86a4003a9a3691b87bc";
+const PROFILE_DIGEST = "sha256:b0fca91264a49d358ed1a9eec2a679b59a48d716b71475bef583c2545e1ee502";
 const ARTIFACT_RELEASE = "sha256:917c03d59c7b6c051d6aa238cd0b2a91aa02c8993ccbfce6421d5c6341d5380e";
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const ZERO_HASH = `0x${"00".repeat(32)}`;
@@ -17,7 +17,7 @@ const KEYS = ["schemaVersion", "artifactReleaseSha256", "graphSha256", "verifica
 const RECEIPT_KEYS = ["schemaVersion", "apiVersion", "chainId", "requestHash", "rawRequestSha256",
   "chainDeploymentDescriptorDigest", "profileDigest", "commitments", "staticAnalysisDigest",
   "externalContractEvidenceDigest", "disposition", "evidenceTier", "hardBlockFindingCodes",
-  "needsEvidenceFindingCodes", "warningFindingCodes", "issuedAt", "feeReviewDigest", "receiptDigest"];
+  "needsEvidenceFindingCodes", "warningFindingCodes", "issuedAt", "feeReviewDigest", "initialBuyReviewDigest", "receiptDigest"];
 
 export type RobinhoodFeeReviewV1 = Readonly<{
   evidenceDigest: `sha256:${string}`;

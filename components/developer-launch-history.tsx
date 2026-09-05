@@ -36,6 +36,7 @@ import {
   robinhoodFundingPlanLabelsV1,
   type RobinhoodLaunchCostV1,
 } from "@/lib/custom-launch/robinhood-funding-review-v1";
+import { parseRobinhoodInitialBuyReviewV1 } from "@/lib/custom-launch/robinhood-initial-buy-review-v1";
 import { parseRobinhoodFeeReviewV1 } from "@/lib/custom-launch/robinhood-fee-review-v1";
 import { PROGRAMMABLE_AGENT_SETUP_LINKS_V1 } from
   "@/lib/custom-launch/agent-setup-v1";
@@ -1885,6 +1886,29 @@ export function DeveloperRobinhoodFeePreview({ resource }: Readonly<{ resource: 
   </section>;
 }
 
+export function DeveloperRobinhoodInitialBuyPreview({ resource }: Readonly<{ resource: unknown }>) {
+  const buy = parseRobinhoodInitialBuyReviewV1(resource);
+  if (!buy) return <div className={styles.metadataUnavailable} role="status">
+    <strong>Bound initial buy verification unavailable</strong>
+    <p>The server must verify the initial buy and its $1 ETH reference before this launch can open a wallet transaction.</p>
+  </div>;
+  const rate = BigInt(buy.quoteAnswer);
+  const usdRate = `${rate / 100000000n}.${(rate % 100000000n).toString().padStart(8, "0")}`;
+  return <section className={styles.routerReview} aria-label="Robinhood initial buy">
+    <div className={styles.stepHeading}><strong>Robinhood initial buy</strong></div>
+    <dl className={styles.reviewGrid}>
+      <div><dt>Initial buy, including swap fees</dt><dd>{formatRobinhoodWeiV1(buy.initialBuyWei)}</dd></div>
+      <div><dt>$1 minimum at authorization</dt><dd>{formatRobinhoodWeiV1(buy.minimumInitialBuyWei)}</dd></div>
+      <div><dt>ETH / USD reference</dt><dd>${usdRate} per ETH</dd></div>
+      <div><dt>Reference observed</dt><dd><time dateTime={buy.referenceObservedAt}>{buy.referenceObservedAt}</time></dd></div>
+      <div><dt>Buyer and token recipient</dt><dd><code>{buy.buyer}</code></dd></div>
+      <div><dt>Minimum token output</dt><dd>{buy.minimumTokensOut} raw token units</dd></div>
+    </dl>
+    <p>The launch includes this buy in the same transaction. It must spend the full initial buy amount and return at least the minimum token output, or the transaction reverts.</p>
+    <p>The $1 minimum uses a verified Ethereum ETH / USD reference at permit authorization. The launch runs on Robinhood; the reference does not guarantee a future dollar value. The initial buy is already included in the launch transaction value. Gas is additional.</p>
+  </section>;
+}
+
 export function DeveloperRobinhoodFundingPreview({ resource, cost, now }: Readonly<{
   resource: unknown;
   cost?: RobinhoodLaunchCostV1;
@@ -3650,7 +3674,10 @@ export function DeveloperLaunchHistory({
                 {reviewLaunch.routeId === "custom-launch:create:v4"
                   && isRecord(reviewLaunch.rawResourceV4?.profile)
                   && reviewLaunch.rawResourceV4.profile.profileVersion === "4.1.0" ? (
-                    <DeveloperRobinhoodFeePreview resource={reviewLaunch.rawResourceV4} />
+                    <>
+                      <DeveloperRobinhoodFeePreview resource={reviewLaunch.rawResourceV4} />
+                      <DeveloperRobinhoodInitialBuyPreview resource={reviewLaunch.rawResourceV4} />
+                    </>
                   ) : null}
                 <AdmissionWarnings codes={warningFindingCodes} />
                 {reviewLaunch.failure
