@@ -32,6 +32,8 @@ import {
   formatRobinhoodWeiV1,
   parseRobinhoodFundingReviewV1,
   robinhoodCostMatchesReviewV1,
+  robinhoodGasBudgetExceededV1,
+  robinhoodFundingPlanLabelsV1,
   type RobinhoodLaunchCostV1,
 } from "@/lib/custom-launch/robinhood-funding-review-v1";
 import { PROGRAMMABLE_AGENT_SETUP_LINKS_V1 } from
@@ -1871,10 +1873,23 @@ export function DeveloperRobinhoodFundingPreview({ resource, cost, now }: Readon
     </div>
   );
   const currentCost = robinhoodCostMatchesReviewV1(cost, funding, now ?? Number.NaN) ? cost : undefined;
+  const plan = funding.fundingPlan;
+  const planLabels = plan ? robinhoodFundingPlanLabelsV1(plan) : null;
   return (
     <section className={styles.routerReview} aria-label="Robinhood launch funding">
       <div className={styles.stepHeading}><strong>Robinhood launch funding</strong></div>
       <dl className={styles.reviewGrid}>
+        {plan && planLabels ? <>
+          <div><dt>Declared capital source</dt><dd>{planLabels.capitalSource}</dd></div>
+          <div><dt>Declared pricing model</dt><dd>{planLabels.pricingModel}</dd></div>
+          <div><dt>Initial liquidity allocation</dt><dd>{formatRobinhoodWeiV1(plan.nativeAllocations.initialLiquidityWei)}</dd></div>
+          <div><dt>Initial buy allocation</dt><dd>{formatRobinhoodWeiV1(plan.nativeAllocations.initialBuyWei)}</dd></div>
+          <div><dt>Native reserve allocation</dt><dd>{formatRobinhoodWeiV1(plan.nativeAllocations.reserveWei)}</dd></div>
+          <div><dt>Other launch value</dt><dd>{formatRobinhoodWeiV1(plan.nativeAllocations.otherLaunchValueWei)}</dd></div>
+          <div><dt>Maximum launch value</dt><dd>{formatRobinhoodWeiV1(plan.maxLaunchValueWei)}</dd></div>
+          <div><dt>Gas budget</dt><dd>{formatRobinhoodWeiV1(plan.maxGasCostWei)}</dd></div>
+          <div><dt>Launch mode</dt><dd>{plan.launchMode === "build-only" ? "Build only" : "Fund and launch"}</dd></div>
+        </> : null}
         <div><dt>Declared liquidity model</dt><dd>{funding.modelLabel}</dd></div>
         <div><dt>Declared starting state</dt><dd>{funding.stateLabel}</dd></div>
         <div><dt>Launch transaction value</dt><dd>{formatRobinhoodWeiV1(funding.valueWei)}</dd></div>
@@ -1890,13 +1905,18 @@ export function DeveloperRobinhoodFundingPreview({ resource, cost, now }: Readon
         Gas is additional, even when transaction value is zero. The declared model does
         not prove that an empty pool can trade or that buyer funding is available.
       </p>
-      <p>Capital source and gas budget must be agreed with your agent. This request version records the declared model and exact transaction value; it does not record a separate financing plan.</p>
+      {plan ? (
+        <p>The financing plan and budgets are bound to this request. Allocation labels do not prove reserves, inventory or solvency. Changing a budget requires your agent to repack the launch.</p>
+      ) : <p>Capital source and gas budget must be agreed with your agent. This request version records the declared model and exact transaction value; it does not record a separate financing plan.</p>}
+      {plan?.launchMode === "build-only" ? <p className={styles.failure} role="alert">This plan is build only. Confirm a funded launch plan with your agent and repack before sending.</p> : null}
       {currentCost ? (
         <>
           <p>Estimated at <time dateTime={currentCost.observedAt}>{currentCost.observedAt.slice(11, 19)} UTC</time>. Network costs can change. The wallet shows the final fee before you approve.</p>
+          {robinhoodGasBudgetExceededV1(currentCost, funding) ? <p className={styles.failure} role="alert">The current network estimate exceeds your bound gas budget. Wait for costs to fall, or confirm a new budget with your agent and repack. No transaction can be requested with this estimate.</p> : null}
           {currentCost.shortfallWei !== "0" ? (
             <p className={styles.failure} role="alert">You need approximately {formatRobinhoodWeiV1(currentCost.shortfallWei)} more on Robinhood Chain for this transaction and its current network estimate. Update the funding, then estimate again.</p>
-          ) : <p>Review these costs, then choose Send transaction. Costs and balance are checked again before the wallet opens.</p>}
+          ) : !robinhoodGasBudgetExceededV1(currentCost, funding) && plan?.launchMode !== "build-only"
+            ? <p>Review these costs, then choose Send transaction. Costs and balance are checked again before the wallet opens.</p> : null}
         </>
       ) : <p>Estimate the exact transaction before sending. Estimates do not request a signature or send a transaction.</p>}
     </section>
@@ -3490,7 +3510,9 @@ export function DeveloperLaunchHistory({
             const currentRobinhoodCost = robinhoodFunding?.account.toLowerCase() === account.toLowerCase()
               && robinhoodCostMatchesReviewV1(robinhoodCosts[key], robinhoodFunding,
                 currentTimeMs ?? Number.NaN) ? robinhoodCosts[key] : undefined;
-            const robinhoodSendReady = currentRobinhoodCost?.shortfallWei === "0";
+            const robinhoodSendReady = currentRobinhoodCost?.shortfallWei === "0"
+              && robinhoodFunding !== null && robinhoodFunding.fundingPlan?.launchMode !== "build-only"
+              && !robinhoodGasBudgetExceededV1(currentRobinhoodCost, robinhoodFunding);
             const fundingReview = fundingAuthorizationReview(reviewLaunch);
             const routerReview = routerTransactionReview(reviewLaunch);
             const transaction = reviewLaunch.routeId
@@ -3866,6 +3888,7 @@ export function DeveloperLaunchHistory({
                                 || handoffExpired
                                 || !projectMetadataReadyForProfile
                                 || robinhoodFunding === null
+                                || robinhoodFunding.fundingPlan?.launchMode === "build-only"
                               }
                               type="button"
                               onClick={() => void submitWalletTransaction(reviewLaunch, robinhoodSendReady ? "send" : "estimate")}

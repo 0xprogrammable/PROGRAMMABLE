@@ -5,7 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { DeveloperRobinhoodFundingPreview } from "../components/developer-launch-history";
 import {
-  estimateRobinhoodLaunchCostV1, parseRobinhoodFundingReviewV1,
+  estimateRobinhoodLaunchCostV1, parseRobinhoodFundingReviewV1, parseRobinhoodFundingPlanV1,
+  robinhoodGasBudgetExceededV1,
   robinhoodCostMatchesReviewV1, robinhoodCostRequiresReviewV1,
 } from "../lib/custom-launch/robinhood-funding-review-v1";
 import type { CustomLaunchWalletReviewV4 } from "../lib/custom-launch/wallet-handoff-v4";
@@ -138,5 +139,87 @@ describe("Robinhood declared funding and live affordability", () => {
     const unknown = renderToStaticMarkup(createElement(DeveloperRobinhoodFundingPreview, { resource: resource() }));
     expect(unknown).toContain("Estimate required");
     expect(unknown).not.toContain("Value plus current estimate</dt><dd>0 ETH");
+  });
+});
+
+function successorResource() {
+  const raw = resource();
+  return {
+    ...raw, profile: { profileVersion: "4.1.0", profileRevision: 2 },
+    fundingPlan: {
+      schemaVersion: "programmable.robinhood-funding-plan.v1",
+      capitalSource: "buyer-funded", pricingModel: "custom-curve",
+      nativeAllocations: { initialLiquidityWei: "400", initialBuyWei: "300", reserveWei: "200", otherLaunchValueWei: "100" },
+      maxLaunchValueWei: "1000", maxGasCostWei: "300", launchMode: "fund-and-launch",
+    },
+    preparedArtifact: { ...raw.preparedArtifact, route: { totalValueWei: "1000", targets: [
+      { deploymentValueWei: "400", initializerValueWei: "100" },
+      { deploymentValueWei: "0", initializerValueWei: "200" },
+      { deploymentValueWei: "100", initializerValueWei: "200" },
+    ] } },
+  };
+}
+
+describe("profile 4.1 declared funding plan and budgets", () => {
+  it("requires the exact plan only for the successor and rejects it on 4.0", () => {
+    const raw = successorResource();
+    expect(parseRobinhoodFundingReviewV1(raw)?.fundingPlan).toEqual(raw.fundingPlan);
+    expect(parseRobinhoodFundingReviewV1({ ...raw, profile: { profileVersion: "4.0.0", profileRevision: 1 } })).toBeNull();
+    expect(parseRobinhoodFundingReviewV1({ ...raw, fundingPlan: undefined })).toBeNull();
+    expect(parseRobinhoodFundingReviewV1({ ...raw, profile: { profileVersion: "4.1.0", profileRevision: 1 } })).toBeNull();
+  });
+
+  it.each(["extra-plan-field", "extra-allocation", "allocation-total", "launch-budget", "zero-gas-budget", "uint-overflow", "graph-total", "graph-target"])("rejects %s", (change) => {
+    const raw = successorResource();
+    if (change === "extra-plan-field") Object.assign(raw.fundingPlan, { sponsor: true });
+    if (change === "extra-allocation") Object.assign(raw.fundingPlan.nativeAllocations, { donationWei: "0" });
+    if (change === "allocation-total") raw.fundingPlan.nativeAllocations.initialBuyWei = "301";
+    if (change === "launch-budget") raw.fundingPlan.maxLaunchValueWei = "999";
+    if (change === "zero-gas-budget") raw.fundingPlan.maxGasCostWei = "0";
+    if (change === "uint-overflow") raw.fundingPlan.nativeAllocations.reserveWei = (1n << 256n).toString();
+    if (change === "graph-total") raw.preparedArtifact.route.totalValueWei = "1001";
+    if (change === "graph-target") raw.preparedArtifact.route.targets[0].initializerValueWei = "101";
+    expect(parseRobinhoodFundingReviewV1(raw)).toBeNull();
+  });
+
+  it("binds budget and allocation purpose changes even when total value is unchanged", () => {
+    const raw = successorResource();
+    const funding = parseRobinhoodFundingReviewV1(raw)!;
+    raw.fundingPlan.maxGasCostWei = "301";
+    expect(parseRobinhoodFundingReviewV1(raw)?.binding).not.toBe(funding.binding);
+    raw.fundingPlan.maxGasCostWei = "300";
+    raw.fundingPlan.nativeAllocations.initialBuyWei = "301";
+    raw.fundingPlan.nativeAllocations.initialLiquidityWei = "399";
+    expect(parseRobinhoodFundingReviewV1(raw)?.binding).not.toBe(funding.binding);
+  });
+
+  it("never permits a build-only plan to estimate toward wallet send", async () => {
+    const raw = successorResource();
+    raw.fundingPlan.launchMode = "build-only";
+    raw.fundingPlan.maxGasCostWei = "0";
+    const funding = parseRobinhoodFundingReviewV1(raw)!;
+    expect(parseRobinhoodFundingPlanV1(raw.fundingPlan, "1000").launchMode).toBe("build-only");
+    const input = { ...fixture(), funding };
+    await expect(estimateRobinhoodLaunchCostV1(input)).rejects.toThrow("build only");
+    expect(input.provider.request).not.toHaveBeenCalled();
+  });
+
+  it("stops at the reviewed gas budget even when the wallet can afford more", async () => {
+    const raw = successorResource();
+    raw.fundingPlan.maxGasCostWei = "199";
+    const funding = parseRobinhoodFundingReviewV1(raw)!;
+    const input = { ...fixture(), funding };
+    const original = input.provider.request.getMockImplementation()!;
+    input.provider.request.mockImplementation(async (call) => call.method === "eth_getBalance" ? "0xffff" : original(call));
+    const cost = await estimateRobinhoodLaunchCostV1(input);
+    expect(cost.shortfallWei).toBe("0");
+    expect(robinhoodGasBudgetExceededV1(cost, funding)).toBe(true);
+    expect(robinhoodCostRequiresReviewV1(cost, cost, funding, Date.parse(observedAt))).toBe(true);
+    const html = renderToStaticMarkup(createElement(DeveloperRobinhoodFundingPreview, { resource: raw, cost, now: Date.parse(observedAt) }));
+    expect(html).toContain("exceeds your bound gas budget");
+    expect(html).toContain("Capital from buyers");
+    expect(html).toContain("Initial buy allocation");
+    expect(html).not.toContain("Review these costs, then choose Send transaction");
+    expect(html).not.toContain("does not record a separate financing plan");
   });
 });

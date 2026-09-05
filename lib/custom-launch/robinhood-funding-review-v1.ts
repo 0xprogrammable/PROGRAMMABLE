@@ -20,6 +20,58 @@ const STATES = {
   "custom-settlement": "Custom settlement",
 } as const;
 
+const CAPITAL_SOURCES = {
+  "buyer-funded": "Capital from buyers", "creator-funded": "Creator supplied capital",
+  hybrid: "Buyer and creator capital", custom: "Custom financing",
+} as const;
+const PRICING_MODELS = {
+  "concentrated-liquidity": "Concentrated liquidity", "custom-curve": "Custom curve",
+  auction: "Auction", custom: "Custom pricing",
+} as const;
+
+export type RobinhoodFundingPlanV1 = Readonly<{
+  schemaVersion: "programmable.robinhood-funding-plan.v1";
+  capitalSource: keyof typeof CAPITAL_SOURCES;
+  pricingModel: keyof typeof PRICING_MODELS;
+  nativeAllocations: Readonly<{
+    initialLiquidityWei: string; initialBuyWei: string; reserveWei: string; otherLaunchValueWei: string;
+  }>;
+  maxLaunchValueWei: string;
+  maxGasCostWei: string;
+  launchMode: "fund-and-launch" | "build-only";
+}>;
+
+/** Successor profile only. Declarations are purpose labels, not reserve proofs. */
+export function parseRobinhoodFundingPlanV1(value: unknown, fundingValueWei: string): RobinhoodFundingPlanV1 {
+  const plan = exactRecord(value, ["schemaVersion", "capitalSource", "pricingModel", "nativeAllocations",
+    "maxLaunchValueWei", "maxGasCostWei", "launchMode"]);
+  if (plan.schemaVersion !== "programmable.robinhood-funding-plan.v1"
+    || typeof plan.capitalSource !== "string" || !Object.hasOwn(CAPITAL_SOURCES, plan.capitalSource)
+    || typeof plan.pricingModel !== "string" || !Object.hasOwn(PRICING_MODELS, plan.pricingModel)
+    || (plan.launchMode !== "fund-and-launch" && plan.launchMode !== "build-only")) throw new TypeError("Invalid Robinhood funding plan");
+  const allocations = exactRecord(plan.nativeAllocations, ["initialLiquidityWei", "initialBuyWei", "reserveWei", "otherLaunchValueWei"]);
+  const initialLiquidityWei = uint(allocations.initialLiquidityWei).toString();
+  const initialBuyWei = uint(allocations.initialBuyWei).toString();
+  const reserveWei = uint(allocations.reserveWei).toString();
+  const otherLaunchValueWei = uint(allocations.otherLaunchValueWei).toString();
+  const total = BigInt(initialLiquidityWei) + BigInt(initialBuyWei) + BigInt(reserveWei) + BigInt(otherLaunchValueWei);
+  const maxLaunchValue = uint(plan.maxLaunchValueWei);
+  const maxGasCost = uint(plan.maxGasCostWei);
+  if (total > UINT256_MAX || total !== uint(fundingValueWei) || total > maxLaunchValue
+    || (plan.launchMode === "fund-and-launch" && maxGasCost === 0n)) throw new TypeError("Robinhood funding allocations or budget do not match the launch");
+  return Object.freeze({
+    schemaVersion: "programmable.robinhood-funding-plan.v1",
+    capitalSource: plan.capitalSource as keyof typeof CAPITAL_SOURCES,
+    pricingModel: plan.pricingModel as keyof typeof PRICING_MODELS,
+    nativeAllocations: Object.freeze({ initialLiquidityWei, initialBuyWei, reserveWei, otherLaunchValueWei }),
+    maxLaunchValueWei: maxLaunchValue.toString(), maxGasCostWei: maxGasCost.toString(), launchMode: plan.launchMode,
+  });
+}
+
+export function robinhoodFundingPlanLabelsV1(plan: RobinhoodFundingPlanV1) {
+  return { capitalSource: CAPITAL_SOURCES[plan.capitalSource], pricingModel: PRICING_MODELS[plan.pricingModel] };
+}
+
 export type RobinhoodFundingReviewV1 = Readonly<{
   binding: `sha256:${string}`;
   account: Address;
@@ -27,6 +79,7 @@ export type RobinhoodFundingReviewV1 = Readonly<{
   valueWei: string;
   modelLabel: string;
   stateLabel: string;
+  fundingPlan?: RobinhoodFundingPlanV1;
 }>;
 
 /** These fields are declared in the immutable request, not a liquidity proof. */
@@ -56,6 +109,11 @@ export function parseRobinhoodFundingReviewV1(value: unknown): RobinhoodFundingR
         || !/^[a-z][a-z0-9._:-]{0,127}$/u.test(id)
         || (index > 0 && String(ids[index - 1]) >= id))
       || (liquidity.model === "none-empty-pool" && liquidity.targetIds.length !== 0)) return null;
+    const profile = resource.profile === undefined ? null : record(resource.profile);
+    const successor = profile?.profileVersion === "4.1.0";
+    if ((successor && profile?.profileRevision !== 2)
+      || (!successor && Object.hasOwn(resource, "fundingPlan"))) return null;
+    const fundingPlan = successor ? parseRobinhoodFundingPlanV1(resource.fundingPlan, amount.toString()) : undefined;
     let transactionPreimageHash: `sha256:${string}` | null = null;
     if (resource.walletTransaction !== null && resource.walletTransaction !== undefined) {
       const transaction = record(resource.walletTransaction);
@@ -66,16 +124,30 @@ export function parseRobinhoodFundingReviewV1(value: unknown): RobinhoodFundingR
         || typeof transaction.transactionPreimageHash !== "string"
         || !SHA256.test(transaction.transactionPreimageHash)
         || resource.walletTransactionPreimageHash !== transaction.transactionPreimageHash) return null;
+      if (fundingPlan) {
+        const route = record(artifact.route);
+        if (!Array.isArray(route.targets) || route.targets.length < 3 || route.targets.length > 16
+          || uint(route.totalValueWei) !== amount) return null;
+        let graphTotal = 0n;
+        for (const candidate of route.targets) {
+          const target = record(candidate);
+          graphTotal += uint(target.deploymentValueWei) + uint(target.initializerValueWei);
+          if (graphTotal > UINT256_MAX) return null;
+        }
+        if (graphTotal !== amount) return null;
+      }
       transactionPreimageHash = transaction.transactionPreimageHash as `sha256:${string}`;
     }
     return Object.freeze({
       binding: canonicalBrowserSha256V2("programmable.robinhood-funding-review.v1", {
         requestHash: resource.requestHash, launchIntent: commitments.launchIntent,
         account, funding, liquidityModel: liquidity, transactionPreimageHash,
+        ...(fundingPlan ? { fundingPlan } : {}),
       }),
       account, transactionPreimageHash, valueWei: amount.toString(),
       modelLabel: MODELS[liquidity.model as keyof typeof MODELS],
       stateLabel: STATES[liquidity.declaredLaunchState as keyof typeof STATES],
+      ...(fundingPlan ? { fundingPlan } : {}),
     });
   } catch { return null; }
 }
@@ -109,6 +181,9 @@ export async function estimateRobinhoodLaunchCostV1(input: Readonly<{
 }>): Promise<RobinhoodLaunchCostV1> {
   const { provider, review, funding } = input;
   const transaction = review.walletRequest;
+  if (funding.fundingPlan?.launchMode === "build-only") {
+    throw new Error("This Robinhood plan is build only. Confirm a funded launch and repack before a wallet transaction.");
+  }
   if (review.chainId !== "4663" || transaction.chainId !== "0x1237"
     || funding.account !== transaction.from || funding.valueWei !== review.valueWei
     || BigInt(transaction.value) !== uint(review.valueWei)
@@ -156,11 +231,18 @@ export function robinhoodCostMatchesReviewV1(cost: RobinhoodLaunchCostV1 | undef
     && cost.valueWei === funding.valueWei && Number.isFinite(age) && age >= 0 && age <= 60_000;
 }
 
+export function robinhoodGasBudgetExceededV1(cost: RobinhoodLaunchCostV1,
+  funding: RobinhoodFundingReviewV1) {
+  return funding.fundingPlan !== undefined
+    && uint(cost.estimatedNetworkFeeWei) > uint(funding.fundingPlan.maxGasCostWei);
+}
+
 export function robinhoodCostRequiresReviewV1(reviewed: RobinhoodLaunchCostV1,
   fresh: RobinhoodLaunchCostV1, funding: RobinhoodFundingReviewV1, now = Date.now()) {
   if (!robinhoodCostMatchesReviewV1(reviewed, funding, now)
     || !robinhoodCostMatchesReviewV1(fresh, funding, now)) return true;
-  return uint(fresh.shortfallWei) > 0n
+  return uint(fresh.shortfallWei) > 0n || funding.fundingPlan?.launchMode === "build-only"
+    || robinhoodGasBudgetExceededV1(fresh, funding)
     || uint(fresh.estimatedTotalWei) > uint(reviewed.estimatedTotalWei);
 }
 
