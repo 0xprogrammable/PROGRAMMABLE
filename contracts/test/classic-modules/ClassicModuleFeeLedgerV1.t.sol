@@ -335,16 +335,115 @@ contract ClassicModuleFeeLedgerV1Test is Test {
     function test_creatorAdminAndTreasuryCanOnlyRotateFutureWallets() public {
         _register(FIRST_POOL, 0);
         _accrue(FIRST_POOL, 0, 100);
+        address[] memory replacements = new address[](1);
+        replacements[0] = REPLACEMENT;
         vm.prank(ADMIN);
-        ledger.changeCreatorWallet(FIRST_POOL, 0, REPLACEMENT);
+        ledger.replaceCreatorWallets(FIRST_POOL, replacements, 0, block.timestamp + 1 hours);
         _accrue(FIRST_POOL, 0, 200);
+        replacements[0] = ADMIN;
         vm.prank(TREASURY);
-        ledger.changeCreatorWallet(FIRST_POOL, 0, ADMIN);
+        ledger.replaceCreatorWallets(FIRST_POOL, replacements, 1, block.timestamp + 1 hours);
         _accrue(FIRST_POOL, 0, 300);
         assertEq(ledger.claimable(_creator(0)), 100);
         assertEq(ledger.claimable(REPLACEMENT), 200);
         assertEq(ledger.claimable(ADMIN), 300);
         assertEq(ledger.creatorShareBpsAt(FIRST_POOL, 0), 10_000);
+        assertEq(ledger.creatorAdminRevision(FIRST_POOL), 2);
+    }
+
+    function test_ctoConsolidatesAllSlotsWithoutMovingOldCreditsOrAuthorFees() public {
+        _registerThreeCreators(FIRST_POOL, 2);
+        bytes32 original = ledger.configurationHash(FIRST_POOL);
+        _accrue(FIRST_POOL, 200, 10_000);
+        address[] memory wallets = new address[](3);
+        for (uint256 i; i < 3; ++i) {
+            wallets[i] = REPLACEMENT;
+        }
+        vm.prank(ADMIN);
+        ledger.replaceCreatorWallets(FIRST_POOL, wallets, 0, block.timestamp + 1 hours);
+        _accrue(FIRST_POOL, 200, 10_000);
+        assertEq(ledger.claimable(REPLACEMENT), 10_000);
+        assertEq(ledger.claimable(_creator(0)), 3333);
+        assertEq(ledger.claimable(_creator(1)), 3333);
+        assertEq(ledger.claimable(_creator(2)), 3334);
+        assertEq(ledger.claimable(TREASURY), 200);
+        assertEq(ledger.claimable(_author(1)), 100);
+        assertEq(ledger.claimable(_author(2)), 100);
+        assertEq(ledger.configurationHash(FIRST_POOL), original);
+        (address[] memory current, uint16[] memory shares, uint256 revision) = ledger.creatorRecipients(FIRST_POOL);
+        assertEq(current, wallets);
+        assertEq(shares[0], 3333);
+        assertEq(shares[2], 3334);
+        assertEq(revision, 1);
+        vm.expectRevert(
+            abi.encodeWithSelector(ClassicModuleFeeLedgerV1.UnauthorizedWalletRotation.selector, _creator(0))
+        );
+        vm.prank(_creator(0));
+        ledger.changeCreatorWallet(FIRST_POOL, 0, _creator(0));
+        ledger.claim(_creator(0));
+        assertEq(_creator(0).balance, 3333);
+        _assertSolvent();
+    }
+
+    function test_ctoRejectsStaleAdminActionsButOwnerSelfRotationCannotVetoIt() public {
+        _registerThreeCreators(FIRST_POOL, 0);
+        address[] memory wallets = _creators(3);
+        wallets[0] = REPLACEMENT;
+        vm.prank(_creator(1));
+        ledger.changeCreatorWallet(FIRST_POOL, 1, address(0x7777));
+        assertEq(ledger.creatorAdminRevision(FIRST_POOL), 0);
+        vm.prank(ADMIN);
+        ledger.replaceCreatorWallets(FIRST_POOL, wallets, 0, block.timestamp + 1 hours);
+        assertEq(ledger.creatorWalletAt(FIRST_POOL, 1), _creator(1));
+        wallets[0] = address(0x8888);
+        vm.expectRevert(abi.encodeWithSelector(ClassicModuleFeeLedgerV1.StaleCreatorAdminRevision.selector, 0, 1));
+        vm.prank(TREASURY);
+        ledger.replaceCreatorWallets(FIRST_POOL, wallets, 0, block.timestamp + 1 hours);
+        assertEq(ledger.creatorWalletAt(FIRST_POOL, 0), REPLACEMENT);
+        vm.expectRevert(abi.encodeWithSelector(ClassicModuleFeeLedgerV1.UnauthorizedWalletRotation.selector, ADMIN));
+        vm.prank(ADMIN);
+        ledger.changeCreatorWallet(FIRST_POOL, 0, address(0x8888));
+    }
+
+    function test_ctoRejectsExpiredUnauthorizedAndInvalidBatchesAtomically() public {
+        _registerThreeCreators(FIRST_POOL, 0);
+        address[] memory wallets = _creators(3);
+        vm.expectRevert(
+            abi.encodeWithSelector(ClassicModuleFeeLedgerV1.UnauthorizedWalletRotation.selector, _creator(0))
+        );
+        vm.prank(_creator(0));
+        ledger.replaceCreatorWallets(FIRST_POOL, wallets, 0, block.timestamp + 1 hours);
+        vm.expectRevert(abi.encodeWithSelector(ClassicModuleFeeLedgerV1.CreatorAdminDeadlineExpired.selector, 0));
+        vm.prank(ADMIN);
+        ledger.replaceCreatorWallets(FIRST_POOL, wallets, 0, 0);
+        uint256 deadline = block.timestamp;
+        vm.warp(deadline + 1);
+        vm.expectRevert(abi.encodeWithSelector(ClassicModuleFeeLedgerV1.CreatorAdminDeadlineExpired.selector, deadline));
+        vm.prank(ADMIN);
+        ledger.replaceCreatorWallets(FIRST_POOL, wallets, 0, deadline);
+        wallets[0] = REPLACEMENT;
+        wallets[2] = address(0);
+        vm.expectRevert(abi.encodeWithSelector(ClassicModuleFeeLedgerV1.InvalidWallet.selector, address(0)));
+        vm.prank(ADMIN);
+        ledger.replaceCreatorWallets(FIRST_POOL, wallets, 0, block.timestamp + 1 hours);
+        assertEq(ledger.creatorWalletAt(FIRST_POOL, 0), _creator(0));
+        assertEq(ledger.creatorAdminRevision(FIRST_POOL), 0);
+        vm.expectRevert(abi.encodeWithSelector(ClassicModuleFeeLedgerV1.InvalidCreatorCount.selector, 1));
+        vm.prank(ADMIN);
+        ledger.replaceCreatorWallets(FIRST_POOL, new address[](1), 0, block.timestamp + 1 hours);
+    }
+
+    function test_ctoReaffirmationCancelsAnOlderPendingAdminDecision() public {
+        _register(FIRST_POOL, 0);
+        address[] memory current = _creators(1);
+        vm.prank(ADMIN);
+        ledger.replaceCreatorWallets(FIRST_POOL, current, 0, block.timestamp + 1 hours);
+        assertEq(ledger.creatorAdminRevision(FIRST_POOL), 1);
+        current[0] = REPLACEMENT;
+        vm.expectRevert(abi.encodeWithSelector(ClassicModuleFeeLedgerV1.StaleCreatorAdminRevision.selector, 0, 1));
+        vm.prank(TREASURY);
+        ledger.replaceCreatorWallets(FIRST_POOL, current, 0, block.timestamp + 1 hours);
+        assertEq(ledger.creatorWalletAt(FIRST_POOL, 0), _creator(0));
     }
 
     function test_rotationRejectsOtherOwnersInvalidSlotsAndZeroWallet() public {
@@ -357,7 +456,7 @@ contract ClassicModuleFeeLedgerV1Test is Test {
         vm.expectRevert(abi.encodeWithSelector(ClassicModuleFeeLedgerV1.InvalidCreatorIndex.selector, 3));
         ledger.changeCreatorWallet(FIRST_POOL, 3, REPLACEMENT);
         vm.expectRevert(abi.encodeWithSelector(ClassicModuleFeeLedgerV1.InvalidWallet.selector, address(0)));
-        vm.prank(ADMIN);
+        vm.prank(_creator(0));
         ledger.changeCreatorWallet(FIRST_POOL, 0, address(0));
         vm.prank(_creator(0));
         ledger.changeCreatorWallet(FIRST_POOL, 0, REPLACEMENT);

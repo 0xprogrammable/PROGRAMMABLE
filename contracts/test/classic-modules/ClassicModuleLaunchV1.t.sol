@@ -30,6 +30,8 @@ import { ClassicModuleLaunchPolicyV1 } from "../../src/classic-modules/ClassicMo
 import { ClassicModuleTypes as T } from "../../src/classic-modules/ClassicModuleTypes.sol";
 import { FallingCreatorFeeV1 } from "../../src/classic-modules/modules/FallingCreatorFeeV1.sol";
 import { QuoteTradeLimitV1 } from "../../src/classic-modules/modules/QuoteTradeLimitV1.sol";
+import { ClassicCreatorFeeSplitterV1 } from "../../src/classic-modules/ClassicCreatorFeeSplitterV1.sol";
+import { ClassicModuleFeeLedgerV1 } from "../../src/classic-modules/ClassicModuleFeeLedgerV1.sol";
 
 interface IClassicModuleLedgerForLaunchTest {
     function claimable(address beneficiary) external view returns (uint256);
@@ -181,6 +183,34 @@ contract ClassicModuleLaunchV1Test is Deployers {
             total += claim;
         }
         assertEq(total, creatorFee);
+    }
+
+    function test_realLaunchWithSplitterAndAdminCtoKeepsOldTeamEarnedFees() public {
+        address first = address(0x1111);
+        address second = address(0x2222);
+        ClassicCreatorFeeSplitterV1 splitter =
+            new ClassicCreatorFeeSplitterV1(abi.encodePacked(first, uint16(2000), second, uint16(8000)));
+        ClassicModuleLaunchV1.LaunchParameters memory parameters = _parameters();
+        parameters.buyCreatorFeeBps = 300;
+        parameters.sellCreatorFeeBps = 500;
+        parameters.creatorWallets[0] = address(splitter);
+        ClassicModuleLaunchV1.LaunchRecord memory result = _launch(parameters, 0.01 ether);
+        uint256 oldTeamFees = ledger.claimable(address(splitter));
+        assertEq(oldTeamFees, 0.01 ether * 300 / 10_000);
+        ClassicModuleFeeLedgerV1 concrete = hook.ledger();
+        address[] memory replacement = new address[](1);
+        replacement[0] = address(0xC700);
+        vm.prank(concrete.rewardAdmin());
+        concrete.replaceCreatorWallets(result.poolId, replacement, 0, block.timestamp + 1 hours);
+        _swap(result.token, true, -int256(0.01 ether), 0.01 ether);
+        assertEq(ledger.claimable(address(splitter)), oldTeamFees);
+        assertEq(ledger.claimable(replacement[0]), oldTeamFees);
+        ledger.claim(address(splitter));
+        bytes32[] memory proof = new bytes32[](1);
+        proof[0] = splitter.leafHash(1, second, 8000);
+        assertEq(splitter.claim(0, first, 2000, proof), oldTeamFees * 2000 / 10_000);
+        _claimAndCheck(replacement[0]);
+        _assertLockedPosition(result);
     }
 
     function test_catalogueDisableStopsNewLaunchButLeavesExistingRecipeTrading() public {

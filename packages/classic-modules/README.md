@@ -132,3 +132,21 @@ The family owner may rotate its future payout wallet in the registry. Existing c
 Local queue storage uses immutable content-addressed directories, bounded reads, no symlinks/traversal, atomic exclusive writes and append-only ordered review records. Repeating the same submission is idempotent. A changed source/schema binding creates a new request. Review records include the immutable package digest. A crash can leave a `review.lock`; the local operator must inspect the queue and confirm that no reviewer process remains before removing that exact lock. This CLI is a single-operator local reference, not a public multi-tenant intake server.
 
 See `docs/architecture/classic-modules-contributing-v1.md` in the repository for the review requirements and API boundary.
+
+## Creator payouts and administrative CTO changes
+
+`buildCreatorSplit([{ wallet, shareBps }])` prepares an immutable native-fee splitter for 1–1,000 ordinary wallet addresses. It sorts and validates the complete allocation, requires positive basis-point shares totaling 10,000, and returns compact constructor bytes, the root, and individual claim proofs. This is a payout list, not a list of executed hook modules.
+
+```sh
+node bin/programmable-classic-modules.mjs prepare-creator-split --recipients recipients.json --out creator-split.json
+```
+
+The input is a JSON array, for example `[{"wallet":"0x1111111111111111111111111111111111111111","shareBps":2000},{"wallet":"0x2222222222222222222222222222222222222222","shareBps":8000}]`. The output is a local unsigned preparation. Deployment uses the exact compiled `ClassicCreatorFeeSplitterFactoryV1` release; no address or runtime hash is inferred from these examples. Keep the allocation/proofs available; they can be reconstructed from the full onchain `AllocationConfigured` event.
+
+The splitter can receive one existing Creator fee slot (or all slots). Its internal shares are immutable. For a CTO, `encodeCreatorTakeover({ ledger, poolId, newWallets, expectedAdminRevision, deadline })` encodes the administrator's call to `replaceCreatorWallets`. Read `creatorRecipients(poolId)` and the bound administrator addresses from the intended ledger, verify the target chain/source, and review all new recipients before the wallet signs. Current slot weights are unchanged; repeated destination wallets consolidate them. The platform `rewardAdmin` or `treasury` must send this transaction. A normal Creator can only rotate their own slot with `changeCreatorWallet`.
+
+Admin revisions change only on administrative batches. Creator self-rotation cannot veto an administrative CTO. Reaffirming the same recipients consumes the current admin revision and cancels older pending revision-bound decisions. A deadline limits when an unsigned/prepared request may be executed.
+
+Past ledger credits remain assigned to the old wallet or old splitter. Anyone can call `ledger.claim(splitterAddress)` to fund that splitter, then `splitter.claim(index, wallet, shareBps, proof)` pays the canonical recipient. Only the beneficiary can redirect their own withdrawal with `claimTo`. The splitter has no root setter, owner, fee setter, or sweep. Changing the destination of future fees to a new splitter allows a new team/allocation without rewriting the old team's claim rights.
+
+This does not change Creator fee rates, the fixed 20 bps or module-author shares. A coin with zero Creator fees still earns zero Creator fees after CTO. The administrative dashboard, application workflow and public proof-serving endpoint remain future integration. See `docs/architecture/classic-creator-cto-v1.md`.

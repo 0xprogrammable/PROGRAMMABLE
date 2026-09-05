@@ -52,6 +52,8 @@ contract ClassicModuleFeeLedgerV1 is IUnlockCallback, ReentrancyGuardTransient {
     mapping(bytes32 poolId => address[]) private _creatorWallets;
     mapping(bytes32 poolId => uint16[]) private _creatorSharesBps;
     mapping(bytes32 poolId => bytes32[]) private _moduleFamilies;
+    /// @notice Counts only administrative recipient changes. Creator self-rotation cannot veto a CTO.
+    mapping(bytes32 poolId => uint256) public creatorAdminRevision;
 
     mapping(address beneficiary => uint256) public claimable;
     mapping(address beneficiary => uint256) public claimedBy;
@@ -77,6 +79,8 @@ contract ClassicModuleFeeLedgerV1 is IUnlockCallback, ReentrancyGuardTransient {
     error InvalidCreatorIndex(uint256 index);
     error UnauthorizedWalletRotation(address caller);
     error PayoutWalletUnchanged(address wallet);
+    error StaleCreatorAdminRevision(uint256 expected, uint256 actual);
+    error CreatorAdminDeadlineExpired(uint256 deadline);
     error InsufficientBacking(uint256 available, uint256 required);
     error NoFeesToClaim(address beneficiary);
     error UnauthorizedPoolManager(address caller);
@@ -103,6 +107,13 @@ contract ClassicModuleFeeLedgerV1 is IUnlockCallback, ReentrancyGuardTransient {
         uint256 effectiveCreatorFeesReceived
     );
     event FeesClaimed(address indexed beneficiary, address indexed recipient, address indexed caller, uint256 amount);
+    event CreatorRecipientsReplaced(
+        bytes32 indexed poolId,
+        address indexed administrator,
+        uint256 indexed adminRevision,
+        address[] wallets,
+        uint256 effectiveCreatorFeesReceived
+    );
 
     constructor(
         IPoolManager poolManager_,
@@ -194,18 +205,64 @@ contract ClassicModuleFeeLedgerV1 is IUnlockCallback, ReentrancyGuardTransient {
         emit FeesAccrued(poolId, platformFee, creatorFee, totalCredited - creditedBefore, _poolDust(accounting));
     }
 
-    /// @notice Rotates one creator slot's future payout address; its share and previous credits stay unchanged.
+    /// @notice The current beneficiary rotates its own slot; administrators use the revision-bound batch API.
     function changeCreatorWallet(bytes32 poolId, uint256 index, address newWallet) external nonReentrant {
         _requireRegistered(poolId);
         if (index >= _creatorWallets[poolId].length) revert InvalidCreatorIndex(index);
         address previousWallet = _creatorWallets[poolId][index];
-        if (msg.sender != previousWallet && msg.sender != rewardAdmin && msg.sender != treasury) {
+        if (msg.sender != previousWallet) {
             revert UnauthorizedWalletRotation(msg.sender);
         }
         _validateWallet(newWallet);
         if (newWallet == previousWallet) revert PayoutWalletUnchanged(newWallet);
         _creatorWallets[poolId][index] = newWallet;
         emit CreatorWalletChanged(poolId, index, previousWallet, newWallet, poolAccounting[poolId].creatorReceived);
+    }
+
+    /// @notice An administrator replaces or reaffirms all future Creator recipients atomically, including a CTO.
+    /// @dev Repeated destinations consolidate existing slots without changing their immutable weights.
+    ///      Creator self-rotations do not increment the administrative revision: the outgoing team has no veto.
+    ///      Old credited fees and all platform/module-author entitlements remain untouched.
+    ///      Reaffirming the current wallets also advances the revision, cancelling older pending admin decisions.
+    function replaceCreatorWallets(
+        bytes32 poolId,
+        address[] calldata newWallets,
+        uint256 expectedAdminRevision,
+        uint256 deadline
+    ) external nonReentrant {
+        if (msg.sender != rewardAdmin && msg.sender != treasury) {
+            revert UnauthorizedWalletRotation(msg.sender);
+        }
+        _requireRegistered(poolId);
+        if (deadline == 0 || block.timestamp > deadline) revert CreatorAdminDeadlineExpired(deadline);
+        uint256 currentRevision = creatorAdminRevision[poolId];
+        if (expectedAdminRevision != currentRevision) {
+            revert StaleCreatorAdminRevision(expectedAdminRevision, currentRevision);
+        }
+        uint256 count = _creatorWallets[poolId].length;
+        if (newWallets.length != count) revert InvalidCreatorCount(newWallets.length);
+        for (uint256 index; index < count; ++index) {
+            _validateWallet(newWallets[index]);
+        }
+        creatorAdminRevision[poolId] = currentRevision + 1;
+        uint256 earned = poolAccounting[poolId].creatorReceived;
+        for (uint256 index; index < count; ++index) {
+            address previous = _creatorWallets[poolId][index];
+            if (newWallets[index] == previous) continue;
+            _creatorWallets[poolId][index] = newWallets[index];
+            emit CreatorWalletChanged(poolId, index, previous, newWallets[index], earned);
+        }
+        emit CreatorRecipientsReplaced(poolId, msg.sender, currentRevision + 1, newWallets, earned);
+    }
+
+    /// @notice Current dashboard state; configurationHash separately preserves the original launch allocation.
+    function creatorRecipients(bytes32 poolId)
+        external
+        view
+        returns (address[] memory wallets, uint16[] memory sharesBps, uint256 adminRevision)
+    {
+        _requireRegistered(poolId);
+        return (_creatorWallets[poolId], _creatorSharesBps[poolId], creatorAdminRevision[poolId]);
     }
 
     function claim() external nonReentrant returns (uint256 amount) {
