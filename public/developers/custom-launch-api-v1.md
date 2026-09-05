@@ -1,5 +1,21 @@
 # Programmable Custom Launch API
 
+## Start with the launch details
+
+The shared intake is published at `customLaunchApi.intake` in [live discovery](https://programmable.market/.well-known/programmable.json). Complete it before following either chain-specific guide.
+
+1. Confirm the project's intended chain: Ethereum Mainnet (1) or Robinhood Chain Mainnet (4663). Reuse an explicit earlier answer; ask if the choice is missing, ambiguous or contradictory. Uniswap V4 identifies a protocol, not a chain. Never infer the chain from the API key, connected wallet or project defaults, and never fall back to another chain when a gate fails.
+
+2. Before building or packing, collect the token name, ticker/symbol, useful public bio/description, actual image file and its public URI, website and X profile. Reuse answers and assets already supplied by the user; ask only for missing or conflicting values. Ask whether Telegram, Discord, documentation, GitHub or other links are available; these additional links are optional. Never invent metadata, image bytes or public URLs. Use the selected chain's image rules.
+
+3. Before submission, show the complete summary: chain, launch wallet, token name, ticker, bio, image preview and public URI, website, X and every additional link. Resolve contradictions with the user. The website shows the same bound metadata read-only before wallet authorization. To change metadata, repack and revalidate a new request. API access does not authorize the agent to sign or broadcast; the controller reviews and signs the exact wallet action separately.
+
+Do not begin chain-specific implementation until the chain is explicit. Do not build, pack or submit while required intake values are missing or contradictory. Existing explicit user answers remain valid; do not ask for them again.
+
+For the image, supply the actual local bytes and their matching public HTTPS, IPFS or Arweave URI. Ethereum V3 accepts PNG, JPEG, WebP or GIF; Robinhood V4 accepts PNG or single-frame GIF. A filename or invented image URL is not a supplied image.
+
+## API versions and release gates
+
 V3.3 is public and live: general custom-hook launch creation, list and single-resource reads are available at
 `https://api.programmable.market` for wallet keys, partner roots and bounded partner subkeys. V2 and V1 history remain
 available for existing requests, and their schemas remain published. Fresh authenticated `POST /v2/custom-launches`
@@ -38,8 +54,8 @@ capabilities and readiness. The authenticated API server selects `robinhood-laun
 `robinhood-production-launch` from the chain binding; callers cannot select a policy profile.
 
 Create one platform API key at <https://programmable.market/developers/api-keys> and provide it through
-`PROGRAMMABLE_API_KEY`. Select Ethereum V3 or Robinhood V4 using that chain's discovery contract and the grants
-reported for the key. The key authorizes API requests; the user separately reviews and signs their onchain launch
+`PROGRAMMABLE_API_KEY`. Follow the user's explicit Ethereum or Robinhood choice, then verify that chain's discovery
+contract and the grants reported for the key. A grant does not select the chain. The key authorizes API requests; the user separately reviews and signs their onchain launch
 transaction and pays gas.
 
 V4 contract pointers:
@@ -103,12 +119,12 @@ The V4 resource uses these exact statuses:
 | `failed` | Processing is terminal. Read the bound failure and remediation before creating a new request. |
 
 The CLI only prepares, validates, submits request bytes, polls status and displays the exact transaction. It never
-signs or broadcasts. Guard V4 polling with the explicit API version and chain:
+signs or broadcasts. Set `LAUNCH_ID` to the returned `launchId`, not `requestId`. Guard V4 polling with the explicit API version and chain:
 
 ```sh
-programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until authorized
+programmable-launch status LAUNCH_ID --api-version 4 --chain-id 4663 --watch --until authorized
 # Stop for separate controller-wallet review, signing and broadcast.
-programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until finalized
+programmable-launch status LAUNCH_ID --api-version 4 --chain-id 4663 --watch --until finalized
 ```
 
 Provider source verification starts after `finalized` and remains independent. Finality does not imply

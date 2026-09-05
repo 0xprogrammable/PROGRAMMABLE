@@ -1287,6 +1287,19 @@ export function walletProjectMetadataRequirementsV1(
   });
 }
 
+function requiresCurrentProjectMetadata(launch: LaunchResource) {
+  return launch.routeId === "custom-launch:create:v4"
+    || launch.launchProfileVersion === "3.3.0"
+    || launch.launchProfileVersion === "3.4.0";
+}
+
+export function walletProjectMetadataReadyForReviewV1(launch: LaunchResource) {
+  const summary = walletProjectMetadataSummaryV1(launch);
+  return summary !== null
+    && (!requiresCurrentProjectMetadata(launch)
+      || walletProjectMetadataRequirementsV1(summary.projectMetadata).complete);
+}
+
 export function walletProjectMetadataSummaryV1(
   launch: LaunchResource,
 ): WalletProjectMetadataBindingV1 | null {
@@ -1796,8 +1809,7 @@ function projectMetadataLinkDisplayLabels(
   links: CustomLaunchProjectMetadataV1["presentation"]["links"],
 ) {
   const bases = links.map((link) => {
-    const hostname = new URL(link.uri).hostname.replace(/^www\./u, "");
-    return `${projectMetadataLinkLabels[link.kind]} · ${hostname}`;
+    return `${projectMetadataLinkLabels[link.kind]} · ${link.uri}`;
   });
   const totals = new Map<string, number>();
   for (const base of bases) totals.set(base, (totals.get(base) ?? 0) + 1);
@@ -1807,6 +1819,37 @@ function projectMetadataLinkDisplayLabels(
     seen.set(base, count);
     return (totals.get(base) ?? 0) > 1 ? `${base} ${count}` : base;
   });
+}
+
+export function DeveloperLaunchMetadataPreview({
+  launch,
+}: Readonly<{ launch: LaunchResource }>) {
+  const binding = walletProjectMetadataSummaryV1(launch);
+  if (binding) return <ProjectMetadataReview launch={launch} binding={binding} />;
+  const legacy = walletLegacyProjectBindingV1(launch);
+  if (legacy) {
+    return (
+      <div className={styles.metadataUnavailable} role="status">
+        <strong>Legacy launch identity</strong>
+        <p>
+          This immutable {legacy.launchProfileVersion}
+          {" request predates bound project metadata. Exact retries remain available, but no project name, symbol, image or links can be reviewed for this record."}
+        </p>
+      </div>
+    );
+  }
+  if (launch.routeId !== "custom-launch:create:v3"
+    && launch.routeId !== "custom-launch:create:v4") return null;
+  return (
+    <div className={styles.metadataUnavailable} role="status">
+      <strong>Bound project metadata unavailable</strong>
+      <p>
+        {launch.requestHash === null
+          ? "Load the exact wallet review to see the launch details supplied by your agent."
+          : "Ask your agent to provide the missing or corrected launch details, then repack and submit a new request. This record remains visible; its bound details cannot be edited here."}
+      </p>
+    </div>
+  );
 }
 
 function ProjectMetadataReview({
@@ -1822,12 +1865,13 @@ function ProjectMetadataReview({
   const imagePreview = useVerifiedProjectImageV1(presentation.image);
   const linkLabels = projectMetadataLinkDisplayLabels(presentation.links);
   const requirements = walletProjectMetadataRequirementsV1(projectMetadata);
-  const completeForProfile = !["3.3.0", "3.4.0"].includes(
-    launch.launchProfileVersion ?? "",
-  )
+  const completeForProfile = !requiresCurrentProjectMetadata(launch)
     || requirements.complete;
   const website = presentation.links.find((link) => link.kind === "website");
   const xLink = presentation.links.find((link) => link.kind === "x");
+  const chain = launch.routeId === "custom-launch:create:v4"
+    ? { name: "Robinhood Chain", id: "4663" }
+    : { name: "Ethereum Mainnet", id: "1" };
   const resourceIdentity = launchResourceIdentity(launch);
   return (
     <section
@@ -1857,8 +1901,7 @@ function ProjectMetadataReview({
       </div>
       <div className={styles.projectRequirementHeading}>
         <h5>
-          {launch.launchProfileVersion === "3.3.0"
-            || launch.launchProfileVersion === "3.4.0"
+          {requiresCurrentProjectMetadata(launch)
             ? "Required launch details"
             : "Bound legacy launch details"}
         </h5>
@@ -1867,6 +1910,10 @@ function ProjectMetadataReview({
         </span>
       </div>
       <dl className={styles.projectRequirements}>
+        <div className={styles.projectChain}>
+          <dt>Chain</dt>
+          <dd>{chain.name} · {chain.id}</dd>
+        </div>
         <div data-complete={requirements.name ? "true" : "false"}>
           <dt>Name</dt>
           <dd>{requirements.name ? token.name : "Missing"}</dd>
@@ -1876,7 +1923,7 @@ function ProjectMetadataReview({
           <dd>{requirements.symbol ? `$${token.symbol}` : "Missing"}</dd>
         </div>
         <div data-complete={requirements.description ? "true" : "false"}>
-          <dt>Coin description</dt>
+          <dt>Bio</dt>
           <dd>{requirements.description ? "Included below" : "Missing"}</dd>
         </div>
         <div data-complete={requirements.image ? "true" : "false"}>
@@ -1888,7 +1935,7 @@ function ProjectMetadataReview({
           <dd>
             {website ? (
               <a href={website.uri} rel="noreferrer" target="_blank">
-                {new URL(website.uri).hostname.replace(/^www\./u, "")}
+                {website.uri}
                 <span className={styles.visuallyHidden}>, opens in a new tab</span>
               </a>
             ) : "Missing"}
@@ -1899,7 +1946,7 @@ function ProjectMetadataReview({
           <dd>
             {xLink ? (
               <a href={xLink.uri} rel="noreferrer" target="_blank">
-                {new URL(xLink.uri).hostname.replace(/^www\./u, "")}
+                {xLink.uri}
                 <span className={styles.visuallyHidden}>, opens in a new tab</span>
               </a>
             ) : "Missing"}
@@ -1908,13 +1955,12 @@ function ProjectMetadataReview({
       </dl>
       {presentation.description ? (
         <div className={styles.projectDescription}>
-          <strong>Coin description</strong>
+          <strong>Bio</strong>
           <p>{presentation.description}</p>
         </div>
-      ) : launch.launchProfileVersion === "3.3.0"
-        || launch.launchProfileVersion === "3.4.0" ? (
+      ) : requiresCurrentProjectMetadata(launch) ? (
         <p className={styles.projectMissing} role="alert">
-          Add a coin description and repack this request before signing.
+          Ask your agent to add a bio, then repack and submit a new request.
         </p>
       ) : null}
       {presentation.image && imagePreview.state !== "verified" ? (
@@ -1945,6 +1991,15 @@ function ProjectMetadataReview({
           ))}
         </nav>
       ) : null}
+      {!presentation.links.some((link) => link.kind === "telegram")
+        || !presentation.links.some((link) => link.kind === "discord") ? (
+        <p className={styles.projectOptionalLinks}>
+          {!presentation.links.some((link) => link.kind === "telegram")
+            ? "Telegram: not supplied. " : ""}
+          {!presentation.links.some((link) => link.kind === "discord")
+            ? "Discord: not supplied." : ""}
+        </p>
+      ) : null}
       <dl className={styles.projectBinding}>
         <div>
           <dt>Metadata digest</dt>
@@ -1961,12 +2016,13 @@ function ProjectMetadataReview({
       {completeForProfile ? (
         <p className={styles.projectBoundary}>
           Review this immutable summary before either wallet step. Changing any
-          bound field requires a newly packed request.
+          bound field requires a newly packed request. Ask your agent to make
+          changes; this preview is read only.
         </p>
       ) : (
         <p className={styles.projectBoundary}>
-          Every required launch detail must be present in the immutable request
-          before a wallet signature or transaction can open.
+          Ask your agent to collect the missing launch details, then repack and
+          submit a new request before opening your wallet. This preview is read only.
         </p>
       )}
     </section>
@@ -3123,6 +3179,7 @@ export function DeveloperLaunchHistory({
     try {
       if (launch.routeId === "custom-launch:create:v4") {
         if (launch.rawResourceV4 === null
+          || !walletProjectMetadataReadyForReviewV1(launch)
           || !["wallet_action_required", "awaiting_wallet_signature"]
             .includes(launch.status)) {
           throw new Error(
@@ -3135,8 +3192,9 @@ export function DeveloperLaunchHistory({
           loadFreshResource: async () => {
             const current = await readLaunchResource(launch);
             updateLaunch(current);
-            if (current.rawResourceV4 === null) {
-              throw new Error("The API omitted the exact Robinhood Chain wallet resource.");
+            if (current.rawResourceV4 === null
+              || !walletProjectMetadataReadyForReviewV1(current)) {
+              throw new Error("The API omitted the exact Robinhood Chain wallet resource or its complete bound launch details.");
             }
             return current.rawResourceV4;
           },
@@ -3354,11 +3412,8 @@ export function DeveloperLaunchHistory({
             const projectMetadataBinding = walletProjectMetadataBindingV1(
               reviewLaunch,
             );
-            const projectMetadataReadyForProfile = projectMetadataSummary !== null
-              && (!["3.3.0", "3.4.0"].includes(
-                reviewLaunch.launchProfileVersion ?? "",
-              )
-                || projectMetadataRequirements?.complete === true);
+            const projectMetadataReadyForProfile =
+              walletProjectMetadataReadyForReviewV1(reviewLaunch);
             const projectRequestBinding = walletProjectRequestBindingV1(
               reviewLaunch,
             );
@@ -3439,42 +3494,17 @@ export function DeveloperLaunchHistory({
                     </div>
                   ) : null}
                 </dl>
-                {projectMetadataSummary ? (
-                  <ProjectMetadataReview
-                    binding={projectMetadataSummary}
-                    launch={reviewLaunch}
-                  />
-                ) : projectRequestBinding?.mode === "legacy-exact-retry" ? (
-                  <div className={styles.metadataUnavailable} role="status">
-                    <strong>Legacy launch identity</strong>
-                    <p>
-                      This immutable {projectRequestBinding.launchProfileVersion}
-                      {" request predates bound project metadata. Exact retries remain available, but no project name, symbol, image or links can be reviewed for this record."}
-                    </p>
-                  </div>
-                ) : reviewLaunch.routeId === "custom-launch:create:v3" ? (
-                  <div className={styles.metadataUnavailable} role="status">
-                    <strong>Bound project metadata unavailable</strong>
-                    <p>
-                      This record remains visible, but no funding signature or
-                      Router transaction can open until the current metadata,
-                      digest and immutable request binding are returned together.
-                      Repack this current-profile request with the latest CLI.
-                    </p>
-                  </div>
-                ) : null}
+                <DeveloperLaunchMetadataPreview launch={reviewLaunch} />
                 {projectMetadataSummary
                   && projectMetadataRequirements
-                  && (reviewLaunch.launchProfileVersion === "3.3.0"
-                    || reviewLaunch.launchProfileVersion === "3.4.0")
+                  && requiresCurrentProjectMetadata(reviewLaunch)
                   && !projectMetadataRequirements.complete ? (
                     <div className={styles.metadataUnavailable} role="alert">
                       <strong>Required launch details are missing</strong>
                       <p>
-                        Name, ticker, coin description, profile image, website
-                        and X must all be bound before signing. Repack this
-                        request with the missing details; no wallet action can
-                        open from this record.
+                        Ask your agent to include the name, ticker, bio, profile
+                        image, website and X, then repack and submit a new
+                        request. These details must be bound before signing.
                       </p>
                     </div>
                   ) : null}
@@ -3756,6 +3786,7 @@ export function DeveloperLaunchHistory({
                                 || checkingId !== null
                                 || Boolean(pollingIds[key])
                                 || handoffExpired
+                                || !projectMetadataReadyForProfile
                               }
                               type="button"
                               onClick={() => void submitWalletTransaction(reviewLaunch)}

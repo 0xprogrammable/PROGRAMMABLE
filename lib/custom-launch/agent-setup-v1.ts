@@ -1,3 +1,56 @@
+export const PROGRAMMABLE_AGENT_INTAKE_V1 = Object.freeze({
+  schemaVersion: "programmable.custom-launch-agent-intake.v1" as const,
+  scope: "agent-preparation-not-server-authorization" as const,
+  chainSelection: Object.freeze({
+    requiredBefore: Object.freeze([
+      "chain-specific-implementation", "build", "pack", "submit",
+    ] as const),
+    authority: "explicit-user-choice" as const,
+    reuseExplicitPriorAnswer: true as const,
+    missingOrAmbiguous: "ask-user-before-proceeding" as const,
+    neverInferFrom: Object.freeze([
+      "api-key", "connected-wallet", "project-defaults", "uniswap-v4",
+    ] as const),
+    choices: Object.freeze([
+      Object.freeze({ chainId: 1, caip2: "eip155:1", name: "Ethereum Mainnet", apiVersion: "3" }),
+      Object.freeze({ chainId: 4663, caip2: "eip155:4663", name: "Robinhood Chain Mainnet", apiVersion: "4" }),
+    ] as const),
+  }),
+  metadata: Object.freeze({
+    requiredBefore: Object.freeze(["build", "pack", "submit"] as const),
+    required: Object.freeze([
+      "token.name", "token.symbol", "presentation.description",
+      "presentation.image.sourcePath", "presentation.image.uri",
+      "presentation.links.website", "presentation.links.x",
+    ] as const),
+    askIfAvailable: Object.freeze([
+      "telegram", "discord", "documentation", "github", "other",
+    ] as const),
+    additionalLinksRequired: false as const,
+    reuseExplicitPriorAnswers: true as const,
+    inventedValuesAllowed: false as const,
+    actualImageBytesRequired: true as const,
+    imagePolicy: "selected-chain-pack-config-schema" as const,
+  }),
+  review: Object.freeze({
+    beforeSubmit: "show-complete-user-summary-and-resolve-contradictions" as const,
+    website: "same-bound-read-only-metadata" as const,
+    changedMetadata: "repack-and-revalidate-a-new-request" as const,
+    walletAuthority: "separate-controller-review-and-sign" as const,
+  }),
+  instructions: Object.freeze([
+    "1. Confirm the project's intended chain: Ethereum Mainnet (1) or Robinhood Chain Mainnet (4663). Reuse an explicit earlier answer; ask if the choice is missing, ambiguous or contradictory. Uniswap V4 identifies a protocol, not a chain. Never infer the chain from the API key, connected wallet or project defaults, and never fall back to another chain when a gate fails.",
+    "2. Before building or packing, collect the token name, ticker/symbol, useful public bio/description, actual image file and its public URI, website and X profile. Reuse answers and assets already supplied by the user; ask only for missing or conflicting values. Ask whether Telegram, Discord, documentation, GitHub or other links are available; these additional links are optional. Never invent metadata, image bytes or public URLs. Use the selected chain's image rules.",
+    "3. Before submission, show the complete summary: chain, launch wallet, token name, ticker, bio, image preview and public URI, website, X and every additional link. Resolve contradictions with the user. The website shows the same bound metadata read-only before wallet authorization. To change metadata, repack and revalidate a new request. API access does not authorize the agent to sign or broadcast; the controller reviews and signs the exact wallet action separately.",
+    "Do not begin chain-specific implementation until the chain is explicit. Do not build, pack or submit while required intake values are missing or contradictory. Existing explicit user answers remain valid; do not ask for them again.",
+  ] as const),
+});
+
+export const PROGRAMMABLE_AGENT_INTAKE_TEXT_V1 = [
+  "Start with the launch details",
+  ...PROGRAMMABLE_AGENT_INTAKE_V1.instructions,
+].join("\n");
+
 export const PROGRAMMABLE_AGENT_SETUP_LINKS_V1 = Object.freeze({
   discovery: "https://programmable.market/.well-known/programmable.json",
   capabilities: "https://api.programmable.market/v3/capabilities",
@@ -31,11 +84,13 @@ export const PROGRAMMABLE_AGENT_SETUP_LINKS_V1 = Object.freeze({
 export const PROGRAMMABLE_AGENT_SETUP_TEXT_V1 = Object.freeze([
   "Programmable Custom Launch agent setup",
   "",
+  PROGRAMMABLE_AGENT_INTAKE_TEXT_V1,
+  "",
   "Use the preconfigured $PROGRAMMABLE_API_KEY from encrypted secrets or the environment. Never paste the key into chat, a prompt, source code, or command history.",
   "The API key grants API access only. It does not contain policy or integration instructions.",
   "",
   `Start here: ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.discovery}`,
-  "Select the project's intended chain before installing a CLI or preparing request bytes: Ethereum Mainnet (1, eip155:1) uses V3; Robinhood Chain Mainnet (4663, eip155:4663) uses V4. If the project does not identify its chain, ask for it. Never choose Ethereum merely because the key came from the shared API keys page, and never fall back to another chain when a gate fails.",
+  "Read customLaunchApi.intake in discovery and complete the launch details above before chain-specific implementation. Follow the user's explicit choice: Ethereum Mainnet (1, eip155:1) uses V3; Robinhood Chain Mainnet (4663, eip155:4663) uses V4.",
   "The same API-key entry point serves both chains. A key needs custom-launch:create and custom-launch:read plus server authorization for the selected chain; its presence does not prove a chain grant. A wallet key's launchWallet must equal its wallet binding. Keep credentials on https://api.programmable.market and follow only the selected chain's instructions below.",
   "",
   "Robinhood Chain Mainnet only (V4, chain 4663)",
@@ -51,8 +106,8 @@ export const PROGRAMMABLE_AGENT_SETUP_TEXT_V1 = Object.freeze([
   "After all public release gates pass: programmable-launch pack --config programmable-launch.config.json --output launch.json",
   "Then: programmable-launch validate launch.json --config programmable-launch.config.json --remote",
   "Follow the V4 preflight's server-authored disposition and typed remediation. Preflight is not admission or a wallet action. If ready for submission, submit the exact validated bytes with programmable-launch submit launch.json --config programmable-launch.config.json. Keep the CLI journal and Idempotency-Key unchanged for retries. An action_required resource requires its specified correction, rebuild and a new immutable request; never bypass a server decision.",
-  "programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until authorized",
-  "At authorized, awaiting_wallet_signature or wallet_action_required, open only the server-provided same-origin walletHandoffUrl and stop for the controller to review chain 4663, sender, Router, value, calldata and expiry. The API key and CLI never sign or broadcast. After the controller sends the exact transaction: programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until finalized. Source verification, indexing, trading and publication remain separate from finality. The following Ethereum instructions do not apply to this V4 request.",
+  "Use the returned launchId as LAUNCH_ID, not requestId: programmable-launch status LAUNCH_ID --api-version 4 --chain-id 4663 --watch --until authorized",
+  "At authorized, awaiting_wallet_signature or wallet_action_required, open only the server-provided same-origin walletHandoffUrl and stop for the controller to review the bound project metadata, chain 4663, sender, Router, value, calldata and expiry. The API key and CLI never sign or broadcast. After the controller sends the exact transaction: programmable-launch status LAUNCH_ID --api-version 4 --chain-id 4663 --watch --until finalized. Source verification, indexing, trading and publication remain separate from finality. The following Ethereum instructions do not apply to this V4 request.",
   "",
   "Ethereum Mainnet only (V3, chain 1)",
   `Public capabilities: ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.capabilities}`,

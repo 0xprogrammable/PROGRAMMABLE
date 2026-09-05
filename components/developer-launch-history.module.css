@@ -284,6 +284,15 @@
   padding-block: 10px;
 }
 
+.projectRequirements .projectChain {
+  grid-column: 1 / -1;
+}
+
+.projectRequirements .projectChain dd {
+  color: var(--webde-ink);
+  font-weight: 650;
+}
+
 .projectRequirements dt {
   color: var(--webde-dim);
   font-size: 10px;
@@ -379,8 +388,18 @@
   font-size: 12px;
   font-weight: 650;
   min-height: 44px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   padding-inline: 11px;
   text-decoration: none;
+}
+
+.projectOptionalLinks {
+  color: var(--webde-dim);
+  font-size: 12px;
+  line-height: 16px;
+  margin-top: 8px;
 }
 
 .projectBinding {
