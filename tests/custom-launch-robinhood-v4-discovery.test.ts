@@ -1,4 +1,4 @@
-import { V4_API_DISCOVERY } from "../lib/custom-launch/v4-api-discovery";
+import { V4_API_DISCOVERY, V4_API_PROFILE_VERSION } from "../lib/custom-launch/v4-api-discovery";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -24,7 +24,9 @@ describe("Robinhood Chain V4 public self-serve release discovery", () => {
     );
     const v4 = document.customLaunchApi.versions.v4;
 
-    expect(v4).toEqual({
+    // The exact historical snapshot remains covered here; the successor's complete
+    // pending/ready projection is independently checked in public-robinhood-v41-well-known.
+    if (V4_API_PROFILE_VERSION === "4.0.0") expect(v4).toEqual({
       status: V4_API_DISCOVERY.status,
       runtimeStatus: "routes-deployed",
       activationStage: V4_API_DISCOVERY.activationStage,
@@ -203,10 +205,11 @@ describe("Robinhood Chain V4 public self-serve release discovery", () => {
     expect(foundationSourceCommitment).toBe(
       "0xe87f5edc2dc839bd87a26a80cb53f14b021e603a1753d27aae3a02862058d730",
     );
-    if (!V4_API_DISCOVERY.releaseReady) {
+    expect(v4.profileVersion).toBe(V4_API_PROFILE_VERSION);
+    if (!V4_API_DISCOVERY.releaseReady && V4_API_PROFILE_VERSION === "4.0.0") {
       expect(JSON.stringify(withoutSourceCommitment).match(/0x[0-9a-f]{40}/giu))
         .toEqual(["0xD88539d3c4C460136a733A3Fd60cf6BF269079da"]);
-    } else {
+    } else if (V4_API_DISCOVERY.releaseReady) {
       expect(v4.deploymentEvidence.roots.programmableLaunchStampRouter)
         .toBe(V4_API_DISCOVERY.deployment?.contracts.programmableLaunchStampRouter.address);
     }
@@ -230,18 +233,18 @@ describe("Robinhood Chain V4 public self-serve release discovery", () => {
       publicWrites: V4_API_DISCOVERY.publicWrites,
       releaseReady: V4_API_DISCOVERY.releaseReady,
       apiVersion: "4",
-      profileVersion: "4.0.0",
+      profileVersion: V4_API_PROFILE_VERSION,
       clientSelectableProfile: false,
       apiKeyPlaceholder: "$PROGRAMMABLE_API_KEY",
       feeBehaviorClaim: false,
       universalFeeBehaviorClaim: false,
-      platformFeePolicyStatus: "required-default-configuration",
+      platformFeePolicyStatus: V4_API_PROFILE_VERSION === "4.1.0" ? "required-exact-native-fee-kernel" : "required-default-configuration",
       platformFeePolicy: {
         required: true,
         rateBps: 20,
         ratePpm: 2_000,
         recipient: "0xD88539d3c4C460136a733A3Fd60cf6BF269079da",
-        enforcement: "not-guaranteed-onchain",
+        enforcement: V4_API_PROFILE_VERSION === "4.1.0" ? "exact-kernel-proof-required-before-wallet-handoff" : "not-guaranteed-onchain",
         canonicalOnchainEnforcementProven: false,
         guaranteedRevenue: false,
         feeBehaviorClaim: false,
@@ -249,7 +252,7 @@ describe("Robinhood Chain V4 public self-serve release discovery", () => {
       },
       externalIndexingGuaranteed: false,
       cli: {
-        sourceCandidateVersion: "4.0.0",
+        sourceCandidateVersion: V4_API_PROFILE_VERSION,
         released: V4_API_DISCOVERY.cliReleased,
         installable: V4_API_DISCOVERY.cliInstallable,
         release: V4_API_DISCOVERY.cliRelease,
@@ -378,7 +381,7 @@ describe("Robinhood Chain V4 public self-serve release discovery", () => {
       activationScope: V4_API_DISCOVERY.activationScope,
       publication: V4_API_DISCOVERY.publication,
         targetLaunchPath: "public-self-serve",
-        profileVersion: "4.0.0",
+        profileVersion: V4_API_PROFILE_VERSION,
         released: V4_API_DISCOVERY.cliReleased,
         installable: V4_API_DISCOVERY.cliInstallable,
         release: V4_API_DISCOVERY.cliRelease,

@@ -83,6 +83,7 @@ type ActiveSection = "keys" | "launch" | "history";
 type ApiKeyLoadMode = "initial" | "refresh" | "mutation";
 type DeveloperApiKeysProps = Readonly<{
   initialSection?: ActiveSection;
+  agentSetupText?: string;
 }>;
 type DeveloperApiKeysViewProps = Readonly<{
   account: `0x${string}` | null;
@@ -91,6 +92,7 @@ type DeveloperApiKeysViewProps = Readonly<{
   getAccessToken: () => Promise<string | null>;
   getIdentityToken: () => Promise<string | null>;
   initialSection: ActiveSection;
+  agentSetupText?: string;
   openWallet: () => void;
   sendCustomLaunchWalletAction: (
     input: CustomLaunchWalletActionV1,
@@ -587,6 +589,7 @@ function ExpirySelect({
 
 export function DeveloperApiKeys({
   initialSection = "keys",
+  agentSetupText = PROGRAMMABLE_AGENT_SETUP_TEXT_V1,
 }: DeveloperApiKeysProps) {
   const {
     authReady,
@@ -611,6 +614,7 @@ export function DeveloperApiKeys({
       getAccessToken={getAccessToken}
       getIdentityToken={getIdentityToken}
       initialSection={initialSection}
+      agentSetupText={agentSetupText}
       openWallet={openWallet}
       sendCustomLaunchWalletAction={sendCustomLaunchWalletAction}
       sendCustomLaunchWalletActionV4={sendCustomLaunchWalletActionV4}
@@ -628,6 +632,7 @@ export function DeveloperApiKeysView({
   getAccessToken,
   getIdentityToken,
   initialSection,
+  agentSetupText = PROGRAMMABLE_AGENT_SETUP_TEXT_V1,
   openWallet,
   sendCustomLaunchWalletAction,
   sendCustomLaunchWalletActionV4,
@@ -964,7 +969,7 @@ export function DeveloperApiKeysView({
 
   const copyAgentSetup = async () => {
     try {
-      await copyToClipboard(PROGRAMMABLE_AGENT_SETUP_TEXT_V1);
+      await copyToClipboard(agentSetupText);
       setSetupCopyState("copied");
       setStatusMessage("Agent setup copied without the API key.");
     } catch {

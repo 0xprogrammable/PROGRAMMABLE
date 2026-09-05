@@ -42,11 +42,15 @@ and `POST /v1/custom-launches` are permanently read only with non-retryable `409
 closed.
 
 The public Ethereum V3 CLI is `@programmable/launch` `3.3.9`. For Robinhood V4, read the live
-[discovery manifest](https://programmable.market/.well-known/programmable.json). Use CLI `4.0.0` only when both
+[discovery manifest](https://programmable.market/.well-known/programmable.json). Use the exact CLI version advertised there only when both
 `customLaunchApi.versions.v4` and `chains[]` for `chainId: 4663` report `publicAuthorization: true`,
 `publicWrites: true` and `releaseReady: true`. If either entry is false, incomplete or missing, stop before
 authenticated preflight or submission. Verify the immutable official GitHub Release, exact source commit, release
 manifest and tarball checksum from `customLaunchApi.versions.v4.cli.release` before installing. A repository source candidate is not an installable release.
+
+Match the advertised profile and immutable CLI release: historical `4.0.0` and successor `4.1.0` have different
+funding and admission contracts. This guide does not activate either version. Preserve historical request bytes;
+never add successor fields to an old launch or assume a source candidate is the currently accepted version.
 
 V2 detail reads are observation-only while an existing request is `prepared` or `simulating`: GET does not advance
 simulation or authorization and cannot expose a new `walletTransaction`. Existing `authorized` and `submitted`
@@ -83,14 +87,19 @@ V4 contract pointers:
 - `POST /v4/chains/4663/custom-launches`
 - `GET /v4/chains/4663/custom-launches/{launchId}`
 - `GET /v4/chains/4663/finalized-custom-launches`
-- OpenAPI: <https://programmable.market/openapi/custom-launch-v4.json>
-- pack config: <https://programmable.market/schemas/custom-launch/v4/pack-config.json>
-- source verification: <https://programmable.market/schemas/custom-launch/v4/source-verification-status.json>
-- policy: <https://github.com/programmablehq/Launch-Policy/blob/main/policy/custom-launch-admission-v4.json>
+- Historical 4.0 OpenAPI: <https://programmable.market/openapi/custom-launch-v4.json>
+- Historical 4.0 pack config: <https://programmable.market/schemas/custom-launch/v4/pack-config.json>
+- Historical 4.0 source verification: <https://programmable.market/schemas/custom-launch/v4/source-verification-status.json>
+- Historical 4.0 policy: <https://github.com/programmablehq/Launch-Policy/blob/main/policy/custom-launch-admission-v4.json>
+- When discovery selects 4.1, use its [OpenAPI](https://programmable.market/openapi/custom-launch-v4.1.json),
+  [pack config](https://programmable.market/schemas/custom-launch/v4.1/pack-config.json),
+  [source verification](https://programmable.market/schemas/custom-launch/v4.1/source-verification-status.json)
+  and [admission descriptor](https://github.com/programmablehq/Launch-Policy/blob/main/policy/custom-launch-admission-v4.1.json).
 
 Use only `Authorization: Bearer $PROGRAMMABLE_API_KEY`. No API key argument, request body field or alternate secret
-name is part of this contract. The key cannot sign or broadcast and cannot bypass server validation. V4 advertises
-only no funding and exact wallet transaction value until ERC-20 settlement has separate proof. Project-owned token
+name is part of this contract. The key cannot sign or broadcast and cannot bypass server validation. Historical 4.0 supports
+no funding and exact wallet transaction value. A funded 4.1 launch requires positive wallet transaction value and
+the funding plan below; ERC-20 settlement still needs separate proof. Project-owned token
 and hook targets, 3–16 graph targets and all fourteen hook permissions are structural support, not behavior or safety
 claims. `feeBehaviorClaim` is false; generic fee claiming and generic buyback management are not live. External
 indexers may lag or omit chain data, so finalized Router evidence and Programmable indexing state remain distinct.
@@ -99,9 +108,25 @@ Legacy Registry and GitHub intake are closed.
 V4 metadata images are exactly PNG or single-frame GIF, as published by `metadataImage.mediaTypes` and `gifFrames`.
 JPEG, WebP, and animated GIF are rejected by the V4 packer before any network request.
 
-For a minimal zero-funding project, use the corrected [Robinhood V4 example](https://github.com/programmablehq/PROGRAMMABLE/tree/production/packages/launch/examples/robinhood-v4-no-broadcast) from the protected production checkout with the verified CLI `4.0.0`. The older example bundled in the immutable CLI tarball does not pass current production admission and simulation. Pin the checked-out project revision as described in the example.
+The [zero-funding Robinhood example](https://github.com/programmablehq/PROGRAMMABLE/tree/production/packages/launch/examples/robinhood-v4-no-broadcast) documents historical `4.0.0` only. It is not a valid fresh 4.1 launch recipe. For selected 4.1, use the [native-20-bps example](https://github.com/programmablehq/PROGRAMMABLE/tree/production/packages/launch/examples/robinhood-v4-native20), pin the protected source revision and verify the advertised immutable CLI before building.
 
-The example keeps its PoolManager immutable and rejects callbacks from other callers. Its permit includes the current finalized Robinhood checkpoint while preserving the one-hour maximum lifetime; finalized blocks can trail the API clock by many minutes. The Router also requires the pool to be initialized before stamping. A zero-funding request can initialize an empty pool without adding liquidity and declares `model: none-empty-pool`, `declaredLaunchState: pool-initialized-empty` and no liquidity target IDs.
+The historical example keeps its PoolManager immutable and rejects callbacks from other callers. Its permit includes a finalized Robinhood checkpoint while preserving the one-hour maximum lifetime; finalized blocks can trail the API clock by many minutes. An initialized empty pool does not prove liquidity or tradability.
+
+When discovery selects **4.1**, agree the funding source and pricing model before building. Include the required
+`fundingPlan`, separate initial liquidity, initial buy, reserves and other native allocations, and bind their sum to
+the exact wallet transaction value. Confirm `maxLaunchValueWei` and `maxGasCostWei`; gas is additional. A build-only
+plan cannot obtain a launch permit, and buyer-funded or virtual-reserve declarations do not create spendable funds.
+
+Every funded 4.1 launch requires an atomic initial buy of at least **USD 1 at permit authorization**. Read public
+`GET /v4/chains/4663/initial-buy-quote` before building, confirm the native amount and positive minimum token output
+to the launch wallet, and budget the buy once inside transaction value. The server obtains its own quote no older
+than 60 seconds, without stale fallback; it cannot raise the user's amount or budget automatically. The reference
+feed is on Ethereum, execution stays on Robinhood, and dollar value at wallet execution or external indexing is not guaranteed.
+
+4.1 admission requires the exact native fee kernel for the stamped PoolKey. It accrues **20 bps (0.2%)** of the gross
+native ETH leg once per successful buy or sell, rounded up, separately from creator and LP fees. PoolManager native
+claims belong to `0xD88539d3c4C460136a733A3Fd60cf6BF269079da`; permissionless claiming pays only that fixed recipient.
+Admission does not prove deployed vault state, a completed trade or collected revenue. API keys do not sign or claim fees.
 
 A bounded external-contract reference is allowed only when the protected API server verifies its exact
 `eip155:4663` address, live runtime hash, source-verification evidence, declared graph role and checkpoint. Arbitrary

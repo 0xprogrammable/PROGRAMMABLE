@@ -5,10 +5,16 @@ import {
   PROGRAMMABLE_LAUNCH_STAMP_ROUTER_V1_ABI,
 } from "@/components/launch-stamp-docs-contract";
 import { V4_TOKEN_ADDRESS } from "@/components/docs-public-policy";
+import { V4_API_PROFILE_VERSION } from "@/lib/custom-launch/v4-api-discovery";
+import { robinhoodV4PublicContractDiscovery, robinhoodV4PublicLaunchRequirements } from "@/lib/custom-launch/v4-public-contract-discovery";
+
+const customLaunchApiOrigin = "https://api.programmable.market";
+const robinhoodContract = robinhoodV4PublicContractDiscovery(V4_API_PROFILE_VERSION);
+const robinhoodProfileVersion = V4_API_PROFILE_VERSION === "4.1.0" ? "4.1.0" : "4.0.0";
+const robinhoodLaunchRequirements = robinhoodV4PublicLaunchRequirements(V4_API_PROFILE_VERSION);
 
 export const developerDocsPath = "/docs/developers";
 export const developerDocsMarkdownPath = "/docs/developers.md";
-const customLaunchApiOrigin = "https://api.programmable.market";
 const apiKeysUrl = "https://programmable.market/developers/api-keys";
 const customLaunchApiOpenApiUrl =
   "https://programmable.market/openapi/custom-launch-v3.json";
@@ -17,11 +23,11 @@ const customLaunchApiV2OpenApiUrl =
 const customLaunchApiV3OpenApiUrl =
   "https://programmable.market/openapi/custom-launch-v3.json";
 const customLaunchApiV4OpenApiUrl =
-  "https://programmable.market/openapi/custom-launch-v4.json";
+  robinhoodContract.openApiUrl ?? "https://programmable.market/openapi/custom-launch-v4.json";
 const customLaunchV4PackConfigSchemaUrl =
-  "https://programmable.market/schemas/custom-launch/v4/pack-config.json";
+  robinhoodContract.packConfigSchemaUrl ?? "https://programmable.market/schemas/custom-launch/v4/pack-config.json";
 const customLaunchV4SourceVerificationSchemaUrl =
-  "https://programmable.market/schemas/custom-launch/v4/source-verification-status.json";
+  robinhoodContract.sourceVerificationSchemaUrl ?? "https://programmable.market/schemas/custom-launch/v4/source-verification-status.json";
 const customLaunchV4CapabilitiesUrl =
   "https://api.programmable.market/v4/chains/4663/capabilities";
 const customLaunchApiGuideUrl =
@@ -90,8 +96,9 @@ export function buildDeveloperDocsMarkdown(): string {
     "",
     `Public V3.3 creation, preflight, list and single-resource reads are live for wallet keys, partner roots and bounded partner subkeys on Ethereum Mainnet at ${customLaunchApiOrigin}/v3/custom-launches. V2 and V1 history and schemas remain readable; fresh creation returns non-retryable \`409 CUSTOM_LAUNCH_V2_READ_ONLY\` and \`409 CUSTOM_LAUNCH_V1_READ_ONLY\`. Only V3.3 accepts new submissions. Legacy Registry and GitHub submission intake is closed.`,
     `The source-tree V3 OpenAPI at ${customLaunchApiV3OpenApiUrl} contains a preparatory profile 3.4 candidate. It is not backend-activation evidence; live discovery and GET /v3/capabilities remain authoritative for the accepted profile, routes and wallet-handoff contract.`,
-    "CLI `3.3.9` is the public Ethereum V3 release. For Robinhood V4, require `publicAuthorization: true`, `publicWrites: true` and `releaseReady: true` in both `customLaunchApi.versions.v4` and the `chains[]` entry for 4663. If either entry reports false, is missing or is incomplete, stop before authenticated preflight or submission. Install CLI `4.0.0` only after verifying the immutable GitHub Release, release manifest, exact source commit and tarball checksum published at `customLaunchApi.versions.v4.cli.release`. Source files and deployed routes alone do not activate the API.",
+    `CLI \`3.3.9\` is the public Ethereum V3 release. For Robinhood V4, require \`publicAuthorization: true\`, \`publicWrites: true\` and \`releaseReady: true\` in both \`customLaunchApi.versions.v4\` and the \`chains[]\` entry for 4663. If either entry reports false, is missing or is incomplete, stop before authenticated preflight or submission. Install CLI \`${robinhoodProfileVersion}\` only after verifying the immutable GitHub Release, release manifest, exact source commit and tarball checksum published at \`customLaunchApi.versions.v4.cli.release\`. Source files and deployed routes alone do not activate the API.`,
     `The stable V4 integration pointers are ${customLaunchApiV4OpenApiUrl}, ${customLaunchV4PackConfigSchemaUrl}, ${customLaunchV4SourceVerificationSchemaUrl} and ${customLaunchV4CapabilitiesUrl}. They describe the V4 contract; their presence is not current public activation, write authorization, publication or external-indexing evidence.`,
+    ...robinhoodLaunchRequirements,
     "V4 has a distinct lifecycle: `received`, `validating`, `action_required`, `authorized`, `awaiting_wallet_signature`, `wallet_action_required`, `submitted`, `sequencer_soft_confirmed`, `ethereum_posted`, `finalized` or `failed`. `action_required` is server-authored remediation, not a wallet action or manual approval. `authorized`, `awaiting_wallet_signature` and `wallet_action_required` expose or lead to the exact wallet transaction but do not mean it was signed or broadcast. `sequencer_soft_confirmed` remains reversible; `ethereum_posted` is not final; only `finalized` satisfies the published Robinhood-to-Ethereum finality policy.",
     "Guard V4 reads with `programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until authorized`, stop for separate controller-wallet review, signing and broadcast, then poll `programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until finalized`. The CLI only prepares and displays the exact transaction; it never signs or broadcasts.",
     "V4 source verification begins after finality and remains independent. `finalized` does not imply `sourceVerification.status: exact_match`; a non-authoritative provider observation alone cannot satisfy the independent protected-source/build/compiler/settings/finalized-transaction/bytecode composite, and provider failure does not revise finality. Programmable indexing, third-party indexing, trading readiness, Explore visibility and publication are separate outcomes.",
@@ -408,7 +415,8 @@ export function buildProgrammableLlmsIndex(): string {
     "- Integrate a read-only terminal, wallet, scanner, catalog, or research tool with the documented public endpoints.",
     "- Package, validate, submit and track a Custom launch with the pinned public CLI.",
     "- Use public credential-principal V3.3 creation and lifecycle reads with a wallet key, partner root or bounded partner subkey. V2 and V1 history and schemas remain readable, their fresh POSTs return non-retryable read-only 409 responses, and legacy Registry and GitHub submission intake is closed.",
-    "- Use Robinhood V4 with the platform API key only after both live discovery entries pass all three public gates and the immutable 4.0.0 CLI release evidence verifies. CLI 3.3.9 remains the Ethereum V3 integration.",
+    `- Use Robinhood V4 with the platform API key only after both live discovery entries pass all three public gates and the immutable ${robinhoodProfileVersion} CLI release evidence verifies. CLI 3.3.9 remains the Ethereum V3 integration.`,
+    ...robinhoodLaunchRequirements.map((requirement) => `- ${requirement}`),
     "- Direct a human to trade, manage a project, claim rewards, or sign an authorized Custom launch transaction through the website. A prepared Custom launch has no wallet transaction. Every wallet action requires explicit wallet authority.",
     "",
     "## Do not use Programmable to infer",
@@ -416,7 +424,7 @@ export function buildProgrammableLlmsIndex(): string {
     "- Safety, endorsement, audit coverage, liquidity, price accuracy, tradability, or future value from a verified identity.",
     "- Public eligibility for Classic V1, other Classic V2 launches, any Stock family, or a Custom launch without successful Registry verification or a finalized verified Router stamp.",
     "- Transaction authority from an API key. The Custom Launch API validates and prepares an exact action, but it cannot sign or broadcast for the controller wallet.",
-    "- Robinhood V4 public API writes, release readiness, source verification, indexing, trading readiness or publication from deployed runtime, source-candidate 4.0.0 files or stable URLs. Live discovery remains authoritative: stop while `pending-public-discovery-promotion` or any public gate is false or missing.",
+    `- Robinhood V4 public API writes, release readiness, source verification, indexing, trading readiness or publication from deployed runtime, source-candidate ${robinhoodProfileVersion} files or stable URLs. Live discovery remains authoritative: stop while \`pending-public-discovery-promotion\` or any public gate is false or missing.`,
     "- Wallet authorization from CLI, preflight, model or caller-attested output. The API server independently enforces objective static hard blocks and exact Router simulation; behavior-derived positive claims require separate exact server evidence.",
     "- A universal Programmable fee from an arbitrary Custom hook. A 10 bps claim applies only to a fee-certified profile or adapter and its exact stamped PoolKey.",
     "- Generic fee claiming or buyback management from a Custom Launch API key. `fees:claim` and `buybacks:manage` are reserved and disabled; FADE uses a separately bound adapter.",
