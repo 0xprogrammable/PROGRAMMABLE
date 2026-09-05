@@ -596,6 +596,42 @@ contract ModuleNativeEngineV1Test is Deployers {
         assertEq(runtime.engine(), address(hook));
         assertEq(runtime.engineCodeHash(), address(hook).codehash);
         assertEq(address(hook.runtimeFactory().runtimeOf(address(hook))), initial);
+        assertEq(hook.runtimeFactory().predict(address(hook)), initial);
+        assertEq(launcher.swapRouterFactory().predict(address(launcher), manager, hook), address(route));
+    }
+
+    function test_runtimeFactoryPredictionSurvivesOtherEngineCreation() public {
+        ModuleNativeRuntimeFactoryV1 factory = new ModuleNativeRuntimeFactoryV1();
+        address expected = factory.predict(address(hook));
+        vm.prank(address(positions));
+        ModuleNativeRuntimeV1 other = factory.create();
+        assertNotEq(address(other), expected);
+        assertEq(factory.predict(address(hook)), expected);
+        vm.prank(address(hook));
+        ModuleNativeRuntimeV1 created = factory.create();
+        assertEq(address(created), expected);
+        assertEq(created.engine(), address(hook));
+        assertEq(created.engineCodeHash(), address(hook).codehash);
+        vm.prank(address(hook));
+        assertEq(address(factory.create()), expected);
+    }
+
+    function test_routerFactoryPredictionSurvivesOtherSourceCreation() public {
+        ModuleNativeSwapRouterFactoryV1 factory = new ModuleNativeSwapRouterFactoryV1();
+        address expected = factory.predict(address(launcher), manager, hook);
+        vm.prank(buyer);
+        ModuleNativeSwapRouterV1 other = factory.create(manager, hook);
+        assertNotEq(address(other), expected);
+        assertEq(factory.predict(address(launcher), manager, hook), expected);
+        vm.prank(address(launcher));
+        ModuleNativeSwapRouterV1 created = factory.create(manager, hook);
+        assertEq(address(created), expected);
+        assertEq(created.source(), address(launcher));
+        assertEq(address(created.hook()), address(hook));
+        assertEq(address(created.poolManager()), address(manager));
+        vm.prank(address(launcher));
+        vm.expectRevert(ModuleNativeSwapRouterFactoryV1.RouterAlreadyCreated.selector);
+        factory.create(manager, hook);
     }
 
     function test_hookDeploymentRejectsUnreviewedRegistryCodeEvenWhenAddressHasCode() public {
