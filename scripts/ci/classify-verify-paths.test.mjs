@@ -386,7 +386,7 @@ test("keeps protected jobs fail closed and production pushes path scoped", () =>
   assert.doesNotMatch(workflow, /run: npm run verify\n/u);
   assert.match(
     workflow,
-    /name: Verify affected interface\n        if: needs\.scope\.outputs\.interface == 'true'/u,
+    /name: Require complete interface verification\n        env:\n          SCOPE_RESULT: \$\{\{ needs\.scope\.result \}\}/u,
   );
   assert.equal(workflow.match(/^    if: always\(\)$/gmu)?.length, 6);
   assert.equal(

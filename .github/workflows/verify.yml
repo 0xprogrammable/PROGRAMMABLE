@@ -204,10 +204,46 @@ jobs:
         if: needs.scope.result == 'success' && needs.scope.outputs.database != 'true'
         run: echo "No database paths changed."
 
-  interface:
-    name: Interface
+  interface-quality:
+    name: Interface quality and tests
     needs: scope
-    if: always()
+    if: needs.scope.outputs.interface == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24.14.0
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit production dependencies
+        if: needs.scope.outputs.interface == 'true' && needs.scope.outputs.dependencies == 'true'
+        run: |
+          node --test scripts/ci/run-production-dependency-audit.test.mjs
+          npm run audit:prod
+
+      - name: Verify interface quality and tests
+        env:
+          PROGRAMMABLE_CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          PROGRAMMABLE_CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: npm run verify:interface:quality:ci
+
+  interface-browser-build:
+    # Browser fixtures and the production build share mutable local output.
+    # Keep them sequential in one checkout, isolated from lint and unit tests.
+    name: Interface browser and build
+    needs: scope
+    if: needs.scope.outputs.interface == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -216,43 +252,28 @@ jobs:
       contents: read
 
     steps:
-      - name: Require successful change classification
-        if: needs.scope.result != 'success'
-        run: exit 1
-
       - name: Check out repository
-        if: needs.scope.outputs.interface == 'true'
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
 
       - name: Set up Node.js
-        if: needs.scope.outputs.interface == 'true'
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24.14.0
           cache: npm
 
       - name: Install dependencies
-        if: needs.scope.outputs.interface == 'true'
         run: npm ci
 
       - name: Install pinned Chromium for wallet interaction tests
-        if: needs.scope.outputs.interface == 'true'
         run: npx playwright install --with-deps chromium
 
-      - name: Audit production dependencies
-        if: needs.scope.outputs.interface == 'true' && needs.scope.outputs.dependencies == 'true'
-        run: |
-          node --test scripts/ci/run-production-dependency-audit.test.mjs
-          npm run audit:prod
-
-      - name: Verify affected interface
-        if: needs.scope.outputs.interface == 'true'
+      - name: Verify interface browser interactions and production build
         env:
           PROGRAMMABLE_CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           PROGRAMMABLE_CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: npm run verify:interface:ci
+        run: npm run verify:interface:browser-build:ci
 
       - name: Require complete Git history for the V4 release audit
         if: needs.scope.outputs.interface == 'true'
@@ -288,9 +309,55 @@ jobs:
         if: needs.scope.outputs.read_model == 'true'
         run: npm run perf:read-model:ops-gate
 
-      - name: Skip unaffected interface
-        if: needs.scope.result == 'success' && needs.scope.outputs.interface != 'true'
-        run: echo "No interface paths changed."
+  interface:
+    # Preserve the required check and production-proof result while both
+    # independent jobs verify the same source with their own locked install.
+    name: Interface
+    needs:
+      - scope
+      - interface-quality
+      - interface-browser-build
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      attestations: read
+      contents: read
+
+    steps:
+      - name: Require successful change classification
+        if: needs.scope.result != 'success'
+        run: exit 1
+
+      - name: Require complete interface verification
+        env:
+          SCOPE_RESULT: ${{ needs.scope.result }}
+          INTERFACE_REQUIRED: ${{ needs.scope.outputs.interface }}
+          READ_MODEL_REQUIRED: ${{ needs.scope.outputs.read_model }}
+          QUALITY_RESULT: ${{ needs.interface-quality.result }}
+          BROWSER_BUILD_RESULT: ${{ needs.interface-browser-build.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$SCOPE_RESULT" = success
+          if [ "$READ_MODEL_REQUIRED" = true ]; then
+            test "$INTERFACE_REQUIRED" = true
+          fi
+          case "$INTERFACE_REQUIRED" in
+            true) expected_result=success ;;
+            false) expected_result=skipped ;;
+            *) echo "Interface scope is missing or invalid." >&2; exit 1 ;;
+          esac
+          for result in "$QUALITY_RESULT" "$BROWSER_BUILD_RESULT"; do
+            test "$result" = "$expected_result" || {
+              echo "Interface lane did not complete as required: $result (expected $expected_result)" >&2
+              exit 1
+            }
+          done
+          if [ "$INTERFACE_REQUIRED" = false ]; then
+            echo "No interface paths changed."
+          fi
 
   contracts:
     name: Contracts
