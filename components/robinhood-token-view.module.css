@@ -100,6 +100,7 @@
   padding: 8px 12px;
   text-decoration: none;
 }
+.copyButton { min-width: 136px; }
 
 .metrics {
   display: grid;
@@ -116,7 +117,9 @@
   font-weight: 500;
   line-height: 28px;
   margin: 4px 0 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .change[data-direction="up"] { color: #9dddbe; }
 .change[data-direction="down"] { color: #f6a1ac; }
@@ -172,7 +175,12 @@
   .chart { height: 400px; }
 }
 
-@media (max-width: 360px) {
+@media (max-width: 480px) {
   .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .headerActions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .headerActions > * { min-width: 0; }
+}
+
+@media (max-width: 360px) {
   .chart { height: 360px; }
 }

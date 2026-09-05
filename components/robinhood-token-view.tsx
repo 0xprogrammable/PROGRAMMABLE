@@ -23,21 +23,22 @@ export function RobinhoodTokenView({ address, token, status }: {
   const market = details?.market;
   const name = token?.name?.trim() || "Unnamed token";
   const change = market?.change24hPercent;
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [copyResult, setCopyResult] = useState<{ address: string; state: "copied" | "failed" } | null>(null);
+  const copyState = copyResult?.address === address ? copyResult.state : "idle";
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   }, [address]);
 
   useEffect(() => {
-    if (copyState === "idle") return;
-    const timer = setTimeout(() => setCopyState("idle"), 3_000);
+    if (!copyResult) return;
+    const timer = setTimeout(() => setCopyResult(null), 3_000);
     return () => clearTimeout(timer);
-  }, [copyState]);
+  }, [copyResult]);
 
   async function copyAddress() {
-    try { await navigator.clipboard.writeText(address); setCopyState("copied"); }
-    catch { setCopyState("failed"); }
+    try { await navigator.clipboard.writeText(address); setCopyResult({ address, state: "copied" }); }
+    catch { setCopyResult({ address, state: "failed" }); }
   }
 
   return (
@@ -62,7 +63,7 @@ export function RobinhoodTokenView({ address, token, status }: {
             </div>
           </div>
           <div className={styles.headerActions}>
-            <button className={styles.secondaryButton} onClick={copyAddress} type="button" title={address}>
+            <button className={`${styles.secondaryButton} ${styles.copyButton}`} onClick={copyAddress} type="button" title={address}>
               {copyState === "copied" ? <Check aria-hidden="true" size={16} /> : <Copy aria-hidden="true" size={16} />}
               {copyState === "copied" ? "Copied" : "Copy address"}
             </button>
@@ -117,7 +118,7 @@ function RobinhoodChart({ poolId, name }: { poolId: string; name: string }) {
 }
 
 function Metric({ label, value }: { label: string; value: ReactNode }) {
-  return <div><dt>{label}</dt><dd>{value}</dd></div>;
+  return <div><dt>{label}</dt><dd title={typeof value === "string" ? value : undefined}>{value}</dd></div>;
 }
 
 function ProjectLinkIcon({ label }: { label: string }) {

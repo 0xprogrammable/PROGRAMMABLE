@@ -10,6 +10,7 @@ import { AnimatedMarketCap } from "@/components/animated-market-cap";
 import { ExploreIndexResetView } from "@/components/explore-index-reset-view";
 import { useViewChain, type ViewChainId } from "@/components/view-chain";
 import { RobinhoodCoinArtwork } from "@/components/robinhood-coin-artwork";
+import { rememberRobinhoodTokenPresentations } from "@/components/robinhood-presentation-cache";
 import { coinAge, coinTicker, mergeRobinhoodPresentations, type RobinhoodCoinPresentation } from "@/lib/robinhood-presentation";
 import { activeExploreFilterCount, DEFAULT_EXPLORE_FILTERS, type RobinhoodExploreFilters } from "@/lib/robinhood-explore-filters";
 import styles from "@/components/robinhood-launches-view.module.css";
@@ -181,8 +182,10 @@ function RobinhoodLaunchList({ embedded, enabled }: { embedded: boolean; enabled
               presentations: mergeRobinhoodPresentations(current.data.presentations, null).items,
             } });
           }
+          const presentations = mergeRobinhoodPresentations(current?.data.presentations ?? [], data.presentations).items;
+          rememberRobinhoodTokenPresentations(presentations);
           return rememberSnapshot({ request, data: { ...data,
-            presentations: mergeRobinhoodPresentations([], data.presentations).items,
+            presentations,
           } });
         });
         setFailed(false);
