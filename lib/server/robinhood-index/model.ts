@@ -1,4 +1,4 @@
-import type { RobinhoodLaunch, RobinhoodLaunchList } from "@/lib/robinhood-launches";
+import type { RobinhoodLaunch, RobinhoodLaunchList, RobinhoodProfileLaunchList } from "@/lib/robinhood-launches";
 import { DEFAULT_EXPLORE_FILTERS, type RobinhoodExploreFilters } from "@/lib/robinhood-explore-filters";
 import { isPinnedRobinhoodToken, isVisibleRobinhoodToken } from "@/lib/robinhood-explore-policy";
 
@@ -113,5 +113,30 @@ export function launchList(snapshot: RobinhoodSnapshot | null, page = 1, query =
     chainId: 4663, status, updatedAt: snapshot?.updatedAt ?? null,
     items: [...(pinned ? [pinned] : []), ...items.slice((number - 1) * pageSize, number * pageSize)],
     page: { number, size: 50, totalItems, totalPages, hasMore: number < totalPages },
+  };
+}
+
+// A profile shows the recorded launch wallet's history. Explore's display policy
+// and market ranking do not change which canonical launches belong to that wallet.
+export function profileLaunchList(snapshot: RobinhoodSnapshot | null, account: string, page = 1, now = Date.now()): RobinhoodProfileLaunchList {
+  const normalizedAccount = account.toLowerCase();
+  if (!ADDRESS.test(normalizedAccount)) throw new Error("Invalid Robinhood profile account");
+  const items = (snapshot?.items ?? [])
+    .filter((row) => row.creator.toLowerCase() === normalizedAccount)
+    .toSorted((a, b) => {
+      const newest = BigInt(a.blockNumber) === BigInt(b.blockNumber)
+        ? b.logIndex - a.logIndex : BigInt(a.blockNumber) > BigInt(b.blockNumber) ? -1 : 1;
+      return newest || a.tokenAddress.toLowerCase().localeCompare(b.tokenAddress.toLowerCase());
+    });
+  const totalPages = Math.ceil(items.length / 50);
+  const requestedPage = Number.isSafeInteger(page) && page > 0 ? page : 1;
+  const number = Math.min(requestedPage, Math.max(1, totalPages));
+  const status = !snapshot ? "unavailable"
+    : now - Date.parse(snapshot.updatedAt) > 300_000 ? "stale"
+    : snapshot.pending || snapshot.cursor?.number !== snapshot.finalizedBlock ? "syncing" : "ready";
+  return {
+    chainId: 4663, account: normalizedAccount, status, updatedAt: snapshot?.updatedAt ?? null,
+    items: items.slice((number - 1) * 50, number * 50),
+    page: { number, size: 50, totalItems: items.length, totalPages, hasMore: number < totalPages },
   };
 }
