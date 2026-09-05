@@ -1,0 +1,29 @@
+[profile.default]
+src = "src"
+test = "test"
+out = "node_modules/.foundry-out"
+cache_path = "node_modules/.foundry-cache"
+libs = ["lib"]
+solc_version = "0.8.26"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 1000
+bytecode_hash = "none"
+cbor_metadata = false
+remappings = [
+  "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+  "@openzeppelin/uniswap-hooks/=lib/openzeppelin-uniswap-hooks/",
+  "@uniswap/v4-core/=lib/v4-core/",
+  "@uniswap/v4-periphery/=lib/v4-periphery/",
+  "forge-std/=lib/forge-std/src/",
+  "solmate/=lib/solmate/"
+]
+fs_permissions = [{ access = "read", path = "./node_modules/.foundry-out" }]
+
+[fmt]
+line_length = 120
+tab_width = 4
+bracket_spacing = true
+int_types = "long"
+quote_style = "double"
+number_underscore = "thousands"
