@@ -2064,6 +2064,21 @@
   filter: saturate(0.38) brightness(0.62);
 }
 
+.artImage[data-ready] {
+  opacity: 0;
+  transition: opacity 180ms ease-out;
+}
+
+.artImage[data-ready="true"] {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .artImage[data-ready] {
+    transition: none;
+  }
+}
+
 .classicLogo {
   display: none;
 }

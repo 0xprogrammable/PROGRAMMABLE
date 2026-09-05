@@ -28,6 +28,22 @@ type LaunchBuilderComponent =
   (typeof import("@/components/launch-builder"))["LaunchBuilderForm"];
 type LaunchPickerChoice = LaunchModel;
 
+function LaunchArtworkImage() {
+  const [ready, setReady] = useState(false);
+  return (
+    <Image
+      className={launchExperience.artImage}
+      src="/brand/atmosphere/programmable-floral-hooks-v1.webp"
+      alt=""
+      fill
+      sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 96px) / 2), 624px"
+      priority
+      data-ready={ready}
+      onLoad={() => setReady(true)}
+    />
+  );
+}
+
 export function LaunchExperience({
   initialViewChainId = DEFAULT_VIEW_CHAIN_ID,
 }: Readonly<{ initialViewChainId?: ViewChainId }>) {
@@ -142,15 +158,7 @@ export function LaunchModelPicker({
         className={`launch-model-art ${launchExperience.modelArt} ${launchExperience.customArt}`}
         aria-hidden="true"
       >
-        <Image
-          className={launchExperience.artImage}
-          src="/brand/atmosphere/programmable-floral-hooks-v1.avif"
-          alt=""
-          fill
-          loading="eager"
-          sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 96px) / 2), 560px"
-          priority
-        />
+        <LaunchArtworkImage />
         <Image
           className={`${launchExperience.classicLogo} ${launchExperience.customLogo}`}
           src="/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png"
@@ -231,14 +239,7 @@ export function LaunchModelPicker({
               className={`launch-model-art launch-model-art-classic ${launchExperience.modelArt} ${launchExperience.classicArt}`}
               aria-hidden="true"
             >
-              <Image
-                className={launchExperience.artImage}
-                src="/brand/atmosphere/programmable-floral-hooks-v1.avif"
-                alt=""
-                fill
-                sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 96px) / 2), 560px"
-                priority
-              />
+              <LaunchArtworkImage />
               <Image
                 className={launchExperience.classicLogo}
                 src="/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png"

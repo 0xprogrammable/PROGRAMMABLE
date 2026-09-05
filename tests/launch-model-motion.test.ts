@@ -17,12 +17,12 @@ describe("launch model artwork", () => {
     const source = read("components/launch-entry.tsx");
 
     expect(source).toContain(
-      'src="/brand/atmosphere/programmable-floral-hooks-v1.avif"',
+      'src="/brand/atmosphere/programmable-floral-hooks-v1.webp"',
     );
     expect(source).toContain(
       'src="/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png"',
     );
-    expect(source).toContain('calc((100vw - 96px) / 2), 560px');
+    expect(source).toContain('calc((100vw - 96px) / 2), 624px');
     expect(source).not.toContain('calc((100vw - 96px) / 4), 260px');
     for (const marker of removedPartnerMarkers) {
       expect(source).not.toContain(marker);
@@ -78,11 +78,7 @@ describe("launch model artwork", () => {
     for (const marker of removedPartnerMarkers) {
       expect(source).not.toContain(marker);
     }
-    expect(
-      source.match(
-        /src="\/brand\/atmosphere\/programmable-floral-hooks-v1\.avif"/g,
-      ),
-    ).toHaveLength(2);
+    expect(source.match(/<LaunchArtworkImage \/>/g)).toHaveLength(2);
     expect(source.match(/aria-hidden="true"/g)?.length).toBeGreaterThanOrEqual(2);
     expect(source).not.toContain("launchExperience.predictionRail");
   });
