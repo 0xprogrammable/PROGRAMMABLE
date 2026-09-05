@@ -385,3 +385,30 @@ test("disconnecting while a network switch is pending invalidates its eventual s
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("alert")).toHaveCount(0);
 });
+
+for (const completion of ["Resolve network switch", "Reject network switch"]) {
+  test(`${completion.toLowerCase()} stays obsolete after selecting another account and returning to the original`, async ({ page }) => {
+    await open(page);
+    await scenario(page, "both-owned");
+    await beginDelayedNetworkSwitch(page);
+    const dialog = page.getByRole("dialog", { name: "Connected account", exact: true });
+
+    await dialog.getByRole("button", { name: "0xbbbb…bbbb", exact: true }).click();
+    await expect(page.getByLabel("Selected account", { exact: true })).toHaveText(accountB);
+    await page.getByRole("button", { name: "Open account", exact: true }).click();
+    await dialog.getByRole("button", { name: "0xaaaa…aaaa", exact: true }).click();
+    await expect(page.getByLabel("Selected account", { exact: true })).toHaveText(accountA);
+
+    // Keep the original account's dialog visible before completion, so an
+    // obsolete SDK error cannot be hidden or cleared by reopening afterwards.
+    await page.getByRole("button", { name: "Open account", exact: true }).click();
+    await expect(dialog).toBeVisible();
+    await page.getByRole("button", { name: completion, exact: true }).dispatchEvent("click");
+
+    await expectNetworkResults(page, [false]);
+    await expect(page.getByLabel("Network switch busy", { exact: true })).toHaveText("false");
+    await expect(page.getByLabel("Selected account", { exact: true })).toHaveText(accountA);
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    expect((await calls(page)).filter((call) => call.method === "switchChain")).toHaveLength(1);
+  });
+}
