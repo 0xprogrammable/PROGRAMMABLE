@@ -1,0 +1,18 @@
+{
+  "enabled": false,
+  "sourceContractAddress": null,
+  "sourceContractRuntimeCodehash": null,
+  "sourceDeploymentBlockNumber": null,
+  "sourceDeploymentBlockHash": null,
+  "activatedAtBlock": null,
+  "relayerAddress": null,
+  "relayerFundingBlockNumber": null,
+  "relayerFundingBlockHash": null,
+  "relayerFundingBalanceWei": null,
+  "relayerPolicySha256": null,
+  "maximumDepositGasLimit": null,
+  "maximumFeePerGasWei": null,
+  "totalRelayerBudgetWei": null,
+  "relayerWalletOwnerId": null,
+  "relayerPolicyOwnerId": null
+}

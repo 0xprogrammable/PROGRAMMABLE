@@ -104,11 +104,17 @@ for (const [name, mutate] of [
 test("predeployment activation requires every deployment/sponsor field null", () => {
   const f = inputs();
   assert.equal(assertLateMigrationActivationIsInert(f.activation), true);
-  f.activation.relayerWalletOwnerId = "unreviewed";
-  assert.throws(
-    () => assertLateMigrationActivationIsInert(f.activation),
-    /must be null/,
-  );
+  for (const [field, value] of Object.entries(f.activation)) {
+    if (value !== null) continue;
+    assert.throws(
+      () => assertLateMigrationActivationIsInert({
+        ...f.activation,
+        [field]: "unreviewed",
+      }),
+      /must be null/,
+      field,
+    );
+  }
 });
 test("predicted intake cannot collide with source holders or pinned roles", () => {
   const f = fixture();

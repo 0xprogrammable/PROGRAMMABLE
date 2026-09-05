@@ -34,6 +34,7 @@ import {
   verifyFrozenLateMigrationInputs,
   verifyOldToken,
 } from "./late-migration-deployment-preflight-core.mjs";
+import { verifyMetaMaskActivationEnvelope, verifyPlainActivationEnvelope } from "./late-migration-activation-envelope.mjs";
 
 export const LATE_MIGRATION_STAGE_JOURNAL_SCHEMA =
   "programmable-late-migration-intake-deployment-journal/v1";
@@ -491,25 +492,33 @@ export async function verifyLateMigrationStageContext({
       anchor,
     );
     equal(
-      address(activated.transaction.to, "activation destination"),
-      sourceAddress,
-      "activation target",
-    );
-    equal(
-      address(activated.receipt.to, "activation receipt destination"),
-      sourceAddress,
-      "activation receipt target",
-    );
-    equal(
       activated.receipt.contractAddress,
       null,
       "activation receipt cannot create a contract",
     );
-    equal(
-      hex(activated.transaction.input, "activation input"),
-      encodeFunctionData({ abi: SOURCE_ABI, functionName: "activateDeposits" }),
-      "exact activation calldata",
-    );
+    let envelope = null;
+    const directCalldata = encodeFunctionData({ abi: SOURCE_ABI, functionName: "activateDeposits" });
+    if (address(activated.transaction.to, "activation destination") === sourceAddress) {
+      equal(address(activated.receipt.to, "activation receipt destination"), sourceAddress, "activation receipt target");
+      equal(hex(activated.transaction.input, "activation input"), directCalldata, "exact activation calldata");
+      await verifyPlainActivationEnvelope(sourceProviders, activated.transaction);
+    } else {
+      // Wrapped evidence is never accepted through public providers, caller
+      // supplied traces or a serialized context. Reuse this exact authenticated
+      // provider array for full transaction, trace and historical code reads.
+      if (!PRODUCTION_PROVIDERS.has(productionProviderSets?.source) ||
+          productionProviderSets.source.providers !== sourceProviders)
+        fail("wrapped activation requires verified authenticated production providers");
+      envelope = await verifyMetaMaskActivationEnvelope({
+        providers: sourceProviders,
+        transactionHash: activated.evidence.transactionHash,
+        canonicalTransaction: activated.transaction,
+        canonicalReceipt: activated.receipt,
+        sourceAddress,
+        sourceRuntimeCode: sourceBytes.runtimeCode,
+        maximumActivationGas: preflight.ownerHandoff.maximumActivationGas,
+      });
+    }
     const deployBlock = BigInt(deployed.evidence.blockNumber);
     const activateBlock = BigInt(activated.evidence.blockNumber);
     if (
@@ -578,6 +587,7 @@ export async function verifyLateMigrationStageContext({
     activationEvidence = {
       ...activated.evidence,
       logIndex: quantity(log.logIndex, "activation log index").toString(),
+      ...(envelope ? { envelope } : {}),
     };
   }
   await assertAnchorCanonical(sourceProviders, anchor);
