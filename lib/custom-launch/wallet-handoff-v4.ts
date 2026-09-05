@@ -16,6 +16,9 @@ import {
   type Hex,
 } from "viem";
 
+import { parseRobinhoodFeeReviewV1, type RobinhoodFeeReviewV1 } from "./robinhood-fee-review-v1";
+import { parseRobinhoodFundingPlanV1, type RobinhoodFundingPlanV1 } from "./robinhood-funding-review-v1";
+
 export const CUSTOM_LAUNCH_EXACT_WALLET_TRANSACTION_SCHEMA_V4 =
   "programmable.exact-wallet-transaction.v4" as const;
 export const CUSTOM_LAUNCH_WALLET_REVIEW_SCHEMA_V4 =
@@ -54,6 +57,18 @@ const ADMISSION_SCHEMA_DIGEST =
   "sha256:a28a6de6208d6ba7b65b4b706174509570955ba9ce9714624bcb2046ab7beae7" as const;
 const PROFILE_DIGEST =
   "sha256:484b1dc6e9091804fabc230f2b3a7504940fa00264f8e66e82a66a951e71f1a0" as const;
+export const CUSTOM_LAUNCH_ROBINHOOD_PROFILE_V41 = Object.freeze({
+  "schemaVersion": "programmable.custom-launch-profile-ref.v4",
+  "structuralProfileId": "programmable.custom-launch.robinhood-mainnet.v1",
+  "businessProfileId": "robinhood-production-launch",
+  "admissionDescriptorDigest": "sha256:a2ed199d421634ac1ee821769ac4526cae46cc3a1357a374a87aa49ee5c649d6",
+  "admissionPolicyDigest": "sha256:4307368bef409e6c7609a1a775f88f45f94f34cfefe8b1d2316589d5244661e8",
+  "admissionBindingDigest": "sha256:4553def3ee66dba41dd0296a3ae12fd5989c34a3b595d657226fa25239f17ea2",
+  "admissionSchemaDigest": "sha256:55ec992f3f93d4ed57c09bd41ef257e65e492bf3e9a12b2a780d01252a9ccf89",
+  "profileRevision": 2,
+  "profileVersion": "4.1.0",
+  "profileDigest": "sha256:5bd194ce769e825231d94e16c7e874f36935931224bca86a4003a9a3691b87bc"
+} as const);
 const SAFE_FALLBACK_HANDLER_RUNTIME_CODE_HASH =
   "0x7c6007a5d711cea8dfd5d91f5940ec29c7f200fe511eb1fc1397b367af3c42f9" as const;
 const SAFE_MODULES_END_SENTINEL =
@@ -383,6 +398,8 @@ export type CustomLaunchWalletExpectedV4 = Readonly<{
     valueWei: string;
   }>;
   projectMetadata: Readonly<{ name: string; symbol: string }>;
+  fundingPlan?: RobinhoodFundingPlanV1;
+  feeReview?: RobinhoodFeeReviewV1;
   commitments: CustomLaunchCommitmentsV4;
   preparedArtifact: CustomLaunchPreparedArtifactV4;
 }>;
@@ -569,6 +586,8 @@ export function deriveCustomLaunchWalletExpectedV4(
     || fundingValue.schemaVersion !== "programmable.custom-launch-funding-intent.v2"
     || !new Set(["none", "wallet-transaction-value"]).has(String(fundingValue.mode))
     || ((fundingValue.mode === "none") !== (valueWei === "0"))) return invalid();
+  const fundingPlan = exactProfileFundingPlan(resource, profile, valueWei);
+  const feeReview = exactProfileFeeReview(resource, profile);
   const projectMetadata = record(resource.projectMetadata);
   const token = exactRecord(projectMetadata.token, ["name", "symbol"]);
   const commitments = exactCommitments(resource.commitments);
@@ -604,11 +623,15 @@ export function deriveCustomLaunchWalletExpectedV4(
     },
     commitments,
     preparedArtifact,
+    ...(fundingPlan ? { fundingPlan } : {}),
+    ...(feeReview ? { feeReview } : {}),
   });
 }
 
 function assertExpectedBindings(value: unknown) {
-  const expected = exactRecord(value, EXPECTED_KEYS);
+  const candidateProfile = exactProfile(record(value).profile);
+  const expected = exactRecord(value, candidateProfile.profileVersion === "4.1.0"
+    ? [...EXPECTED_KEYS, "fundingPlan", "feeReview"] : EXPECTED_KEYS);
   const chainDeployment = exactChainDeployment(expected.chainDeployment);
   const chainDeploymentDescriptorDigest = exactLowerBytes32(
     expected.chainDeploymentDescriptorDigest,
@@ -625,6 +648,8 @@ function assertExpectedBindings(value: unknown) {
   const projectMetadata = exactRecord(expected.projectMetadata, ["name", "symbol"]);
   const commitments = exactCommitments(expected.commitments);
   const preparedArtifact = exactPreparedArtifact(expected.preparedArtifact);
+  const fundingPlan = exactProfileFundingPlan(expected, profile, valueWei.source);
+  const feeReview = profile.profileVersion === "4.1.0" ? exactExpectedFeeReview(expected.feeReview) : undefined;
   if (deadline.parsed <= validAfter.parsed
     || !new Set(["none", "wallet-transaction-value"]).has(String(funding.mode))
     || ((funding.mode === "none") !== (valueWei.parsed === 0n))
@@ -650,6 +675,8 @@ function assertExpectedBindings(value: unknown) {
     },
     commitments,
     preparedArtifact,
+    ...(fundingPlan ? { fundingPlan } : {}),
+    ...(feeReview ? { feeReview } : {}),
   });
 }
 
@@ -674,6 +701,12 @@ function assertFreshCapabilities(
   ]);
   const deployment = exactChainDeployment(capabilities.chainDeployment);
   const profile = exactProfile(capabilities.profile);
+  // Only an already issued historical wallet action may finish after the
+  // pinned 4.1 cutover. The caller still loads its authenticated stored resource;
+  // assertResourceAndTransaction requires its exact signed artifact and expiry.
+  // Full chain descriptor, Router code and finality checks below stay identical.
+  const historicalIssuedProfile = expected.profile.profileVersion === "4.0.0"
+    && profile.profileVersion === "4.1.0";
   if (capabilities.schemaVersion !== "programmable.custom-launch-capabilities.v2"
     || capabilities.apiVersion !== "v4"
     || !canonicalTimestamp(capabilities.serverTime)
@@ -685,7 +718,7 @@ function assertFreshCapabilities(
       !== expected.chainDeploymentDescriptorDigest
     || chainDeploymentDigest(deployment) !== expected.chainDeploymentDescriptorDigest
     || canonicalJson(deployment) !== canonicalJson(expected.chainDeployment)
-    || canonicalJson(profile) !== canonicalJson(expected.profile)
+    || (!historicalIssuedProfile && canonicalJson(profile) !== canonicalJson(expected.profile))
     || readiness.status !== "ready"
     || !Array.isArray(readiness.reasonCodes)
     || readiness.reasonCodes.length !== 0
@@ -718,6 +751,10 @@ function assertResourceAndTransaction(
   const deployment = exactChainDeployment(resource.chainDeployment);
   const profile = exactProfile(resource.profile);
   const controller = exactRecord(resource.controller, ["namespace", "address"]);
+  const fundingPlan = exactProfileFundingPlan(resource, profile, expected.funding.valueWei);
+  const feeReview = exactProfileFeeReview(resource, profile);
+  if (canonicalJson(feeReview ?? null) !== canonicalJson(expected.feeReview ?? null)) return invalid();
+  if (canonicalJson(fundingPlan ?? null) !== canonicalJson(expected.fundingPlan ?? null)) return invalid();
   if (resource.schemaVersion !== "programmable.custom-launch.v4"
     || resource.apiVersion !== "v4"
     || resource.chainId !== CUSTOM_LAUNCH_ROBINHOOD_CHAIN_ID_V4
@@ -1985,6 +2022,12 @@ function exactProfile(value: unknown) {
     "admissionSchemaDigest",
     "profileRevision", "profileVersion", "profileDigest",
   ]);
+  if (profile.profileVersion === "4.1.0") {
+    if (canonicalJson(profile) !== canonicalJson(CUSTOM_LAUNCH_ROBINHOOD_PROFILE_V41)) return invalid();
+    const { profileDigest, ...withoutDigest } = CUSTOM_LAUNCH_ROBINHOOD_PROFILE_V41;
+    if (framedSha256(PROFILE_DOMAIN_V4, withoutDigest) !== profileDigest) return invalid();
+    return CUSTOM_LAUNCH_ROBINHOOD_PROFILE_V41;
+  }
   if (profile.schemaVersion !== "programmable.custom-launch-profile-ref.v4"
     || profile.structuralProfileId
       !== "programmable.custom-launch.robinhood-mainnet.v1"
@@ -2009,6 +2052,48 @@ function exactProfile(value: unknown) {
   });
   if (framedSha256(PROFILE_DOMAIN_V4, withoutDigest) !== PROFILE_DIGEST) return invalid();
   return deepFreeze({ ...withoutDigest, profileDigest: PROFILE_DIGEST });
+}
+
+function exactProfileFeeReview(resource: Readonly<Record<string, unknown>>,
+  profile: ReturnType<typeof exactProfile>): RobinhoodFeeReviewV1 | undefined {
+  if (profile.profileVersion !== "4.1.0") {
+    if (Object.hasOwn(resource, "feeReview")) return invalid();
+    return undefined;
+  }
+  const review = parseRobinhoodFeeReviewV1(resource);
+  if (review === null) return invalid();
+  return review;
+}
+
+function exactExpectedFeeReview(value: unknown): RobinhoodFeeReviewV1 {
+  const review = exactRecord(value, ["evidenceDigest", "preparedArtifactHash", "kernelAddress", "vaultAddress",
+    "platformRecipient", "creatorFeeRecipient", "creatorBuyFeeBps", "creatorSellFeeBps", "lpFeeMode", "lpFeePips", "maxModuleLpFeePips"]);
+  if (review.platformRecipient !== "0xD88539d3c4C460136a733A3Fd60cf6BF269079da"
+    || !["static", "dynamic"].includes(String(review.lpFeeMode))) return invalid();
+  for (const field of ["creatorBuyFeeBps", "creatorSellFeeBps", "lpFeePips", "maxModuleLpFeePips"] as const) {
+    if (typeof review[field] !== "number" || !Number.isSafeInteger(review[field]) || review[field] < 0) return invalid();
+  }
+  return deepFreeze({
+    evidenceDigest: exactSha256(review.evidenceDigest), preparedArtifactHash: exactSha256(review.preparedArtifactHash),
+    kernelAddress: canonicalAddress(review.kernelAddress), vaultAddress: canonicalAddress(review.vaultAddress),
+    platformRecipient: review.platformRecipient, creatorFeeRecipient: canonicalAddress(review.creatorFeeRecipient),
+    creatorBuyFeeBps: review.creatorBuyFeeBps as number, creatorSellFeeBps: review.creatorSellFeeBps as number,
+    lpFeeMode: review.lpFeeMode as "static" | "dynamic", lpFeePips: review.lpFeePips as number,
+    maxModuleLpFeePips: review.maxModuleLpFeePips as number,
+  });
+}
+
+function exactProfileFundingPlan(resource: Readonly<Record<string, unknown>>,
+  profile: ReturnType<typeof exactProfile>, valueWei: string): RobinhoodFundingPlanV1 | undefined {
+  if (profile.profileVersion !== "4.1.0") {
+    if (Object.hasOwn(resource, "fundingPlan")) return invalid();
+    return undefined;
+  }
+  try {
+    const plan = parseRobinhoodFundingPlanV1(resource.fundingPlan, valueWei);
+    if (plan.launchMode !== "fund-and-launch") return invalid();
+    return plan;
+  } catch { return invalid(); }
 }
 
 function exactCommitments(value: unknown): CustomLaunchCommitmentsV4 {

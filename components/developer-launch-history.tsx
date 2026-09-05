@@ -36,6 +36,7 @@ import {
   robinhoodFundingPlanLabelsV1,
   type RobinhoodLaunchCostV1,
 } from "@/lib/custom-launch/robinhood-funding-review-v1";
+import { parseRobinhoodFeeReviewV1 } from "@/lib/custom-launch/robinhood-fee-review-v1";
 import { PROGRAMMABLE_AGENT_SETUP_LINKS_V1 } from
   "@/lib/custom-launch/agent-setup-v1";
 import {
@@ -1860,6 +1861,30 @@ export function DeveloperLaunchMetadataPreview({
   );
 }
 
+export function DeveloperRobinhoodFeePreview({ resource }: Readonly<{ resource: unknown }>) {
+  const fee = parseRobinhoodFeeReviewV1(resource);
+  if (!fee) return <div className={styles.metadataUnavailable} role="status">
+    <strong>Bound fee verification unavailable</strong>
+    <p>Load the exact launch review. The server must bind the platform, creator and LP fee settings before a wallet transaction can open.</p>
+  </div>;
+  return <section className={styles.routerReview} aria-label="Robinhood launch fees">
+    <div className={styles.stepHeading}><strong>Robinhood launch fees</strong></div>
+    <dl className={styles.reviewGrid}>
+      <div><dt>Programmable fee</dt><dd>0.2% on each successful buy and sell</dd></div>
+      <div><dt>Creator buy fee</dt><dd>{fee.creatorBuyFeeBps / 100}%</dd></div>
+      <div><dt>Creator sell fee</dt><dd>{fee.creatorSellFeeBps / 100}%</dd></div>
+      <div><dt>{fee.lpFeeMode === "dynamic" ? "Maximum module LP fee" : "Pool LP fee"}</dt>
+        <dd>{(fee.lpFeeMode === "dynamic" ? fee.maxModuleLpFeePips : fee.lpFeePips) / 10000}% {fee.lpFeeMode === "dynamic" ? "cap" : "fixed"}</dd></div>
+      <div><dt>Platform treasury</dt><dd><code>{fee.platformRecipient}</code></dd></div>
+      <div><dt>Creator fee recipient</dt><dd><code>{fee.creatorFeeRecipient}</code></dd></div>
+      <div><dt>Fee vault</dt><dd><code>{fee.vaultAddress}</code></dd></div>
+    </dl>
+    <p>The platform fee is separate from creator and LP fees. It uses the gross native ETH side of each swap once, rounded up to whole wei.</p>
+    <p>After launch, platform fees accrue as native ETH claims. Anyone can trigger collection to the fixed treasury. They are not transferred to the treasury immediately on each trade.</p>
+    <p>These fee settings are bound to the server verified code. The child vault runtime still requires verification after deployment; this is not a safety audit.</p>
+  </section>;
+}
+
 export function DeveloperRobinhoodFundingPreview({ resource, cost, now }: Readonly<{
   resource: unknown;
   cost?: RobinhoodLaunchCostV1;
@@ -3622,6 +3647,11 @@ export function DeveloperLaunchHistory({
                   <DeveloperRobinhoodFundingPreview resource={reviewLaunch.rawResourceV4}
                     cost={currentRobinhoodCost} now={currentTimeMs ?? Number.NaN} />
                 ) : null}
+                {reviewLaunch.routeId === "custom-launch:create:v4"
+                  && isRecord(reviewLaunch.rawResourceV4?.profile)
+                  && reviewLaunch.rawResourceV4.profile.profileVersion === "4.1.0" ? (
+                    <DeveloperRobinhoodFeePreview resource={reviewLaunch.rawResourceV4} />
+                  ) : null}
                 <AdmissionWarnings codes={warningFindingCodes} />
                 {reviewLaunch.failure
                   && reviewLaunch.status !== "action_required" ? (
