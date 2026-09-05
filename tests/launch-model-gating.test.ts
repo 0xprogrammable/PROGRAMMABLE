@@ -172,12 +172,13 @@ describe("unreleased launch model gating", () => {
   it("offers Classic and Custom on Ethereum without bypassing launch authority", () => {
     const html = renderToStaticMarkup(
       createElement(LaunchModelPicker, {
+        chainId: 1,
         onChoose: () => undefined,
       }),
     );
 
     expect(html.match(/data-launch-model-option=/g)).toHaveLength(2);
-    expect(html).toContain('<h1 class="sr-only">Create</h1>');
+    expect(html).toContain('<h1 class="sr-only">Launch</h1>');
     expect(html).toContain('<legend class="sr-only">Launch chain</legend>');
     expect(html).toContain('aria-label="Ethereum"');
     expect(html).toContain('aria-label="Robinhood"');
@@ -211,7 +212,7 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain(
       'id="launch-model-custom-title">Custom V4 Hook</strong>',
     );
-    expect(html).toContain("Create a Classic coin");
+    expect(html).toContain("Launch a Classic Coin");
     expect(html).toContain(
       "Build your own Uniswap v4 hook and submit it with an API key. Your wallet reviews and signs the launch.",
     );

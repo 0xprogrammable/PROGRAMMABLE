@@ -4,7 +4,8 @@ import { isAddress } from "viem";
 
 import { TokenIndexResetView } from "@/components/token-index-reset-view";
 import { RobinhoodTokenView } from "@/components/robinhood-token-view";
-import { readRobinhoodToken } from "@/lib/server/robinhood-index/read";
+import { TokenRouteChainSync } from "@/components/token-route-chain-sync";
+import { resolveTokenPage } from "@/lib/server/token-page";
 import { genericTokenDetailMetadata } from "@/lib/token-detail-metadata";
 import { tokenDetailPageChainId } from "@/lib/token-page-chain";
 
@@ -23,16 +24,16 @@ export async function generateMetadata({
     params,
     searchParams,
   ]);
-  const chainId = tokenDetailPageChainId(resolvedSearchParams.chain);
-  if (chainId === 4663 && isAddress(address)) {
-    const { token } = await readRobinhoodToken(address);
+  if (isAddress(address) && tokenDetailPageChainId(resolvedSearchParams.chain) !== null) {
+    const resolved = await resolveTokenPage(address, resolvedSearchParams.chain);
+    const token = resolved?.chainId === 4663 ? resolved.token : null;
     if (token) return {
       title: `${token.name || address} · Programmable`,
       description: "Programmable Custom launch on Robinhood Chain. Token, hook and launch stamp details.",
-      alternates: { canonical: `/token/${token.tokenAddress}?chain=4663` },
+      alternates: { canonical: `/token/${token.tokenAddress}` },
     };
   }
-  return genericTokenDetailMetadata(address, true, chainId ?? 1);
+  return genericTokenDetailMetadata(address, true, tokenDetailPageChainId(resolvedSearchParams.chain) ?? 1);
 }
 
 export default async function TokenPage({
@@ -52,9 +53,15 @@ export default async function TokenPage({
   ) {
     notFound();
   }
-  if (tokenDetailPageChainId(resolvedSearchParams.chain) === 4663) {
-    const { token, status } = await readRobinhoodToken(address);
-    return <RobinhoodTokenView address={address} token={token} status={status} />;
+  const resolved = await resolveTokenPage(address, resolvedSearchParams.chain);
+  if (resolved === null) notFound();
+  if (resolved.chainId === 4663) {
+    return <TokenRouteChainSync key={4663} chainId={4663}>
+      <RobinhoodTokenView address={address} token={resolved.token} status={resolved.status} />
+    </TokenRouteChainSync>;
   }
-  return <TokenIndexResetView />;
+  if (resolved.chainId === 1) {
+    return <TokenRouteChainSync key={1} chainId={1}><TokenIndexResetView /></TokenRouteChainSync>;
+  }
+  return <TokenIndexResetView unresolved />;
 }

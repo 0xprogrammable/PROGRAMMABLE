@@ -40,7 +40,7 @@ export function ExploreIndexResetView({
               />
             </div>
 
-            <ExploreChainSelector />
+            <ExploreChainSelector chainId={1} />
 
             <ExploreFilters disabled />
           </div>

@@ -146,7 +146,6 @@
 .artwork { border-radius: 8px; width: 100%; }
 .identity { min-width: 0; padding: 12px 4px 0; }
 .nameRow { align-items: center; display: flex; gap: 8px; min-width: 0; }
-.pin { color: var(--webde-muted); display: inline-flex; flex: none; }
 .name, .symbol { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .name { font-size: 18px; font-weight: 550; line-height: 28px; }
 .symbol { color: var(--webde-muted); font-size: 14px; line-height: 20px; }

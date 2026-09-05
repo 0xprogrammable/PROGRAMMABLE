@@ -5,10 +5,10 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 
 describe("Explore index reset", () => {
-  it("renders the reset view without a server index read or reactivation flag", () => {
-    const page = read("app/explore/page.tsx");
+  it("renders chain-specific views without a server index read or reactivation flag", () => {
+    const page = read("app/explore/[chain]/page.tsx");
 
-    expect(page).toContain("<RobinhoodLaunchesView />");
+    expect(page).toContain("<RobinhoodLaunchesView chainId={chainId} />");
     expect(page).toContain("index: false");
     expect(page).not.toContain("@/app/api/explore/route");
     expect(page).not.toContain("ExploreView");
@@ -24,7 +24,7 @@ describe("Explore index reset", () => {
     const selector = read("components/explore-chain-selector.tsx");
 
     expect(resetView).toContain("No token data is loaded");
-    expect(resetView).toContain("<ExploreChainSelector />");
+    expect(resetView).toContain("<ExploreChainSelector chainId={1} />");
     expect(resetView).not.toContain("fetch(");
     expect(resetView).not.toContain("ExploreView");
     expect(resetView).not.toContain("setInterval");

@@ -10,7 +10,7 @@ import { useViewChain, type ViewChainId } from "@/components/view-chain";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
 import { resolveImplementedLaunchModel } from "@/lib/launch-model-gating";
 import type { LaunchModel } from "@/lib/launch";
-import { VIEW_CHAIN_OPTIONS } from "@/lib/view-chain";
+import { DEFAULT_VIEW_CHAIN_ID, VIEW_CHAIN_OPTIONS } from "@/lib/view-chain";
 
 const launchEnvironment =
   process.env.NEXT_PUBLIC_PROGRAMMABLE_ONCHAIN_NETWORK === "rehearsal"
@@ -28,7 +28,7 @@ type LaunchBuilderComponent =
 type LaunchPickerChoice = LaunchModel;
 
 export function LaunchExperience({
-  initialViewChainId = 1,
+  initialViewChainId = DEFAULT_VIEW_CHAIN_ID,
 }: Readonly<{ initialViewChainId?: ViewChainId }>) {
   const { hydrated, viewChainId, setViewChainId } = useViewChain();
   return (
@@ -118,7 +118,7 @@ function LaunchExperienceRuntime({
 }
 
 export function LaunchModelPicker({
-  chainId = 1,
+  chainId = DEFAULT_VIEW_CHAIN_ID,
   onChangeChain,
   modelLoadError = "",
   onChoose,
@@ -191,7 +191,7 @@ export function LaunchModelPicker({
       <header
         className={`launch-model-heading ${launchExperience.pickerHeading}`}
       >
-        <h1 className="sr-only">Create</h1>
+        <h1 className="sr-only">Launch</h1>
         <fieldset
           className={launchExperience.chainChoice}
           disabled={preparingModel !== null}
@@ -283,7 +283,7 @@ export function LaunchModelPicker({
                 className={`launch-model-description ${launchExperience.modelDescription}`}
                 id="launch-model-classic-description"
               >
-                Create a fixed-supply token with permanently locked, one-sided
+                Launch a fixed-supply token with permanently locked, one-sided
                 Uniswap v4 liquidity. Set buy and sell fees, reward recipients,
                 and the initial buy before you sign.
               </span>
@@ -293,7 +293,7 @@ export function LaunchModelPicker({
                 >
                   {preparingModel === "classic-v3"
                     ? "Opening Classic"
-                    : "Create a Classic coin"}
+                    : "Launch a Classic Coin"}
                   <ArrowRight aria-hidden="true" size={16} />
                 </span>
               ) : null}

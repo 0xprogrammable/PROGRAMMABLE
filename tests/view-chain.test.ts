@@ -20,8 +20,8 @@ const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 describe("view chain", () => {
-  it("accepts only Ethereum and Robinhood and fails invalid state to Ethereum", () => {
-    expect(DEFAULT_VIEW_CHAIN_ID).toBe(1);
+  it("accepts only Ethereum and Robinhood and defaults invalid or missing state to Robinhood", () => {
+    expect(DEFAULT_VIEW_CHAIN_ID).toBe(4663);
     expect(isViewChainId(1)).toBe(true);
     expect(isViewChainId(4663)).toBe(true);
     expect(isViewChainId("4663")).toBe(false);
@@ -29,8 +29,8 @@ describe("view chain", () => {
     expect(tryParseViewChainId("4663")).toBe(4663);
     expect(tryParseViewChainId("8453")).toBeNull();
     expect(tryParseViewChainId("11155111")).toBeNull();
-    expect(parseViewChainId(null)).toBe(1);
-    expect(parseViewChainId("invalid")).toBe(1);
+    expect(parseViewChainId(null)).toBe(4663);
+    expect(parseViewChainId("invalid")).toBe(4663);
   });
 
   it("serializes a long-lived, site-wide preference cookie", () => {
@@ -46,8 +46,8 @@ describe("view chain", () => {
   it("accepts supported Explore preferences and normalizes invalid chains", () => {
     expect(resolveExploreChainId(1)).toBe(1);
     expect(resolveExploreChainId(4663)).toBe(4663);
-    expect(resolveExploreChainId(8453)).toBe(1);
-    expect(resolveExploreChainId("invalid")).toBe(1);
+    expect(resolveExploreChainId(8453)).toBe(4663);
+    expect(resolveExploreChainId("invalid")).toBe(4663);
   });
 
   it("derives Robinhood availability only from a non-empty ready server response", () => {

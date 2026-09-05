@@ -1,6 +1,6 @@
 export type ViewChainId = 1 | 4663;
 
-export const DEFAULT_VIEW_CHAIN_ID: ViewChainId = 1;
+export const DEFAULT_VIEW_CHAIN_ID: ViewChainId = 4663;
 export const VIEW_CHAIN_COOKIE_NAME = "programmable-view-chain";
 export const VIEW_CHAIN_STORAGE_KEY = "programmable:view-chain:v1";
 export const VIEW_CHAIN_CHANGE_EVENT = "programmable:view-chain-change";
