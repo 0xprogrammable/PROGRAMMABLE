@@ -19,7 +19,8 @@ export interface OpenManagement { summary: string; reads: OpenRead[]; actions: O
 export interface OpenSourcePackage {
   format: typeof OPEN_PACKAGE_FORMAT; name: string; version: string;
   author: OpenHex; rewardWallet: OpenHex; familySalt: OpenHex;
-  source: { repository: string; revision: string; files: Array<{path: string; sha256: string}> };
+  source: { files: Array<{path: string; sha256: string}> } &
+    ({repository: string;revision: string} | {repository?:never;revision?:never});
   components: OpenComponent[]; configuration: OpenConfigSchema;
   ports: {inputs: Record<string, string>; outputs: Record<string, string>};
   constraints: OpenConstraint[]; management: OpenManagement; requiresHost: string[];

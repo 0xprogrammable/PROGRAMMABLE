@@ -106,14 +106,19 @@ function assertPackage(p) {
     'OPEN_VERSION', 'Use an explicit semantic version', '/version');
   address(p.author, '/author'); address(p.rewardWallet, '/rewardWallet');
   need(typeof p.familySalt === 'string' && hex32.test(p.familySalt), 'OPEN_FAMILY', 'Family salt must be lowercase bytes32', '/familySalt');
-  object(p.source, ['repository', 'revision', 'files'], [], '/source');
-  need(typeof p.source.repository === 'string', 'OPEN_SOURCE', 'Repository URL must be a string', '/source/repository');
-  let url;
-  try { url = new URL(p.source.repository); } catch { fail('OPEN_SOURCE', 'Invalid repository URL', '/source/repository'); }
-  need(url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash,
-    'OPEN_SOURCE', 'Repository must be HTTPS without credentials, query or fragment', '/source/repository');
-  need(typeof p.source.revision === 'string' && /^[0-9a-f]{40}$/.test(p.source.revision) && !/^0+$/.test(p.source.revision),
-    'OPEN_SOURCE', 'Pin an exact Git revision', '/source/revision');
+  object(p.source, ['files'], ['repository', 'revision'], '/source');
+  const repositoryDeclared = Object.hasOwn(p.source, 'repository');
+  need(repositoryDeclared === Object.hasOwn(p.source, 'revision'),
+    'OPEN_SOURCE', 'Optional Git provenance requires both repository and revision', '/source');
+  if (repositoryDeclared) {
+    need(typeof p.source.repository === 'string', 'OPEN_SOURCE', 'Repository URL must be a string', '/source/repository');
+    let url;
+    try { url = new URL(p.source.repository); } catch { fail('OPEN_SOURCE', 'Invalid repository URL', '/source/repository'); }
+    need(url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash,
+      'OPEN_SOURCE', 'Repository must be HTTPS without credentials, query or fragment', '/source/repository');
+    need(typeof p.source.revision === 'string' && /^[0-9a-f]{40}$/.test(p.source.revision) && !/^0+$/.test(p.source.revision),
+      'OPEN_SOURCE', 'Pin an exact Git revision', '/source/revision');
+  }
   list(p.source.files, 128, '/source/files');
   need(p.source.files.length > 0, 'OPEN_SOURCE', 'Declare source files', '/source/files');
   for (const [i, file] of p.source.files.entries()) {

@@ -34,6 +34,19 @@ test('wire parser rejects unknown evidence, duplicate/missing/extra files and so
   ];
   for (const edit of edits) { const x = request(); edit(x); assert.equal(validateModuleSubmissionRequest(x).ok, false); }
 });
+test('API contributions can upload pinned bytes without a Git repository; partial provenance fails', () => {
+  const x = request(); const withRepository = validateModuleSubmissionRequest(x);
+  delete x.descriptor.source.repository; delete x.descriptor.source.revision;
+  const uploaded = validateModuleSubmissionRequest(x);
+  assert.equal(uploaded.ok, true);
+  assert.equal(uploaded.sourceBytesVerified, true);
+  assert.equal(uploaded.sourceRevisionVerified, false);
+  assert.notEqual(uploaded.requestDigest, withRepository.requestDigest);
+  x.descriptor.source.repository = 'https://example.invalid/source';
+  assert.equal(validateModuleSubmissionRequest(x).ok, false);
+  delete x.descriptor.source.repository; x.descriptor.source.revision = 'a'.repeat(40);
+  assert.equal(validateModuleSubmissionRequest(x).ok, false);
+});
 test('canonical base64 rejects whitespace, alternate padding bits and ignored characters', () => {
   for (const encoding of ['YQ', 'YQ==\n', 'YR==', 'YQ===', '$YQ==', '-_==']) {
     const x = request(); x.files[0].bytes = encoding;
