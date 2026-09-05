@@ -72,7 +72,7 @@ describe("Module Mode immutable release digest", () => {
   it("matches the fixed canonical Keccak identity vector and ignores object key order", () => {
     const { release } = moduleEvidenceFixture();
     expect(computeModuleModeReleaseDigest(release)).toBe("0xd545a5ca686c4e1f381acdc9af54dc71655a8391e24a8a80fabaf01e6ecbc1cb");
-    const reordered = Object.fromEntries(Object.entries(release).reverse());
+    const reordered: Record<string, unknown> = Object.fromEntries(Object.entries(release).reverse());
     reordered.contracts = Object.fromEntries(Object.entries(release.contracts).reverse());
     expect(bindActiveModuleModeRelease(reordered).releaseDigest).toBe(release.releaseDigest);
   });
