@@ -55,6 +55,13 @@ import {
   prepareCustomLaunchWalletReviewV4,
   revalidateCustomLaunchWalletRequestV4,
 } from "@/lib/custom-launch/wallet-handoff-v4";
+import {
+  estimateRobinhoodLaunchCostV1,
+  parseRobinhoodFundingReviewV1,
+  robinhoodCostMatchesReviewV1,
+  robinhoodCostRequiresReviewV1,
+  type RobinhoodLaunchCostV1,
+} from "@/lib/custom-launch/robinhood-funding-review-v1";
 import { parseLocalProfile } from "@/lib/profile/local-profile";
 import { robinhoodChain } from "@/lib/chains";
 import {
@@ -141,7 +148,11 @@ export type WalletApplicantSessionV1 = Readonly<{
   launchWallet: `0x${string}`;
 }>;
 
+export type CustomLaunchWalletActionResultV4 = `0x${string}` | RobinhoodLaunchCostV1;
+
 export type CustomLaunchWalletActionInputV4 = Readonly<{
+  action: "estimate" | "send";
+  reviewedCost?: RobinhoodLaunchCostV1;
   reviewedResource: unknown;
   loadFreshCapabilities: () => Promise<unknown>;
   loadFreshResource: () => Promise<unknown>;
@@ -218,7 +229,7 @@ type WalletContextValue = {
   ) => Promise<Hex>;
   sendCustomLaunchWalletActionV4: (
     input: CustomLaunchWalletActionInputV4,
-  ) => Promise<Hex>;
+  ) => Promise<CustomLaunchWalletActionResultV4>;
   signCustomLaunchFundingAuthorization: (
     input: CustomLaunchFundingAuthorizationV3,
   ) => Promise<Hex>;
@@ -2454,6 +2465,8 @@ function PrivyWalletBridge({
     };
     try {
       const expected = deriveCustomLaunchWalletExpectedV4(input.reviewedResource);
+      const funding = parseRobinhoodFundingReviewV1(input.reviewedResource);
+      if (!funding) throw new Error("Load the exact Robinhood funding details before continuing.");
       if (wallet.chainId !== robinhoodChainHex) {
         await connectedWallet.switchChain(robinhoodChain.id);
         assertCurrentSession();
@@ -2462,10 +2475,26 @@ function PrivyWalletBridge({
       const review = await prepareCustomLaunchWalletReviewV4({
         provider,
         loadFreshCapabilities: input.loadFreshCapabilities,
-        loadFreshResource: input.loadFreshResource,
+        loadFreshResource: async () => {
+          const fresh = await input.loadFreshResource();
+          const currentFunding = parseRobinhoodFundingReviewV1(fresh);
+          if (!currentFunding || currentFunding.binding !== funding.binding) {
+            throw new Error("The Robinhood funding details changed. Load the exact review again.");
+          }
+          return fresh;
+        },
         expected,
       });
       assertCurrentSession();
+      if (input.action === "estimate") {
+        const cost = await estimateRobinhoodLaunchCostV1({ provider, review, funding });
+        assertCurrentSession();
+        return cost;
+      }
+      if (input.action !== "send" || !input.reviewedCost || !robinhoodCostMatchesReviewV1(input.reviewedCost, funding)) {
+        throw new Error("Estimate and review the current Robinhood launch cost before sending.");
+      }
+      const reviewedCost = input.reviewedCost;
       return await runWithBrowserWalletRequestLock({
         sessionSubject,
         account: wallet.account,
@@ -2476,10 +2505,13 @@ function PrivyWalletBridge({
         ]),
         assertCurrentSession,
         execute: async () => {
+          const freshCost = await estimateRobinhoodLaunchCostV1({ provider, review, funding });
+          assertCurrentSession();
+          if (robinhoodCostRequiresReviewV1(reviewedCost, freshCost, funding)) {
+            return freshCost;
+          }
           const transaction = await revalidateCustomLaunchWalletRequestV4({
-            provider,
-            review,
-            candidate: review.walletRequest,
+            provider, review, candidate: review.walletRequest,
           });
           assertCurrentSession();
           const hash = await provider.request({
