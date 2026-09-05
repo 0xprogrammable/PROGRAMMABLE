@@ -29,6 +29,7 @@ import {
 import {
   useWallet,
   type CustomLaunchWalletActionInputV4,
+  type CustomLaunchWalletActionResultV4,
 } from "@/components/wallet-provider";
 import { PROGRAMMABLE_AGENT_SETUP_TEXT_V1 } from
   "@/lib/custom-launch/agent-setup-v1";
@@ -97,7 +98,7 @@ type DeveloperApiKeysViewProps = Readonly<{
   ) => Promise<`0x${string}`>;
   sendCustomLaunchWalletActionV4: (
     input: CustomLaunchWalletActionInputV4,
-  ) => Promise<`0x${string}`>;
+  ) => Promise<CustomLaunchWalletActionResultV4>;
   signCustomLaunchFundingAuthorization: (
     input: CustomLaunchFundingAuthorizationV3,
   ) => Promise<`0x${string}`>;

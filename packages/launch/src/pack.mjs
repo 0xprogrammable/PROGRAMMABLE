@@ -1,3 +1,4 @@
+import { PACK_CONFIG_V41_CONTRACT_URL, PACK_CONFIG_V41_EXAMPLE_URL } from "./profile-v41.mjs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -557,11 +558,11 @@ async function readPackConfig(absoluteConfig) {
   } catch (error) {
     if (config?.schemaVersion === PACK_CONFIG_SCHEMA_V1
       || config?.schemaVersion === PACK_CONFIG_SCHEMA_V2) throw error;
-    throw invalidPackConfig(error, config?.schemaVersion);
+    throw invalidPackConfig(error, config?.schemaVersion, config?.profile?.profileVersion);
   }
 }
 
-function invalidPackConfig(error, schemaVersion) {
+function invalidPackConfig(error, schemaVersion, profileVersion) {
   const isV4 = schemaVersion === PACK_CONFIG_SCHEMA_V4;
   return createCliDiagnosticError({
     code: isV4 ? "PACK_CONFIG_V4_INVALID" : "PACK_CONFIG_V3_INVALID",
@@ -572,10 +573,10 @@ function invalidPackConfig(error, schemaVersion) {
     expected: {
       schemaVersion: isV4 ? PACK_CONFIG_SCHEMA_V4 : PACK_CONFIG_SCHEMA_V3,
       configContract: isV4
-        ? "https://programmable.market/schemas/custom-launch/v4/pack-config.json"
+        ? profileVersion === "4.1.0" ? PACK_CONFIG_V41_CONTRACT_URL : "https://programmable.market/schemas/custom-launch/v4/pack-config.json"
         : PACK_CONFIG_V3_CONTRACT_URL,
       executableExample: isV4
-        ? "https://github.com/programmablehq/PROGRAMMABLE/tree/programmable-launch-v4.0.0/packages/launch/examples/robinhood-v4-no-broadcast"
+        ? profileVersion === "4.1.0" ? PACK_CONFIG_V41_EXAMPLE_URL : "https://github.com/programmablehq/PROGRAMMABLE/tree/programmable-launch-v4.0.0/packages/launch/examples/robinhood-v4-no-broadcast"
         : PACK_CONFIG_V3_EXAMPLE_URL,
     },
     observed: {

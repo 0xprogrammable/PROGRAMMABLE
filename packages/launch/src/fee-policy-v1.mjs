@@ -1,0 +1,4 @@
+// Reviewed immutable constants only; safe for server projections without filesystem reads.
+export const ROBINHOOD_NATIVE_FEE_ARTIFACT_SHA256_V1 = "sha256:917c03d59c7b6c051d6aa238cd0b2a91aa02c8993ccbfce6421d5c6341d5380e";
+export const ROBINHOOD_NATIVE_FEE_KERNEL_CREATION_BYTES_V1 = 13498;
+export const ROBINHOOD_NATIVE_FEE_KERNEL_CREATION_KECCAK_V1 = "0x07423d5bb97c4cf08612fa6e4235927f623fb1f897948be46ad7f30b1ef83e3f";

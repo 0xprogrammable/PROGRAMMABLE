@@ -8,6 +8,8 @@ import {
   PROGRAMMABLE_AGENT_INTAKE_TEXT_V1,
   PROGRAMMABLE_AGENT_INTAKE_V1,
   PROGRAMMABLE_AGENT_SETUP_TEXT_V1,
+  PROGRAMMABLE_ROBINHOOD_FUNDING_INTAKE_V1,
+  PROGRAMMABLE_ROBINHOOD_FUNDING_INTAKE_TEXT_V1,
 } from "../lib/custom-launch/agent-setup-v1";
 import { PRELAUNCH_CUSTOM_REGISTRY_PUBLIC_MANIFEST_V1 } from "../lib/custom-launch/registry-public-manifest-v1";
 import { programmableWellKnownDocumentV1 } from "../lib/server/custom-launch/well-known-v1";
@@ -21,6 +23,27 @@ const document = programmableWellKnownDocumentV1(
 );
 
 describe("chain-first Custom Launch intake", () => {
+  it("keeps the funding conversation scoped to Robinhood and consistent across discovery, setup and guide", () => {
+    const funding = document.customLaunchApi.intake.chainSpecific.robinhood;
+    expect(funding).toBe(PROGRAMMABLE_ROBINHOOD_FUNDING_INTAKE_V1);
+    expect(funding.chainId).toBe(4663);
+    expect(funding.choicesAreRequestEnumValues).toBe(false);
+    expect(funding.pricingModelIsFundingSource).toBe(false);
+    expect(funding.costReview.unknownCostIsZero).toBe(false);
+    expect(funding.costReview.avoidDoubleCountingInitialBuy).toBe(true);
+    expect(funding.platformFee.configurationIsCollectionProof).toBe(false);
+    expect(funding.platformFee.treasuryIsUserSelectable).toBe(false);
+    const robinhoodStart = PROGRAMMABLE_AGENT_SETUP_TEXT_V1.indexOf("Robinhood Chain Mainnet only (V4, chain 4663)");
+    const ethereumStart = PROGRAMMABLE_AGENT_SETUP_TEXT_V1.indexOf("Ethereum Mainnet only (V3, chain 1)");
+    const fundingStart = PROGRAMMABLE_AGENT_SETUP_TEXT_V1.indexOf(PROGRAMMABLE_ROBINHOOD_FUNDING_INTAKE_TEXT_V1);
+    expect(fundingStart).toBeGreaterThan(robinhoodStart);
+    expect(fundingStart).toBeLessThan(ethereumStart);
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1.slice(ethereumStart)).not.toContain(PROGRAMMABLE_ROBINHOOD_FUNDING_INTAKE_TEXT_V1);
+    for (const instruction of funding.instructions) {
+      expect(rawGuide).toContain(instruction);
+    }
+  });
+
   it("publishes the same preparation guidance before technical setup on every entry point", () => {
     expect(document.customLaunchApi.intake).toBe(PROGRAMMABLE_AGENT_INTAKE_V1);
     expect(document.customLaunchApi.intake.scope).toBe("agent-preparation-not-server-authorization");

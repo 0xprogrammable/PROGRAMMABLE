@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://programmable.market/schemas/custom-launch/v4.1/initial-buy-quote.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "executionChainId",
+    "referenceChainId",
+    "nativeCurrency",
+    "quoteCurrency",
+    "assessmentBase",
+    "feedAddress",
+    "feedDecimals",
+    "blockNumber",
+    "blockHash",
+    "blockTimestamp",
+    "roundId",
+    "answeredInRound",
+    "answer",
+    "startedAt",
+    "updatedAt",
+    "minimumUsdWad",
+    "minimumInitialBuyWei",
+    "observedAt",
+    "expiresAt",
+    "providers",
+    "evidenceDigest"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "programmable.robinhood-initial-buy-usd-quote.v1"
+    },
+    "executionChainId": {
+      "const": "4663"
+    },
+    "referenceChainId": {
+      "const": "1"
+    },
+    "nativeCurrency": {
+      "const": "ETH"
+    },
+    "quoteCurrency": {
+      "const": "USD"
+    },
+    "assessmentBase": {
+      "const": "gross-native-initial-buy-at-admission"
+    },
+    "feedAddress": {
+      "const": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419"
+    },
+    "feedDecimals": {
+      "const": 8
+    },
+    "blockNumber": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,77}$"
+    },
+    "blockHash": {
+      "type": "string",
+      "pattern": "^0x(?!0{64}$)[0-9a-f]{64}$"
+    },
+    "blockTimestamp": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,77}$"
+    },
+    "roundId": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,77}$"
+    },
+    "answeredInRound": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,77}$"
+    },
+    "answer": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,77}$"
+    },
+    "startedAt": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,77}$"
+    },
+    "updatedAt": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,77}$"
+    },
+    "minimumUsdWad": {
+      "const": "1000000000000000000"
+    },
+    "minimumInitialBuyWei": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,77}$"
+    },
+    "observedAt": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "expiresAt": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "providers": {
+      "const": [
+        {
+          "providerId": "drpc",
+          "trustDomain": "drpc.org"
+        },
+        {
+          "providerId": "quicknode",
+          "trustDomain": "quicknode.com"
+        }
+      ]
+    },
+    "evidenceDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

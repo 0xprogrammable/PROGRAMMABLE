@@ -1,3 +1,4 @@
+import { OPENAPI_URL_V41, PACK_CONFIG_V41_CONTRACT_URL, PACK_CONFIG_V41_EXAMPLE_URL } from "./profile-v41.mjs";
 import {
   GUIDE_URL,
   OPENAPI_URL_V1,
@@ -198,8 +199,9 @@ function requiredV3ConfigFlag(parsed) {
       executableExample: PACK_CONFIG_V3_EXAMPLE_URL,
       chainAwareAlternative: {
         schemaVersion: PACK_CONFIG_SCHEMA_V4,
-        configContract: PACK_CONFIG_V4_CONTRACT_URL,
-        executableExample: PACK_CONFIG_V4_EXAMPLE_URL,
+        configContract: PACK_CONFIG_V41_CONTRACT_URL,
+        executableExample: PACK_CONFIG_V41_EXAMPLE_URL,
+        profileSelection: "Use the complete current capabilities.profile tuple. Historical 4.0 keeps its frozen contract.",
       },
     },
     observed: { flag: null },
@@ -255,7 +257,8 @@ function usage(command) {
     `OpenAPI V1 (read compatibility; create fenced): ${OPENAPI_URL_V1}`,
     `OpenAPI V2 (read compatibility; create fenced): ${OPENAPI_URL_V2}`,
     `OpenAPI V3 general hook profile: ${OPENAPI_URL_V3}`,
-    `OpenAPI V4 chain-aware Custom Launch: ${OPENAPI_URL_V4}`,
+    `OpenAPI V4 profile 4.1: ${OPENAPI_URL_V41}`,
+    `Historical profile 4.0: ${OPENAPI_URL_V4}`,
     `Stable V1 release: ${RELEASE_URL_V1}`,
     `Public V3 release (immutable): ${RELEASE_URL_V3}`,
     `Public V4 release: ${RELEASE_URL}`,

@@ -304,6 +304,17 @@ paths = ['''contracts/test/late-migration/mocks/IntakeV3Mocks\.sol''']
 regexes = ['''^PinnedPermitTokenMockV3 is IERC20, IERC20Permit\s+$''']
 
 [[allowlists]]
+description = "Synthetic Robinhood v4.1 wallet fixture contains public token and pool identities"
+condition = "AND"
+regexTarget = "match"
+paths = ['''^tests/fixtures/robinhood-initial-buy-wallet-v41\.json$''']
+regexes = [
+  '''(?i)token(?:Address)?":\s*"0x7d1f0460894c1800fb287e420730b7508aee6ec3"''',
+  '''poolKeyHash":\s*"0xde63828e6a3fc6782a90a2476c6213c2c639a1772349d8b9b481cc712775657c"''',
+  '''tokenRuntimeCodeHash":\s*"0xf23f3216c9e0f5866ca3af180215d56edc3d3df7d0215dbe70495a620bbd3f09"''',
+]
+
+[[allowlists]]
 description = "Robinhood website and tests pin the public Programmable token address"
 targetRules = ["generic-api-key"]
 condition = "AND"

@@ -10,7 +10,7 @@ import { RefreshCw } from "lucide-react";
 import NextImage from "next/image";
 
 import styles from "@/components/developer-launch-history.module.css";
-import type { CustomLaunchWalletActionInputV4 } from
+import type { CustomLaunchWalletActionInputV4, CustomLaunchWalletActionResultV4 } from
   "@/components/wallet-provider";
 import { canonicalBrowserSha256V2, fileSha256V2 } from
   "@/lib/custom-launch/browser-authority-v2";
@@ -28,6 +28,16 @@ import {
   type CustomLaunchFundingAuthorizationV3,
   type CustomLaunchRouterReviewV3,
 } from "@/lib/custom-launch/wallet-handoff-v3";
+import {
+  formatRobinhoodWeiV1,
+  parseRobinhoodFundingReviewV1,
+  robinhoodCostMatchesReviewV1,
+  robinhoodGasBudgetExceededV1,
+  robinhoodFundingPlanLabelsV1,
+  type RobinhoodLaunchCostV1,
+} from "@/lib/custom-launch/robinhood-funding-review-v1";
+import { parseRobinhoodInitialBuyReviewV1 } from "@/lib/custom-launch/robinhood-initial-buy-review-v1";
+import { parseRobinhoodFeeReviewV1 } from "@/lib/custom-launch/robinhood-fee-review-v1";
 import { PROGRAMMABLE_AGENT_SETUP_LINKS_V1 } from
   "@/lib/custom-launch/agent-setup-v1";
 import {
@@ -196,7 +206,7 @@ type DeveloperLaunchHistoryProps = Readonly<{
   ) => Promise<`0x${string}`>;
   sendCustomLaunchWalletActionV4: (
     input: CustomLaunchWalletActionInputV4,
-  ) => Promise<`0x${string}`>;
+  ) => Promise<CustomLaunchWalletActionResultV4>;
   signCustomLaunchFundingAuthorization: (
     input: CustomLaunchFundingAuthorizationV3,
   ) => Promise<`0x${string}`>;
@@ -1852,6 +1862,116 @@ export function DeveloperLaunchMetadataPreview({
   );
 }
 
+export function DeveloperRobinhoodFeePreview({ resource }: Readonly<{ resource: unknown }>) {
+  const fee = parseRobinhoodFeeReviewV1(resource);
+  if (!fee) return <div className={styles.metadataUnavailable} role="status">
+    <strong>Bound fee verification unavailable</strong>
+    <p>Load the exact launch review. The server must bind the platform, creator and LP fee settings before a wallet transaction can open.</p>
+  </div>;
+  return <section className={styles.routerReview} aria-label="Robinhood launch fees">
+    <div className={styles.stepHeading}><strong>Robinhood launch fees</strong></div>
+    <dl className={styles.reviewGrid}>
+      <div><dt>Programmable fee</dt><dd>0.2% on each successful buy and sell</dd></div>
+      <div><dt>Creator buy fee</dt><dd>{fee.creatorBuyFeeBps / 100}%</dd></div>
+      <div><dt>Creator sell fee</dt><dd>{fee.creatorSellFeeBps / 100}%</dd></div>
+      <div><dt>{fee.lpFeeMode === "dynamic" ? "Maximum module LP fee" : "Pool LP fee"}</dt>
+        <dd>{(fee.lpFeeMode === "dynamic" ? fee.maxModuleLpFeePips : fee.lpFeePips) / 10000}% {fee.lpFeeMode === "dynamic" ? "cap" : "fixed"}</dd></div>
+      <div><dt>Platform treasury</dt><dd><code>{fee.platformRecipient}</code></dd></div>
+      <div><dt>Creator fee recipient</dt><dd><code>{fee.creatorFeeRecipient}</code></dd></div>
+      <div><dt>Fee vault</dt><dd><code>{fee.vaultAddress}</code></dd></div>
+    </dl>
+    <p>The platform fee is separate from creator and LP fees. It uses the gross native ETH side of each swap once, rounded up to whole wei.</p>
+    <p>After launch, platform fees accrue as native ETH claims. Anyone can trigger collection to the fixed treasury. They are not transferred to the treasury immediately on each trade.</p>
+    <p>These fee settings are bound to the server verified code. The child vault runtime still requires verification after deployment; this is not a safety audit.</p>
+  </section>;
+}
+
+export function DeveloperRobinhoodInitialBuyPreview({ resource }: Readonly<{ resource: unknown }>) {
+  const buy = parseRobinhoodInitialBuyReviewV1(resource);
+  if (!buy) return <div className={styles.metadataUnavailable} role="status">
+    <strong>Bound initial buy verification unavailable</strong>
+    <p>The server must verify the initial buy and its $1 ETH reference before this launch can open a wallet transaction.</p>
+  </div>;
+  const rate = BigInt(buy.quoteAnswer);
+  const usdRate = `${rate / 100000000n}.${(rate % 100000000n).toString().padStart(8, "0")}`;
+  return <section className={styles.routerReview} aria-label="Robinhood initial buy">
+    <div className={styles.stepHeading}><strong>Robinhood initial buy</strong></div>
+    <dl className={styles.reviewGrid}>
+      <div><dt>Initial buy, including swap fees</dt><dd>{formatRobinhoodWeiV1(buy.initialBuyWei)}</dd></div>
+      <div><dt>$1 minimum at authorization</dt><dd>{formatRobinhoodWeiV1(buy.minimumInitialBuyWei)}</dd></div>
+      <div><dt>ETH / USD reference</dt><dd>${usdRate} per ETH</dd></div>
+      <div><dt>Reference observed</dt><dd><time dateTime={buy.referenceObservedAt}>{buy.referenceObservedAt}</time></dd></div>
+      <div><dt>Buyer and token recipient</dt><dd><code>{buy.buyer}</code></dd></div>
+      <div><dt>Minimum token output</dt><dd>{buy.minimumTokensOut} raw token units</dd></div>
+    </dl>
+    <p>The launch includes this buy in the same transaction. It must spend the full initial buy amount and return at least the minimum token output, or the transaction reverts.</p>
+    <p>The $1 minimum uses a verified Ethereum ETH / USD reference at permit authorization. The launch runs on Robinhood; the reference does not guarantee a future dollar value. The initial buy is already included in the launch transaction value. Gas is additional.</p>
+  </section>;
+}
+
+export function DeveloperRobinhoodFundingPreview({ resource, cost, now }: Readonly<{
+  resource: unknown;
+  cost?: RobinhoodLaunchCostV1;
+  now?: number;
+}>) {
+  const funding = parseRobinhoodFundingReviewV1(resource);
+  if (!funding) return (
+    <div className={styles.metadataUnavailable} role="status">
+      <strong>Robinhood funding details unavailable</strong>
+      <p>Load the exact launch review. Missing or inconsistent funding details must be corrected by your agent before sending.</p>
+    </div>
+  );
+  const currentCost = robinhoodCostMatchesReviewV1(cost, funding, now ?? Number.NaN) ? cost : undefined;
+  const plan = funding.fundingPlan;
+  const planLabels = plan ? robinhoodFundingPlanLabelsV1(plan) : null;
+  return (
+    <section className={styles.routerReview} aria-label="Robinhood launch funding">
+      <div className={styles.stepHeading}><strong>Robinhood launch funding</strong></div>
+      <dl className={styles.reviewGrid}>
+        {plan && planLabels ? <>
+          <div><dt>Declared capital source</dt><dd>{planLabels.capitalSource}</dd></div>
+          <div><dt>Declared pricing model</dt><dd>{planLabels.pricingModel}</dd></div>
+          <div><dt>Initial liquidity allocation</dt><dd>{formatRobinhoodWeiV1(plan.nativeAllocations.initialLiquidityWei)}</dd></div>
+          <div><dt>Initial buy allocation</dt><dd>{formatRobinhoodWeiV1(plan.nativeAllocations.initialBuyWei)}</dd></div>
+          <div><dt>Native reserve allocation</dt><dd>{formatRobinhoodWeiV1(plan.nativeAllocations.reserveWei)}</dd></div>
+          <div><dt>Other launch value</dt><dd>{formatRobinhoodWeiV1(plan.nativeAllocations.otherLaunchValueWei)}</dd></div>
+          <div><dt>Maximum launch value</dt><dd>{formatRobinhoodWeiV1(plan.maxLaunchValueWei)}</dd></div>
+          <div><dt>Gas budget</dt><dd>{formatRobinhoodWeiV1(plan.maxGasCostWei)}</dd></div>
+          <div><dt>Launch mode</dt><dd>{plan.launchMode === "build-only" ? "Build only" : "Fund and launch"}</dd></div>
+        </> : null}
+        <div><dt>Declared liquidity model</dt><dd>{funding.modelLabel}</dd></div>
+        <div><dt>Declared starting state</dt><dd>{funding.stateLabel}</dd></div>
+        <div><dt>Launch transaction value</dt><dd>{formatRobinhoodWeiV1(funding.valueWei)}</dd></div>
+        <div><dt>Estimated network cost</dt><dd>{currentCost
+          ? formatRobinhoodWeiV1(currentCost.estimatedNetworkFeeWei) : "Estimate required"}</dd></div>
+        <div><dt>Value plus current estimate</dt><dd>{currentCost
+          ? formatRobinhoodWeiV1(currentCost.estimatedTotalWei) : "Not estimated"}</dd></div>
+        <div><dt>Available ETH on Robinhood</dt><dd>{currentCost
+          ? formatRobinhoodWeiV1(currentCost.balanceWei) : "Balance check required"}</dd></div>
+      </dl>
+      <p>
+        Transaction value already includes any native deposit or first buy in this launch.
+        Gas is additional, even when transaction value is zero. The declared model does
+        not prove that an empty pool can trade or that buyer funding is available.
+      </p>
+      {plan ? (
+        <p>The financing plan and budgets are bound to this request. Allocation labels do not prove reserves, inventory or solvency. Changing a budget requires your agent to repack the launch.</p>
+      ) : <p>Capital source and gas budget must be agreed with your agent. This request version records the declared model and exact transaction value; it does not record a separate financing plan.</p>}
+      {plan?.launchMode === "build-only" ? <p className={styles.failure} role="alert">This plan is build only. Confirm a funded launch plan with your agent and repack before sending.</p> : null}
+      {currentCost ? (
+        <>
+          <p>Estimated at <time dateTime={currentCost.observedAt}>{currentCost.observedAt.slice(11, 19)} UTC</time>. Network costs can change. The wallet shows the final fee before you approve.</p>
+          {robinhoodGasBudgetExceededV1(currentCost, funding) ? <p className={styles.failure} role="alert">The current network estimate exceeds your bound gas budget. Wait for costs to fall, or confirm a new budget with your agent and repack. No transaction can be requested with this estimate.</p> : null}
+          {currentCost.shortfallWei !== "0" ? (
+            <p className={styles.failure} role="alert">You need approximately {formatRobinhoodWeiV1(currentCost.shortfallWei)} more on Robinhood Chain for this transaction and its current network estimate. Update the funding, then estimate again.</p>
+          ) : !robinhoodGasBudgetExceededV1(currentCost, funding) && plan?.launchMode !== "build-only"
+            ? <p>Review these costs, then choose Send transaction. Costs and balance are checked again before the wallet opens.</p> : null}
+        </>
+      ) : <p>Estimate the exact transaction before sending. Estimates do not request a signature or send a transaction.</p>}
+    </section>
+  );
+}
+
 function ProjectMetadataReview({
   launch,
   binding,
@@ -2169,6 +2289,7 @@ export function DeveloperLaunchHistory({
   const [hydratingId, setHydratingId] = useState<string | null>(null);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [fundingId, setFundingId] = useState<string | null>(null);
+  const [robinhoodCosts, setRobinhoodCosts] = useState<Readonly<Record<string, RobinhoodLaunchCostV1>>>({});
   const [fundingRetryDelayMs, setFundingRetryDelayMs] = useState<number | null>(
     null,
   );
@@ -3166,7 +3287,7 @@ export function DeveloperLaunchHistory({
     }
   };
 
-  const submitWalletTransaction = async (launch: LaunchResource) => {
+  const submitWalletTransaction = async (launch: LaunchResource, robinhoodAction: "estimate" | "send" = "send") => {
     if (
       sendInFlightRef.current
       || submittingId !== null
@@ -3186,7 +3307,9 @@ export function DeveloperLaunchHistory({
             "Load and review the current Robinhood Chain transaction before opening the wallet.",
           );
         }
-        const transactionHash = await sendCustomLaunchWalletActionV4({
+        const result = await sendCustomLaunchWalletActionV4({
+          action: robinhoodAction,
+          reviewedCost: robinhoodCosts[key],
           reviewedResource: launch.rawResourceV4,
           loadFreshCapabilities: readV4Capabilities,
           loadFreshResource: async () => {
@@ -3199,6 +3322,14 @@ export function DeveloperLaunchHistory({
             return current.rawResourceV4;
           },
         });
+        if (typeof result !== "string") {
+          setRobinhoodCosts((costs) => Object.freeze({ ...costs, [key]: result }));
+          setStatusMessage(result.shortfallWei === "0"
+            ? "Robinhood costs loaded. Review the estimate before choosing Send transaction."
+            : "The Robinhood balance does not cover the current launch estimate. Review the funding shortfall.");
+          return;
+        }
+        const transactionHash = result;
         if (!transactionHashPattern.test(transactionHash)) {
           throw new Error("The wallet returned an invalid transaction hash.");
         }
@@ -3308,6 +3439,13 @@ export function DeveloperLaunchHistory({
       );
       startStatusPolling(current);
     } catch (cause) {
+      if (launch.routeId === "custom-launch:create:v4") {
+        setRobinhoodCosts((costs) => {
+          const next = { ...costs };
+          delete next[key];
+          return Object.freeze(next);
+        });
+      }
       reportLaunchError(
         key,
         cause,
@@ -3417,6 +3555,13 @@ export function DeveloperLaunchHistory({
             const projectRequestBinding = walletProjectRequestBindingV1(
               reviewLaunch,
             );
+            const robinhoodFunding = parseRobinhoodFundingReviewV1(reviewLaunch.rawResourceV4);
+            const currentRobinhoodCost = robinhoodFunding?.account.toLowerCase() === account.toLowerCase()
+              && robinhoodCostMatchesReviewV1(robinhoodCosts[key], robinhoodFunding,
+                currentTimeMs ?? Number.NaN) ? robinhoodCosts[key] : undefined;
+            const robinhoodSendReady = currentRobinhoodCost?.shortfallWei === "0"
+              && robinhoodFunding !== null && robinhoodFunding.fundingPlan?.launchMode !== "build-only"
+              && !robinhoodGasBudgetExceededV1(currentRobinhoodCost, robinhoodFunding);
             const fundingReview = fundingAuthorizationReview(reviewLaunch);
             const routerReview = routerTransactionReview(reviewLaunch);
             const transaction = reviewLaunch.routeId
@@ -3521,6 +3666,18 @@ export function DeveloperLaunchHistory({
                         signature or Router transaction can open.
                       </p>
                     </div>
+                  ) : null}
+                {reviewLaunch.routeId === "custom-launch:create:v4" ? (
+                  <DeveloperRobinhoodFundingPreview resource={reviewLaunch.rawResourceV4}
+                    cost={currentRobinhoodCost} now={currentTimeMs ?? Number.NaN} />
+                ) : null}
+                {reviewLaunch.routeId === "custom-launch:create:v4"
+                  && isRecord(reviewLaunch.rawResourceV4?.profile)
+                  && reviewLaunch.rawResourceV4.profile.profileVersion === "4.1.0" ? (
+                    <>
+                      <DeveloperRobinhoodFeePreview resource={reviewLaunch.rawResourceV4} />
+                      <DeveloperRobinhoodInitialBuyPreview resource={reviewLaunch.rawResourceV4} />
+                    </>
                   ) : null}
                 <AdmissionWarnings codes={warningFindingCodes} />
                 {reviewLaunch.failure
@@ -3787,13 +3944,15 @@ export function DeveloperLaunchHistory({
                                 || Boolean(pollingIds[key])
                                 || handoffExpired
                                 || !projectMetadataReadyForProfile
+                                || robinhoodFunding === null
+                                || robinhoodFunding.fundingPlan?.launchMode === "build-only"
                               }
                               type="button"
-                              onClick={() => void submitWalletTransaction(reviewLaunch)}
+                              onClick={() => void submitWalletTransaction(reviewLaunch, robinhoodSendReady ? "send" : "estimate")}
                             >
                               {submittingId === key
-                                ? "Opening wallet transaction review"
-                                : "Review and send on Robinhood Chain"}
+                                ? "Checking Robinhood launch costs"
+                                : robinhoodSendReady ? "Send transaction" : "Estimate launch cost"}
                             </button>
                           ) : (
                             <button

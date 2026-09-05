@@ -26,26 +26,10 @@ import {
   sha256Digest,
 } from "../../packages/launch/src/io.mjs";
 import { parseStrictJson } from "../../packages/launch/src/canonical-json.mjs";
-import { requireV4ReleaseReady } from "../../scripts/programmable-launch-v4-release-binding.mjs";
+import * as defaultReleaseTools from "../../scripts/programmable-launch-v4-release-binding.mjs";
 import { parseProductionVerifyProofV1 } from
   "../../scripts/production-verify-proof.mjs";
-import {
-  ROBINHOOD_LIVE_DEPLOYMENT_PATH,
-  ROBINHOOD_PREDEPLOYMENT_PATH,
-  ROBINHOOD_BACKEND_CHAIN_DEPLOYMENT_PATH,
-  ROBINHOOD_BACKEND_SOURCE_MANIFEST_PATH,
-  ROBINHOOD_BACKEND_STANDARD_JSON_PATHS,
-  ROBINHOOD_BACKEND_PHASE_A_STAGE_BUNDLE_PATH,
-  ROBINHOOD_BACKEND_PHASE_A_STAGE_ATTESTATION_PATH,
-  ROBINHOOD_BACKEND_PHASE_A_PRODUCTION_CAPTURE_PATH,
-  ROBINHOOD_BACKEND_PHASE_A_PRODUCTION_CAPTURE_ATTESTATION_PATH,
-  ROBINHOOD_STAGE_BUNDLE_PATH,
-  ROBINHOOD_PROMOTION_BUNDLE_PATH,
-  materializeRobinhoodStageBundle,
-  materializeRobinhoodPromotionBundle,
-  verifyRobinhoodStageBundle,
-  verifyRobinhoodPromotionBundle,
-} from "./robinhood-custom-launch-postdeploy-core.mjs";
+import * as defaultPostdeployTools from "./robinhood-custom-launch-postdeploy-core.mjs";
 import {
   ROBINHOOD_CAPTURE_AUTHORIZATION_SCHEMA,
   ROBINHOOD_CAPTURE_ATTESTATION_BUNDLE_PATH,
@@ -63,8 +47,32 @@ import {
   freshVerifyRobinhoodSourcify,
   sha256CaptureBytes,
 } from "./robinhood-custom-launch-capture-v2.mjs";
-import {
-  ROBINHOOD_BACKEND_CAPTURE_AUTHORIZATION_SCHEMA,
+import * as defaultBackendTools from "./robinhood-backend-promotion-v1.mjs";
+
+export function createRobinhoodPostdeploymentCli({
+  releaseTools = defaultReleaseTools,
+  postdeployTools = defaultPostdeployTools,
+  backendTools = defaultBackendTools,
+  backendStageContext = ({ stageBundle }) => stageBundle,
+  allowedCommands = null,
+} = {}) {
+const { requireV4ReleaseReady } = releaseTools;
+const { ROBINHOOD_LIVE_DEPLOYMENT_PATH,
+  ROBINHOOD_PREDEPLOYMENT_PATH,
+  ROBINHOOD_BACKEND_CHAIN_DEPLOYMENT_PATH,
+  ROBINHOOD_BACKEND_SOURCE_MANIFEST_PATH,
+  ROBINHOOD_BACKEND_STANDARD_JSON_PATHS,
+  ROBINHOOD_BACKEND_PHASE_A_STAGE_BUNDLE_PATH,
+  ROBINHOOD_BACKEND_PHASE_A_STAGE_ATTESTATION_PATH,
+  ROBINHOOD_BACKEND_PHASE_A_PRODUCTION_CAPTURE_PATH,
+  ROBINHOOD_BACKEND_PHASE_A_PRODUCTION_CAPTURE_ATTESTATION_PATH,
+  ROBINHOOD_STAGE_BUNDLE_PATH,
+  ROBINHOOD_PROMOTION_BUNDLE_PATH,
+  materializeRobinhoodStageBundle,
+  materializeRobinhoodPromotionBundle,
+  verifyRobinhoodStageBundle,
+  verifyRobinhoodPromotionBundle, } = postdeployTools;
+const { ROBINHOOD_BACKEND_CAPTURE_AUTHORIZATION_SCHEMA,
   ROBINHOOD_BACKEND_ATTESTATION_BUNDLE_PATH,
   ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_IDENTITY,
   ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_OIDC_ISSUER,
@@ -86,15 +94,13 @@ import {
   validateRobinhoodBackendCaptureAuthorization,
   validateRobinhoodBackendPromotionPublicInput,
   validateSigstoreMessageBundleV03,
-  SIGSTORE_BUNDLE_V03_MEDIA_TYPE,
-} from "./robinhood-backend-promotion-v1.mjs";
-
+  SIGSTORE_BUNDLE_V03_MEDIA_TYPE, } = backendTools;
 const execFileAsync = promisify(execFile);
 
 const DEFAULT_STAGE_BUNDLE_PATH = ROBINHOOD_STAGE_BUNDLE_PATH;
 const DEFAULT_PROMOTION_BUNDLE_PATH = ROBINHOOD_PROMOTION_BUNDLE_PATH;
 
-export function canonicalRobinhoodVerifierInstant(now = () => new Date(), label = "verifier clock") {
+function canonicalRobinhoodVerifierInstant(now = () => new Date(), label = "verifier clock") {
   const instant = now();
   if (!(instant instanceof Date) || !Number.isFinite(instant.getTime())) {
     throw new TypeError(`${label} is invalid`);
@@ -102,7 +108,7 @@ export function canonicalRobinhoodVerifierInstant(now = () => new Date(), label 
   return new Date(Math.floor(instant.getTime() / 1_000) * 1_000).toISOString();
 }
 
-export function canonicalRobinhoodBackendVerifierInstant(
+function canonicalRobinhoodBackendVerifierInstant(
   now = () => new Date(),
   label = "backend verifier clock",
 ) {
@@ -825,7 +831,7 @@ async function backendAuthoritiesFor({
     : dependencies.backendDependencies?.now;
   const backend = validateRobinhoodBackendPromotionPublicInput({
     input: backendInputFile.value,
-    stageBundle,
+    stageBundle: backendStageContext({ repositoryRoot: options.repositoryRoot, stageBundle }),
     now: backendValidationNow,
   });
   const authorizeCapture = dependencies.authorizeBackendCapture
@@ -944,7 +950,7 @@ async function verifyPortableBackendAuthorization({
       bundleBytes: attestationBundleFile.bytes,
       trustedRootPath,
       repository: ROBINHOOD_PRODUCTION_REPOSITORY,
-      workflow: ".github/workflows/finalize-robinhood-custom-launch-promotion.yml",
+      workflow: backendTools.ROBINHOOD_BACKEND_AUTHORIZATION_WORKFLOW,
       sourceRef: ROBINHOOD_PRODUCTION_REF,
       sourceRevision: authorization.producerRevision,
     }));
@@ -1235,7 +1241,7 @@ async function authorizeBackend(options, dependencies) {
   );
   const backend = validateRobinhoodBackendPromotionPublicInput({
     input: backendInputFile.value,
-    stageBundle: stageFile.value,
+    stageBundle: backendStageContext({ repositoryRoot: options.repositoryRoot, stageBundle: stageFile.value }),
     now: dependencies.backendDependencies?.now,
   });
   const authorizeCapture = dependencies.authorizeBackendCapture
@@ -1261,7 +1267,7 @@ async function authorizeBackend(options, dependencies) {
       ? "test-only" : "github-artifact-attestation",
     repository: ROBINHOOD_PRODUCTION_REPOSITORY,
     repositoryId: ROBINHOOD_PRODUCTION_REPOSITORY_ID,
-    workflow: ".github/workflows/finalize-robinhood-custom-launch-promotion.yml",
+    workflow: backendTools.ROBINHOOD_BACKEND_AUTHORIZATION_WORKFLOW,
     sourceRef: ROBINHOOD_PRODUCTION_REF,
     producerRevision: protectedContext.head,
     producerTree: protectedContext.tree,
@@ -1329,7 +1335,7 @@ async function verifyBackendImport(options, dependencies) {
     ]);
   const backend = validateRobinhoodBackendPromotionPublicInput({
     input: backendInputFile.value,
-    stageBundle: stageFile.value,
+    stageBundle: backendStageContext({ repositoryRoot: options.repositoryRoot, stageBundle: stageFile.value }),
     now: dependencies.backendDependencies?.now,
   });
   const authorizeCapture = dependencies.authorizeBackendCapture
@@ -1646,7 +1652,7 @@ async function apply(options, dependencies) {
   const freshBackend = dependencies.freshVerifyBackend
     ?? freshVerifyRobinhoodBackendPromotionInput;
   const freshBackendResult = await freshBackend({
-    stageBundle: sidecars.stageFile.value,
+    stageBundle: backendStageContext({ repositoryRoot, stageBundle: sidecars.stageFile.value }),
     capturedInput: sidecars.backendInputFile.value,
     fetch: dependencies.fetch,
     flyApiToken: dependencies.flyApiToken ?? process.env.FLY_API_TOKEN,
@@ -1712,8 +1718,11 @@ async function apply(options, dependencies) {
   };
 }
 
-export async function runRobinhoodPostdeploymentCli(argv, dependencies = {}) {
+async function runRobinhoodPostdeploymentCli(argv, dependencies = {}) {
   const options = parseCli(argv);
+  if (allowedCommands !== null && !allowedCommands.includes(options.command)) {
+    throw new TypeError("successor finalizer supports Phase B commands only");
+  }
   if (options.command === "assemble-stage") return assembleStage(options, dependencies);
   if (options.command === "verify-stage") return verifyStage(options, dependencies);
   if (options.command === "stage-backend-assets") {
@@ -1731,6 +1740,24 @@ export async function runRobinhoodPostdeploymentCli(argv, dependencies = {}) {
   return apply(options, dependencies);
 }
 
+
+return Object.freeze({
+  canonicalRobinhoodVerifierInstant,
+  canonicalRobinhoodBackendVerifierInstant,
+  runRobinhoodPostdeploymentCli,
+  DEFAULT_PROMOTION_BUNDLE_PATH,
+  DEFAULT_STAGE_BUNDLE_PATH,
+});
+}
+
+export const {
+  canonicalRobinhoodVerifierInstant,
+  canonicalRobinhoodBackendVerifierInstant,
+  runRobinhoodPostdeploymentCli,
+  DEFAULT_PROMOTION_BUNDLE_PATH,
+  DEFAULT_STAGE_BUNDLE_PATH,
+} = createRobinhoodPostdeploymentCli();
+
 const invoked = process.argv[1] ? path.resolve(process.argv[1]) : null;
 if (invoked === fileURLToPath(import.meta.url)) {
   try {
@@ -1741,5 +1768,3 @@ if (invoked === fileURLToPath(import.meta.url)) {
     process.exitCode = 1;
   }
 }
-
-export { DEFAULT_PROMOTION_BUNDLE_PATH, DEFAULT_STAGE_BUNDLE_PATH };

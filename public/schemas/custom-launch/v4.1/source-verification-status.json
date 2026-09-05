@@ -1,0 +1,444 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://programmable.market/schemas/custom-launch/v4.1/source-verification-status.json",
+  "title": "Programmable Custom Launch source-verification status V4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "chainId",
+    "caip2",
+    "chainDeploymentId",
+    "status",
+    "components",
+    "updatedAt"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "programmable.source-verification-status.v4"
+    },
+    "chainId": {
+      "const": "4663"
+    },
+    "caip2": {
+      "const": "eip155:4663"
+    },
+    "chainDeploymentId": {
+      "const": "robinhood-mainnet-custom-launch-v1"
+    },
+    "status": {
+      "enum": [
+        "queued",
+        "retrying",
+        "exact_match",
+        "needs_attention"
+      ]
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "targetId",
+              "address",
+              "status",
+              "providerObservation",
+              "exactSourceAuthority",
+              "exactSourceBinding",
+              "updatedAt",
+              "nextAttemptAt"
+            ],
+            "properties": {
+              "targetId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+              },
+              "address": {
+                "type": "string",
+                "pattern": "^0x[0-9a-f]{40}$"
+              },
+              "status": {
+                "const": "queued"
+              },
+              "providerObservation": {
+                "type": "null"
+              },
+              "exactSourceAuthority": {
+                "type": "null"
+              },
+              "exactSourceBinding": {
+                "type": "null"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+              },
+              "nextAttemptAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "targetId",
+              "address",
+              "status",
+              "providerObservation",
+              "exactSourceAuthority",
+              "exactSourceBinding",
+              "updatedAt",
+              "nextAttemptAt"
+            ],
+            "properties": {
+              "targetId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+              },
+              "address": {
+                "type": "string",
+                "pattern": "^0x[0-9a-f]{40}$"
+              },
+              "status": {
+                "const": "retrying"
+              },
+              "providerObservation": {
+                "type": "null"
+              },
+              "exactSourceAuthority": {
+                "type": "null"
+              },
+              "exactSourceBinding": {
+                "type": "null"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+              },
+              "nextAttemptAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "targetId",
+              "address",
+              "status",
+              "providerObservation",
+              "exactSourceAuthority",
+              "exactSourceBinding",
+              "updatedAt"
+            ],
+            "properties": {
+              "targetId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+              },
+              "address": {
+                "type": "string",
+                "pattern": "^0x[0-9a-f]{40}$"
+              },
+              "status": {
+                "const": "exact_match"
+              },
+              "providerObservation": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "provider",
+                  "classification",
+                  "match",
+                  "creationMatch",
+                  "runtimeMatch",
+                  "releaseAuthority",
+                  "evidenceDigest"
+                ],
+                "properties": {
+                  "provider": {
+                    "const": "sourcify-v2"
+                  },
+                  "classification": {
+                    "const": "PARTIAL_NO_CBOR_EXACT_BYTES"
+                  },
+                  "creationMatch": {
+                    "const": "match"
+                  },
+                  "runtimeMatch": {
+                    "const": "match"
+                  },
+                  "match": {
+                    "const": "match"
+                  },
+                  "releaseAuthority": {
+                    "const": false
+                  },
+                  "evidenceDigest": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  }
+                }
+              },
+              "exactSourceAuthority": {
+                "const": "protected-hosted-build-finalized-transaction-bytecode"
+              },
+              "exactSourceBinding": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "schemaVersion",
+                  "authority",
+                  "coveredEvidence",
+                  "bindingDigest"
+                ],
+                "properties": {
+                  "schemaVersion": {
+                    "const": "programmable.robinhood-custom-launch.exact-byte-source-build-transaction-binding.v1"
+                  },
+                  "authority": {
+                    "const": "protected-hosted-build-finalized-transaction-bytecode"
+                  },
+                  "coveredEvidence": {
+                    "const": [
+                      "protected-source-tree",
+                      "source-closure",
+                      "hosted-build-artifact",
+                      "standard-json-input",
+                      "compiler-binary",
+                      "compiler-settings",
+                      "finalized-creation-transaction",
+                      "creation-bytecode",
+                      "runtime-bytecode"
+                    ]
+                  },
+                  "bindingDigest": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  }
+                }
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "targetId",
+              "address",
+              "status",
+              "providerObservation",
+              "exactSourceAuthority",
+              "exactSourceBinding",
+              "updatedAt"
+            ],
+            "properties": {
+              "targetId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+              },
+              "address": {
+                "type": "string",
+                "pattern": "^0x[0-9a-f]{40}$"
+              },
+              "status": {
+                "const": "needs_attention"
+              },
+              "providerObservation": {
+                "type": "null"
+              },
+              "exactSourceAuthority": {
+                "type": "null"
+              },
+              "exactSourceBinding": {
+                "type": "null"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+              }
+            }
+          }
+        ]
+      },
+      "minItems": 1,
+      "maxItems": 16,
+      "x-programmable-order": "unique UTF-8 targetId ascending"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    }
+  },
+  "description": "Server-authored post-finality exact-source state. Sourcify v2 match/match/match is explicitly non-authoritative provider observation; exact_match is emitted only after the independent protected-source/build/compiler/settings/finalized-transaction/bytecode composite binding closes. Provider retries and failures never alter launch finality.",
+  "x-programmable-order": "updatedAt == max components[*].updatedAt",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "exact_match"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "components": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "const": "exact_match"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "needs_attention"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "components": {
+            "type": "array",
+            "contains": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "const": "needs_attention"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "retrying"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "components": {
+            "type": "array",
+            "contains": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "const": "retrying"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            "not": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "const": "needs_attention"
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "queued"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "components": {
+            "type": "array",
+            "contains": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "const": "queued"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            "not": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "enum": [
+                      "needs_attention",
+                      "retrying"
+                    ]
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

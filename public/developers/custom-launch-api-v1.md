@@ -14,6 +14,24 @@ Do not begin chain-specific implementation until the chain is explicit. Do not b
 
 For the image, supply the actual local bytes and their matching public HTTPS, IPFS or Arweave URI. Ethereum V3 accepts PNG, JPEG, WebP or GIF; Robinhood V4 accepts PNG or single-frame GIF. A filename or invented image URL is not a supplied image.
 
+## Robinhood: choose the funding plan before building
+
+The Robinhood-only intake is published at `customLaunchApi.intake.chainSpecific.robinhood`. Ethereum instructions are unchanged.
+
+Robinhood only (chain 4663): before funding-dependent implementation, ask whether buyers will build the capital, the creator will provide starting liquidity, or the project uses a hybrid or custom source. Reuse an explicit earlier answer. These are conversation choices, not API enum values or a project allowlist. A bonding curve describes pricing; it does not by itself prove funding or repayment reserves.
+
+Collect the initial token inventory, real and virtual reserves, any liquidity assets and amounts, funding wallet, initial buy and minimum token output, available capital and gas budgets, gas payer, and intended launch state. Clarify who funds each step and when trading can actually begin. Zero initial ETH principal is not a free deployment. An initialized empty pool is not a funded or tradable curve; virtual reserves are not spendable ETH. Do not invent a sponsor or promise buyer demand.
+
+Before building, show the preliminary capital requirement separately from estimated deployment and transaction gas, with assumptions and unknowns. Check available balances on Robinhood Chain when the funding wallet is known. Do not count assets on another chain as available Robinhood funding. If the budget is insufficient or uncertain, resolve the funding plan with the user; continue building before funding only when the user explicitly accepts that launch is still unfunded. Never silently change the chain, launch model or budget.
+
+For Robinhood profile 4.1, when selected by live discovery and capabilities, every funded launch requires an atomic initial buy worth at least USD 1 at the server reference rate. Before building, read GET /v4/chains/4663/initial-buy-quote without an API key and show its minimum native ETH amount plus separate gas. Have the user confirm the exact buy amount and positive minimum token output; do not raise the amount or budget automatically. The buy must pay real tokens to the launch controller in the same transaction; failure rolls back the launch. Budget the initial buy once within total transaction value. The server obtains its own fresh quote at admission and may require a newly confirmed package if the amount falls below the current minimum. A first buy does not guarantee third-party indexing. Historical 4.0 requests keep their original contract; never invent 4.1 fields for them.
+
+Read the current Robinhood platformFeePolicy and enforcement status from discovery. Show its rate, recipient and supported fee currency separately from creator, LP and other fees. 20 bps equals 0.2 percent: two million dollars of once-counted trade volume implies four thousand dollars of fee value if that fee is actually enforced. A configured recipient or rate is not collection proof. Do not claim universal ETH revenue, a working claim path or automatic bridging while those capabilities remain unproven. The creator cannot replace the platform treasury.
+
+Before submission, summarize the funding source, pricing and reserve model, exact initial assets and amounts, initial buy and minimum token output, intended launch state, platform recipient and all fees alongside the project metadata. Map the plan to the selected V4 schema's actual funding and liquidityModel fields. Do not add invented fields to a frozen request. Verify that the packed graph and total wallet transaction value match the agreed plan; an initial buy already included in that value is not an extra cost. Resolve mismatches by changing and revalidating the request with the user.
+
+Before the Robinhood wallet action, review the bound transaction value separately from a fresh gas estimate and the current native balance. Mark unavailable estimates as unknown, never zero; resolve an unaffordable or unknown funding requirement before sending. The website's bound summary and transaction review do not prove economic safety or future liquidity. Signing and sending remain the controller's separate wallet actions.
+
 ## API versions and release gates
 
 V3.3 is public and live: general custom-hook launch creation, list and single-resource reads are available at

@@ -1,0 +1,17 @@
+{
+  "name": "programmable-robinhood-v4-native20",
+  "version": "0.0.0-reference",
+  "private": true,
+  "description": "Native20 locked token inventory with exact reviewed native fee kernel and explicit funding plan.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24.14.0 <25"
+  },
+  "scripts": {
+    "build": "node build-and-configure.mjs"
+  },
+  "devDependencies": {
+    "solc": "0.8.26"
+  }
+}

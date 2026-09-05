@@ -11,6 +11,8 @@ const EMPTY_SCOPE = Object.freeze({
   read_model: false,
   robinhood_phase_b_evidence: false,
   robinhood_phase_b_evidence_exact: false,
+  robinhood_v41_phase_b_evidence: false,
+  robinhood_v41_phase_b_evidence_exact: false,
 });
 
 const FULL_SCOPE_KEYS = Object.freeze([
@@ -30,6 +32,15 @@ export const ROBINHOOD_PHASE_B_BACKEND_EVIDENCE_PATHS = Object.freeze([
 
 const ROBINHOOD_PHASE_B_BACKEND_EVIDENCE_PATH_SET = new Set(
   ROBINHOOD_PHASE_B_BACKEND_EVIDENCE_PATHS,
+);
+
+export const ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATHS = Object.freeze([
+  "release/robinhood-chain-4663/v4.1/backend-promotion-input.attestation.json",
+  "release/robinhood-chain-4663/v4.1/backend-promotion-input.public.json",
+]);
+
+const ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATH_SET = new Set(
+  ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATHS,
 );
 
 const CUSTOM_V2_EXACT_PATHS = new Set([
@@ -120,15 +131,22 @@ export function classifyVerifyPaths(
   scope.robinhood_phase_b_evidence_exact =
     uniquePaths.size === ROBINHOOD_PHASE_B_BACKEND_EVIDENCE_PATHS.length
     && robinhoodEvidencePaths.length === ROBINHOOD_PHASE_B_BACKEND_EVIDENCE_PATHS.length;
+  const robinhoodV41EvidencePaths = [...uniquePaths].filter((candidate) =>
+    ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATH_SET.has(candidate));
+  scope.robinhood_v41_phase_b_evidence = robinhoodV41EvidencePaths.length > 0;
+  scope.robinhood_v41_phase_b_evidence_exact =
+    uniquePaths.size === ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATHS.length
+    && robinhoodV41EvidencePaths.length === ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATHS.length;
 
   for (const path of paths) {
     if (!path) continue;
 
-    // This one short-lived, cryptographically attested evidence pair has a
-    // dedicated protected Contracts check. The check rejects partial or mixed
-    // imports and verifies the exact subject, Sigstore identity, stage binding,
-    // and unchanged ten-minute authorization window before merge.
-    if (ROBINHOOD_PHASE_B_BACKEND_EVIDENCE_PATH_SET.has(path)) continue;
+    // Each version's short-lived, cryptographically attested evidence pair has
+    // a dedicated protected Contracts check. Both checks reject partial, mixed,
+    // and cross-version imports and verify the exact subject, Sigstore identity,
+    // stage binding, and unchanged ten-minute authorization window before merge.
+    if (ROBINHOOD_PHASE_B_BACKEND_EVIDENCE_PATH_SET.has(path)
+      || ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATH_SET.has(path)) continue;
 
     // This closed generation-2 surface has its own production proof and
     // staged health contract. In particular, flipping the versioned Registry
