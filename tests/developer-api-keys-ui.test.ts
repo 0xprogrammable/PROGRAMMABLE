@@ -1,8 +1,11 @@
 import { readFileSync } from "node:fs";
 
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  DeveloperApiKeysView,
   applyApiKeyMutationResult,
   apiKeyLifetimeDays,
   mergeApiKeySummaries,
@@ -342,6 +345,57 @@ describe("developer API key interface", () => {
     expect(apiKeysStyles).not.toContain("appearance: auto");
   });
 
+  it.each([
+    { state: "returning wallet before any key mutation", authReady: true,
+      account: "0x0000000000000000000000000000000000000001" as const },
+    { state: "disconnected wallet", authReady: true, account: null },
+    { state: "loading wallet session", authReady: false, account: null },
+  ])("offers setup without exposing a key for $state", ({ authReady, account }) => {
+    const getToken = vi.fn(async () => null);
+    const walletAction = vi.fn(async (): Promise<`0x${string}`> => {
+      throw new Error("Setup must not request a wallet action");
+    });
+    const html = renderToStaticMarkup(createElement(DeveloperApiKeysView, {
+      account,
+      authReady,
+      connecting: false,
+      getAccessToken: getToken,
+      getIdentityToken: getToken,
+      initialSection: "keys",
+      openWallet: vi.fn(),
+      sendCustomLaunchWalletAction: walletAction,
+      sendCustomLaunchWalletActionV4: walletAction,
+      signCustomLaunchFundingAuthorization: walletAction,
+    }));
+
+    const setupButton = html.match(/<button\b[^>]*>Copy agent setup<\/button>/u)?.[0];
+    expect(setupButton).toBeDefined();
+    expect(setupButton).not.toContain("disabled");
+    expect(html).toContain('aria-labelledby="agent-setup-title"');
+    expect(html).toContain("new or existing key");
+    expect(html).not.toContain(">Copy key</button>");
+    expect(html).not.toContain("api-key-mutation-result-title");
+    expect(html).not.toMatch(/pm_live_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{43}/u);
+    expect(getToken).not.toHaveBeenCalled();
+    expect(walletAction).not.toHaveBeenCalled();
+  });
+
+  it("keeps copying setup independent of the one-time key secret", () => {
+    const copyKeyStart = apiKeysSource.indexOf("const copyApiKey = async");
+    const copySetupStart = apiKeysSource.indexOf("const copyAgentSetup = async");
+    const dismissStart = apiKeysSource.indexOf("const dismissApiKeyResult =");
+    expect(copyKeyStart).toBeGreaterThan(-1);
+    expect(copySetupStart).toBeGreaterThan(copyKeyStart);
+    expect(dismissStart).toBeGreaterThan(copySetupStart);
+
+    const copyKey = apiKeysSource.slice(copyKeyStart, copySetupStart);
+    const copySetup = apiKeysSource.slice(copySetupStart, dismissStart);
+    expect(copyKey).toContain('secretState !== "delivered-once"');
+    expect(copySetup).toContain("copyToClipboard(PROGRAMMABLE_AGENT_SETUP_TEXT_V1)");
+    expect(copySetup).not.toContain("mutationResult");
+    expect(copySetup).not.toContain("apiKeySecret");
+  });
+
   it("preserves wallet authority and one-time secret handling", () => {
     expect(apiKeysSource).toContain(
       "API keys cannot sign or broadcast wallet transactions.",
@@ -355,12 +409,8 @@ describe("developer API key interface", () => {
     expect(apiKeysSource).toContain("Copy agent setup");
     expect(apiKeysSource).toContain("PROGRAMMABLE_AGENT_SETUP_TEXT_V1");
     expect(apiKeysSource).toContain(
-      "Agent setup uses only the <code>$PROGRAMMABLE_API_KEY</code>",
+      "the <code>$PROGRAMMABLE_API_KEY</code> placeholder, never your secret.",
     );
-    expect(apiKeysSource).toContain(
-      "public CLI, guide and OpenAPI contract.",
-    );
-    expect(apiKeysSource).toContain("never includes this key");
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain("$PROGRAMMABLE_API_KEY");
     expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain(
       PROGRAMMABLE_AGENT_SETUP_LINKS_V1.cli,

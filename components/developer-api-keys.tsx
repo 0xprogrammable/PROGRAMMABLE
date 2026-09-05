@@ -621,7 +621,7 @@ export function DeveloperApiKeys({
   );
 }
 
-function DeveloperApiKeysView({
+export function DeveloperApiKeysView({
   account,
   authReady,
   connecting,
@@ -963,7 +963,6 @@ function DeveloperApiKeysView({
   };
 
   const copyAgentSetup = async () => {
-    if (mutationResult?.result.secretState !== "delivered-once") return;
     try {
       await copyToClipboard(PROGRAMMABLE_AGENT_SETUP_TEXT_V1);
       setSetupCopyState("copied");
@@ -1237,6 +1236,42 @@ function DeveloperApiKeysView({
         </div>
       </header>
 
+      {activeSection === "keys" ? (
+        <section
+          className={styles.agentSetup}
+          aria-labelledby="agent-setup-title"
+        >
+          <div className={styles.agentSetupCopy}>
+            <h2 id="agent-setup-title">Set up your agent</h2>
+            <p>
+              Your agent asks which chain to use and collects your complete
+              project details. Review the prepared launch on this website
+              before confirming it in your wallet.
+            </p>
+            <p className={styles.setupNote}>
+              Use these instructions with a new or existing key. They include
+              the <code>$PROGRAMMABLE_API_KEY</code> placeholder, never your secret.
+            </p>
+          </div>
+          <div className={styles.agentSetupActions}>
+            <button
+              className={styles.secondaryButton}
+              type="button"
+              onClick={() => void copyAgentSetup()}
+            >
+              {setupCopyState === "copied"
+                ? "Setup copied"
+                : "Copy agent setup"}
+            </button>
+            {setupCopyState === "error" ? (
+              <p className={styles.inlineError} role="alert">
+                Agent setup could not be copied. Try again.
+              </p>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
       {activeSection === "launch" ? (
         <RobinhoodFeePolicyDisclosure />
       ) : null}
@@ -1346,30 +1381,11 @@ function DeveloperApiKeysView({
                       >
                         {keyCopyState === "copied" ? "Copied" : "Copy key"}
                       </button>
-                      <button
-                        className={styles.secondaryButton}
-                        type="button"
-                        onClick={() => void copyAgentSetup()}
-                      >
-                        {setupCopyState === "copied"
-                          ? "Setup copied"
-                          : "Copy agent setup"}
-                      </button>
                     </div>
                   </div>
-                  <p className={styles.setupNote}>
-                    Agent setup uses only the <code>$PROGRAMMABLE_API_KEY</code>
-                    placeholder and never includes this key. It links to the
-                    public CLI, guide and OpenAPI contract.
-                  </p>
                   {keyCopyState === "error" ? (
                     <p className={styles.inlineError} role="alert">
                       Copy failed. Select the key and copy it manually.
-                    </p>
-                  ) : null}
-                  {setupCopyState === "error" ? (
-                    <p className={styles.inlineError} role="alert">
-                      Agent setup could not be copied. Try again.
                     </p>
                   ) : null}
                   <button
