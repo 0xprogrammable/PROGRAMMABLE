@@ -284,7 +284,7 @@ function RobinhoodLaunchList({ embedded, enabled }: { embedded: boolean; enabled
               <li key={launch.launchId} className={styles.item}>
                 <Link className={styles.row} href={`/token/${launch.tokenAddress}?chain=4663`} prefetch={false}>
                   <RobinhoodCoinArtwork
-                    imageUrl={details?.imageUrl} name={launch.name} symbol={launch.symbol}
+                    imageUrl={details?.imageUrl} loading={presentation.loading}
                     className={styles.artwork}
                   />
                   <div className={styles.identity}>

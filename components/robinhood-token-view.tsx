@@ -46,7 +46,7 @@ export function RobinhoodTokenView({ address, token, status }: {
         <section className={styles.market} aria-label={`${name} market`}>
         <header className={styles.header}>
           <div className={styles.identity}>
-            <RobinhoodCoinArtwork className={styles.avatar} imageUrl={details?.imageUrl} name={token.name} symbol={token.symbol} />
+            <RobinhoodCoinArtwork className={styles.avatar} imageUrl={details?.imageUrl} loading={presentation.loading} />
             <div className={styles.identityText}>
               <div className={styles.nameRow}>
                 <h1>{name}</h1>

@@ -12,12 +12,30 @@
   display: block;
   height: 100%;
   object-fit: cover;
+  opacity: 0;
+  transition: opacity 180ms ease-out;
   width: 100%;
 }
 
-.artwork span {
-  color: var(--webde-muted);
-  font-size: clamp(24px, 4vw, 48px);
-  font-weight: 500;
-  letter-spacing: -.04em;
+.artwork img.loaded {
+  opacity: 1;
+}
+
+.artwork[data-loading="true"]::after {
+  animation: pulse 1.6s ease-in-out infinite;
+  background: var(--webde-line);
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: .25; }
+  50% { opacity: .65; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .artwork img { transition: none; }
+  .artwork[data-loading="true"]::after { animation: none; opacity: .4; }
 }

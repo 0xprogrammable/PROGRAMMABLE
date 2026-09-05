@@ -6,20 +6,30 @@ import { safePublicImageUrl } from "@/lib/safe-public-image-url";
 import { getTokenCardImageSource } from "@/lib/token-image";
 import styles from "./robinhood-coin-artwork.module.css";
 
-export function RobinhoodCoinArtwork({ imageUrl, name, symbol, className = "" }: {
+export function RobinhoodCoinArtwork({ imageUrl, loading = false, className = "" }: {
   imageUrl?: string | null;
-  name: string | null;
-  symbol: string | null;
+  loading?: boolean;
   className?: string;
 }) {
-  const [failedSource, setFailedSource] = useState<string | null>(null);
   const safeSource = safePublicImageUrl(imageUrl);
   const source = safeSource ? getTokenCardImageSource(safeSource) : null;
-  const initials = (symbol?.trim() || name?.trim() || "?").replace(/^\$/, "").slice(0, 3);
-  return <div className={`${styles.artwork} ${className}`} aria-hidden="true">
-    {source && source !== failedSource ? <Image
+  return <ArtworkImage key={source} source={source} loading={loading} className={className} />;
+}
+
+function ArtworkImage({ source, loading, className }: {
+  source: string | null;
+  loading: boolean;
+  className: string;
+}) {
+  const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
+  const pending = source ? status === "loading" : loading;
+
+  return <div className={`${styles.artwork} ${className}`} data-loading={pending} aria-hidden="true">
+    {source && status !== "failed" ? <Image
       src={source} alt="" width={600} height={600} unoptimized
-      onError={() => setFailedSource(source)}
-    /> : <span>{initials}</span>}
+      className={status === "ready" ? styles.loaded : undefined}
+      onLoad={() => setStatus("ready")}
+      onError={() => setStatus("failed")}
+    /> : null}
   </div>;
 }
