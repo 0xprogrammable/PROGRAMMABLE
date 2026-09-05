@@ -1,6 +1,6 @@
 # Robinhood native20 buyer-funded example
 
-This example builds a real ETH/token Uniswap v4 market on Robinhood Chain 4663 with **zero ETH supplied as starting liquidity**. It supplies fixed token inventory to a concentrated-liquidity position. Buyers then put real ETH into that position through swaps. Deployment and later transactions still require ETH for gas.
+This example builds a real ETH/token Uniswap v4 market on Robinhood Chain 4663 with **zero ETH supplied as starting liquidity**. It supplies fixed token inventory to a concentrated-liquidity position. The launch wallet funds the first real ETH buy in the same atomic launch transaction, so a successful launch already has an executed trade and real ETH reserves. Deployment and later transactions still require separate ETH for gas.
 
 It is a bounded reference implementation for the new native20 fee profile. It is not an arbitrary custom-accounting bonding curve, an audit, a promise of liquidity value, or evidence that this example is deployed. Remote submission requires an activated successor API/profile and its exact released CLI. Building this example never signs or broadcasts a transaction.
 
@@ -10,7 +10,7 @@ It is a bounded reference implementation for the new native20 fee profile. It is
 - Pool: native ETH as currency0 and the token as currency1, LP fee 0, tick spacing 60.
 - Initial position: ticks **160020–200040**, starting exactly at the upper price. The initial square-root price is **1747735933952748037356115466503453** in Q96 units.
 - The initializer supplies token inventory only. It owns the exact initial position permanently and exposes no withdrawal, fee collection, approval, operator, recovery or arbitrary execution method. Token rounding dust left there is also permanently inaccessible.
-- At the upper price the position is initially out of the active range; its stored position liquidity and token inventory are positive. The first ETH-input buy crosses into the range. Reading only current active liquidity at the initial boundary would incorrectly classify the market as an empty pool.
+- At the upper price the position is initially out of the active range; its stored position liquidity and token inventory are positive. The mandatory first ETH-input buy crosses into the range before the launch succeeds. Reading only active liquidity before that buy would incorrectly classify the token inventory as an empty pool.
 - Subsequent sells draw from ETH actually put into the position through trading. There are no invented or borrowed ETH reserves. This is a finite concentrated-liquidity price range, not a separate fundraising contract or an automatic pool migration.
 
 The initial position's principal cannot be pulled by the creator. This statement concerns that position; it does not redefine withdrawal rights for unrelated positions other users later create in the same pool. It does not guarantee a price, depth, return or continuous market demand.
@@ -36,11 +36,11 @@ The graph is deliberately ordered as follows:
 1. Deploy `RobinhoodNative20Initializer(manager, graphFactory)` with no target references.
 2. Deploy `RobinhoodNative20Token(initializer)` and issue the fixed inventory to that address.
 3. Deploy the exact fee hook with the token and initializer references; the hook constructs its deterministic fee vault as its first CREATE child.
-4. After every target exists, the graph factory calls `initializer.initialize(token, hook)` in the initialization phase.
+4. After every target exists, the graph factory calls `initializer.initialize(token, hook, launchWallet, minimumTokensOut)` with the exact initial-buy ETH allocation in the initialization phase.
 
 The current graph factory deploys all targets before running deferred initializer calls. This avoids a CREATE2 cycle between the hook's immutable initializer and an initializer constructor containing the hook address.
 
-Initialization is nonpayable, authenticated to the exact Robinhood graph factory and usable once. Its PoolManager unlock callback is also authenticated, hash-bound and usable once. The callback adds positive liquidity, rejects any ETH debt, transfers only the exact canonical token debt, and verifies settlement. It cannot be reused to remove liquidity.
+Initialization is payable, authenticated to the exact Robinhood graph factory and usable once. Its PoolManager unlock callback is also authenticated, hash-bound and usable once. It first adds token-side liquidity with no native seed debt, then spends the exact supplied ETH on a native-input buy through the canonical fee kernel. The output must be positive and meet the explicitly bound token minimum, and is transferred to the launch wallet. Missing funds, failed settlement, partial execution or insufficient output revert the entire initialization, including the pool seed and fees. The callback cannot be reused to remove liquidity.
 
 The kernel's vault is a deterministic child at the kernel's CREATE nonce 1, not an additional graph root. Successor admission and post-launch evidence must bind its address, source, runtime and immutables explicitly.
 
@@ -50,10 +50,12 @@ The successor builder resolves live chain capabilities and prepares a determinis
 
 The config declares:
 
-- Funding model: buyer-funded token inventory, no ETH principal or initial buy.
-- Native transaction value: `0`.
+- Funding model: buyer-funded token inventory, no native seed principal, plus a mandatory first buy funded by the launch wallet.
+- Native transaction value: the exact initial-buy allocation, counted once. Gas is additional.
 - Liquidity model: `project-provided-liquidity` / `liquidity-provided-by-launch`, target `initializer`.
 - A separately disclosed, positive gas budget paid by the launch wallet. This recipe provides no gas sponsorship.
+
+The server requires a first buy worth at least USD 1 using its verified native ETH/USD reference at permit authorization. It rounds the required wei upward; the agent cannot choose the exchange rate. This is a reference valuation at authorization, not a guarantee of the dollar value when the transaction executes. The first swap is evidence of executed trading, not a promise of third-party indexing.
 
 Before building a real launch, the agent must obtain the selected chain, funding model, gas budget, project image, description, name, ticker and social links. The fixed token name/symbol above must match this reference project's metadata. A changed token or initializer requires new source-bound admission; do not substitute an unreviewed token while claiming this exact example's evidence.
 
@@ -101,6 +103,8 @@ programmable-launch validate launch.json --config programmable-launch.config.jso
 The unauthenticated builder fetches current 4663 capabilities and a finalized checkpoint, requires the complete successor profile tuple, and refuses API keys. It emits two complete compiler inputs, artifacts, build evidence and the config. The canonical fee unit stays unchanged; the token and initializer compile together. A second deterministic pack pass materializes the first-CREATE vault address without changing the hook deployment address. Local reproduction does not replace backend admission, live balance/gas checks, wallet confirmation or finalized evidence.
 
 ## Local verification and limits
+
+The dedicated tests also reject a zero first buy, a zero token minimum, a zero recipient and an unfillable minimum; failed first buys leave no initialized pool, seed or accrued fees.
 
 The dedicated tests execute the pinned real v4-core PoolManager locally, including its constructor at the canonical address. They verify a token-only initial position, zero ETH seeding, buy/sell execution and Treasury claims, including separate nonzero directional creator fees with unchanged platform allocation and position liquidity, plus unauthorized/repeated initialization, forged callbacks and unavailable withdrawal/approval routes.
 

@@ -28,6 +28,8 @@ contract RobinhoodNative20LaunchTest is Test, IUnlockCallback {
     address internal constant MANAGER = 0x8366a39CC670B4001A1121B8F6A443A643e40951;
     address internal constant FACTORY = 0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd;
     address internal constant TREASURY = 0xD88539d3c4C460136a733A3Fd60cf6BF269079da;
+    address internal constant INITIAL_BUYER = address(0xBEEF);
+    uint256 internal constant FIRST_BUY = 0.001 ether;
     uint256 internal constant TOTAL_SUPPLY = 1_000_000_000 ether;
     uint160 internal constant HOOK_FLAGS = 0x20cc;
 
@@ -77,22 +79,31 @@ contract RobinhoodNative20LaunchTest is Test, IUnlockCallback {
         assertEq(hook.creatorSellFeeBps(), 0);
     }
 
-    function test_launchSeedsActualLockedPositionWithZeroNativeCapital() public {
+    function test_launchSeedsLockedPositionAndExecutesFundedFirstBuyAtomically() public {
         assertEq(initializer.initialSqrtPriceX96(), 1_747_735_933_952_748_037_356_115_466_503_453);
         _launch();
         (uint128 liquidity,,) = manager.getPositionInfo(key.toId(), address(initializer), 160_020, 200_040, bytes32(0));
         assertGt(liquidity, 0);
-        assertEq(MANAGER.balance, 0);
+        assertEq(MANAGER.balance, FIRST_BUY);
         assertEq(address(initializer).balance, 0);
-        assertEq(token.balanceOf(MANAGER) + token.balanceOf(address(initializer)), TOTAL_SUPPLY);
-        assertGt(token.balanceOf(MANAGER), TOTAL_SUPPLY - 1_000_000);
+        assertEq(
+            token.balanceOf(MANAGER) + token.balanceOf(address(initializer)) + token.balanceOf(INITIAL_BUYER),
+            TOTAL_SUPPLY
+        );
+        assertGt(token.balanceOf(INITIAL_BUYER), 0);
+        assertEq(initializer.initialBuyer(), INITIAL_BUYER);
+        assertEq(initializer.initialBuyWei(), FIRST_BUY);
+        assertEq(initializer.initialTokensOut(), token.balanceOf(INITIAL_BUYER));
+        assertGt(manager.getLiquidity(key.toId()), 0);
+        assertGt(initializer.seededTokenAmount(), TOTAL_SUPPLY - 1_000_000);
         assertEq(manager.balanceOf(address(initializer), 0), 0);
-        assertEq(manager.balanceOf(address(hook.feeVault()), 0), 0);
+        assertEq(manager.balanceOf(address(hook.feeVault()), 0), _ceil(FIRST_BUY * 20, 10_000));
         assertEq(token.allowance(address(initializer), address(this)), 0);
     }
 
     function test_firstBuyerFundsNativeReserveAndCanSellBackWithTreasuryFees() public {
         _launch();
+        uint256 initialPlatform = hook.feeVault().platformAccrued();
         uint256 grossBuy = 0.01 ether;
         uint256 nativeBefore = MANAGER.balance;
         BalanceDelta buy = _swap(true, -int256(grossBuy));
@@ -102,7 +113,7 @@ contract RobinhoodNative20LaunchTest is Test, IUnlockCallback {
         assertGt(tokensBought, 0);
         assertEq(token.balanceOf(address(this)), tokensBought);
         assertEq(MANAGER.balance - nativeBefore, grossBuy);
-        assertEq(hook.feeVault().platformAccrued(), platformBuy);
+        assertEq(hook.feeVault().platformAccrued(), initialPlatform + platformBuy);
 
         uint256 reserveBeforeSell = MANAGER.balance;
         uint256 tokenSell = tokensBought / 2;
@@ -111,7 +122,7 @@ contract RobinhoodNative20LaunchTest is Test, IUnlockCallback {
         assertEq(-int256(sell.amount1()), int256(tokenSell));
         assertLt(MANAGER.balance, reserveBeforeSell);
         uint256 totalPlatform = hook.feeVault().platformAccrued();
-        uint256 platformSell = totalPlatform - platformBuy;
+        uint256 platformSell = totalPlatform - initialPlatform - platformBuy;
         uint256 grossSell = uint256(int256(sell.amount0())) + platformSell;
         assertEq(platformSell, _ceil(grossSell * 20, 10_000));
         assertEq(hook.feeVault().creatorAccrued(), 0);
@@ -137,8 +148,10 @@ contract RobinhoodNative20LaunchTest is Test, IUnlockCallback {
         (uint128 initialLiquidity,,) =
             manager.getPositionInfo(key.toId(), address(initializer), 160_020, 200_040, bytes32(0));
         assertGt(initialLiquidity, 0);
-        assertEq(MANAGER.balance, 0);
+        assertEq(MANAGER.balance, FIRST_BUY);
 
+        uint256 initialPlatform = hook.feeVault().platformAccrued();
+        uint256 initialCreator = hook.feeVault().creatorAccrued();
         uint256 grossBuy = 0.01 ether;
         BalanceDelta buy = _swap(true, -int256(grossBuy));
         uint256 platformBuy = _ceil(grossBuy * 20, 10_000);
@@ -146,29 +159,20 @@ contract RobinhoodNative20LaunchTest is Test, IUnlockCallback {
         assertEq(-int256(buy.amount0()), int256(grossBuy));
         assertGt(buy.amount1(), 0);
         RobinhoodNativeFeeVaultV1 vault = hook.feeVault();
-        assertEq(vault.platformAccrued(), platformBuy);
-        assertEq(vault.creatorAccrued(), creatorBuy);
+        assertEq(vault.platformAccrued(), initialPlatform + platformBuy);
+        assertEq(vault.creatorAccrued(), initialCreator + creatorBuy);
 
         uint256 tokensSold = uint256(int256(buy.amount1())) / 2;
         BalanceDelta sell = _swap(false, -int256(tokensSold));
-        uint256 platformSell = vault.platformAccrued() - platformBuy;
-        uint256 creatorSell = vault.creatorAccrued() - creatorBuy;
+        uint256 platformSell = vault.platformAccrued() - initialPlatform - platformBuy;
+        uint256 creatorSell = vault.creatorAccrued() - initialCreator - creatorBuy;
         uint256 grossSell = uint256(int256(sell.amount0())) + platformSell + creatorSell;
         assertGt(sell.amount0(), 0);
         assertEq(-int256(sell.amount1()), int256(tokensSold));
         assertEq(platformSell, _ceil(grossSell * 20, 10_000));
         assertEq(creatorSell, _ceil(grossSell * 720, 10_000) - platformSell);
 
-        uint256 treasuryBefore = TREASURY.balance;
-        uint256 creatorBefore = address(this).balance;
-        vm.startPrank(makeAddr("directionalFeeClaimCaller"));
-        assertEq(vault.claimCreator(), creatorBuy + creatorSell);
-        assertEq(manager.balanceOf(address(vault), 0), platformBuy + platformSell);
-        assertEq(vault.claimPlatform(), platformBuy + platformSell);
-        vm.stopPrank();
-        assertEq(TREASURY.balance - treasuryBefore, platformBuy + platformSell);
-        assertEq(address(this).balance - creatorBefore, creatorBuy + creatorSell);
-        assertEq(manager.balanceOf(address(vault), 0), 0);
+        _claimBoth(vault, initialPlatform + platformBuy + platformSell, initialCreator + creatorBuy + creatorSell);
 
         (uint128 finalLiquidity,,) =
             manager.getPositionInfo(key.toId(), address(initializer), 160_020, 200_040, bytes32(0));
@@ -180,7 +184,7 @@ contract RobinhoodNative20LaunchTest is Test, IUnlockCallback {
 
     function test_untrustedCallerCannotInitialize() public {
         vm.expectRevert();
-        initializer.initialize(address(token), address(hook));
+        initializer.initialize(address(token), address(hook), INITIAL_BUYER, 1);
         assertEq(token.balanceOf(address(initializer)), TOTAL_SUPPLY);
         assertEq(token.balanceOf(MANAGER), 0);
     }
@@ -190,7 +194,7 @@ contract RobinhoodNative20LaunchTest is Test, IUnlockCallback {
         uint256 poolTokens = token.balanceOf(MANAGER);
         vm.prank(FACTORY);
         vm.expectRevert();
-        initializer.initialize(address(token), address(hook));
+        initializer.initialize(address(token), address(hook), INITIAL_BUYER, 1);
         assertEq(token.balanceOf(MANAGER), poolTokens);
     }
 
@@ -233,8 +237,45 @@ contract RobinhoodNative20LaunchTest is Test, IUnlockCallback {
     }
 
     function _launch() internal {
+        vm.deal(FACTORY, FIRST_BUY);
         vm.prank(FACTORY);
-        initializer.initialize(address(token), address(hook));
+        initializer.initialize{ value: FIRST_BUY }(address(token), address(hook), INITIAL_BUYER, 1);
+    }
+
+    function test_zeroInitialBuyCannotLeaveAnEmptyLaunch() public {
+        vm.prank(FACTORY);
+        vm.expectRevert(RobinhoodNative20Initializer.InvalidInitialBuy.selector);
+        initializer.initialize(address(token), address(hook), INITIAL_BUYER, 1);
+        assertFalse(initializer.initialized());
+        assertEq(token.balanceOf(address(initializer)), TOTAL_SUPPLY);
+        assertEq(MANAGER.balance, 0);
+        (uint160 price,,,) = manager.getSlot0(key.toId());
+        assertEq(price, 0);
+    }
+
+    function test_unfillableMinimumRollsBackSeedBuyAndFees() public {
+        vm.deal(FACTORY, FIRST_BUY);
+        vm.prank(FACTORY);
+        vm.expectRevert(RobinhoodNative20Initializer.InvalidInitialBuy.selector);
+        initializer.initialize{ value: FIRST_BUY }(address(token), address(hook), INITIAL_BUYER, TOTAL_SUPPLY);
+        assertFalse(initializer.initialized());
+        assertEq(token.balanceOf(address(initializer)), TOTAL_SUPPLY);
+        assertEq(token.balanceOf(INITIAL_BUYER), 0);
+        assertEq(MANAGER.balance, 0);
+        assertEq(hook.feeVault().platformAccrued(), 0);
+        (uint160 price,,,) = manager.getSlot0(key.toId());
+        assertEq(price, 0);
+    }
+
+    function test_zeroMinimumOrRecipientCannotLaunch() public {
+        vm.deal(FACTORY, FIRST_BUY);
+        vm.startPrank(FACTORY);
+        vm.expectRevert(RobinhoodNative20Initializer.InvalidInitialBuy.selector);
+        initializer.initialize{ value: FIRST_BUY }(address(token), address(hook), INITIAL_BUYER, 0);
+        vm.expectRevert(RobinhoodNative20Initializer.InvalidInitialBuy.selector);
+        initializer.initialize{ value: FIRST_BUY }(address(token), address(hook), address(0), 1);
+        vm.stopPrank();
+        assertFalse(initializer.initialized());
     }
 
     function _swap(bool buy, int256 amount) internal returns (BalanceDelta) {
@@ -259,6 +300,19 @@ contract RobinhoodNative20LaunchTest is Test, IUnlockCallback {
         } else if (amount > 0) {
             manager.take(currency, address(this), uint256(int256(amount)));
         }
+    }
+
+    function _claimBoth(RobinhoodNativeFeeVaultV1 vault, uint256 platformTotal, uint256 creatorTotal) internal {
+        uint256 treasuryBefore = TREASURY.balance;
+        uint256 creatorBefore = address(this).balance;
+        vm.startPrank(makeAddr("directionalFeeClaimCaller"));
+        assertEq(vault.claimCreator(), creatorTotal);
+        assertEq(manager.balanceOf(address(vault), 0), platformTotal);
+        assertEq(vault.claimPlatform(), platformTotal);
+        vm.stopPrank();
+        assertEq(TREASURY.balance - treasuryBefore, platformTotal);
+        assertEq(address(this).balance - creatorBefore, creatorTotal);
+        assertEq(manager.balanceOf(address(vault), 0), 0);
     }
 
     function _ceil(uint256 numerator, uint256 denominator) internal pure returns (uint256) {

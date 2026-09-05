@@ -1,22 +1,23 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
-import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
-import {IUnlockCallback} from "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
-import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
-import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
-import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
-import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
-import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
-import {ModifyLiquidityParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
-import {RobinhoodNative20Token} from "./RobinhoodNative20Token.sol";
-import {RobinhoodNativeFeeHookV1} from "./robinhood-fee-v1/RobinhoodNativeFeeHookV1.sol";
+import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import { IHooks } from "@uniswap/v4-core/src/interfaces/IHooks.sol";
+import { IUnlockCallback } from "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
+import { FullMath } from "@uniswap/v4-core/src/libraries/FullMath.sol";
+import { TickMath } from "@uniswap/v4-core/src/libraries/TickMath.sol";
+import { BalanceDelta } from "@uniswap/v4-core/src/types/BalanceDelta.sol";
+import { Currency } from "@uniswap/v4-core/src/types/Currency.sol";
+import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
+import { ModifyLiquidityParams, SwapParams } from "@uniswap/v4-core/src/types/PoolOperation.sol";
+import { RobinhoodNative20Token } from "./RobinhoodNative20Token.sol";
+import { RobinhoodNativeFeeHookV1 } from "./robinhood-fee-v1/RobinhoodNativeFeeHookV1.sol";
 
 /// @notice One-shot, graph-factory-only token-side liquidity seed. The position is permanently owned here.
 /// @dev There is deliberately no remove/collect/approve/operator/sweep/arbitrary execution entry point.
 ///      It seeds actual v4 concentrated liquidity with token inventory, not synthetic ETH reserves.
-///      ETH enters when buyers trade. Transaction gas still requires real ETH.
+///      A separately funded first buy executes atomically after the token-side seed.
+///      The API checks its USD reference value; this contract enforces the exact native buy and token minimum.
 contract RobinhoodNative20Initializer is IUnlockCallback {
     address public constant CANONICAL_POOL_MANAGER = 0x8366a39CC670B4001A1121B8F6A443A643e40951;
     address public constant CANONICAL_GRAPH_FACTORY = 0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd;
@@ -33,6 +34,10 @@ contract RobinhoodNative20Initializer is IUnlockCallback {
     address public hook;
     uint128 public lockedLiquidity;
     uint256 public seededTokenAmount;
+    address public initialBuyer;
+    uint256 public initialBuyWei;
+    uint256 public initialTokensOut;
+    uint256 public minimumInitialTokensOut;
     bytes32 private pendingUnlock;
 
     error InvalidEnvironment();
@@ -43,10 +48,12 @@ contract RobinhoodNative20Initializer is IUnlockCallback {
     error InvalidUnlock();
     error UnexpectedLiquidityDelta();
     error TokenSettlementMismatch();
+    error InvalidInitialBuy();
 
     event TokenInventorySeeded(
         address indexed token, address indexed hook, uint128 lockedLiquidity, uint256 tokenAmount
     );
+    event InitialBuyExecuted(address indexed buyer, address indexed token, uint256 grossNativeWei, uint256 tokensOut);
 
     constructor(IPoolManager manager, address factory) {
         if (
@@ -63,9 +70,13 @@ contract RobinhoodNative20Initializer is IUnlockCallback {
 
     /// @notice Called only after the graph factory has deployed initializer, token and fee kernel.
     /// @dev Deferred initialization avoids a CREATE2 constructor-reference cycle between initializer and hook.
-    function initialize(address token_, address hook_) external {
+    function initialize(address token_, address hook_, address buyer_, uint256 minimumTokensOut_) external payable {
         if (msg.sender != graphFactory) revert UnauthorizedFactory();
         if (initialized) revert AlreadyInitialized();
+        if (
+            buyer_ == address(0) || buyer_ == address(this) || msg.value == 0
+                || msg.value > uint256(uint128(type(int128).max)) || minimumTokensOut_ == 0
+        ) revert InvalidInitialBuy();
         if (token_.codehash != keccak256(type(RobinhoodNative20Token).runtimeCode)) revert InvalidInventory();
         uint256 inventory = RobinhoodNative20Token(token_).balanceOf(address(this));
         if (inventory != RobinhoodNative20Token(token_).totalSupply()) revert InvalidInventory();
@@ -85,17 +96,25 @@ contract RobinhoodNative20Initializer is IUnlockCallback {
         token = token_;
         hook = hook_;
         lockedLiquidity = uint128(liquidity);
+        initialBuyer = buyer_;
+        initialBuyWei = msg.value;
+        minimumInitialTokensOut = minimumTokensOut_;
         PoolKey memory key = _poolKey();
         poolManager.initialize(key, initialSqrtPriceX96());
-        bytes memory data = abi.encode(token_, hook_, lockedLiquidity);
+        bytes memory data = abi.encode(token_, hook_, lockedLiquidity, buyer_, msg.value, minimumTokensOut_);
         pendingUnlock = keccak256(data);
         bytes memory result = poolManager.unlock(data);
-        if (pendingUnlock != bytes32(0) || result.length != 0 || seededTokenAmount == 0) revert InvalidUnlock();
+        if (
+            pendingUnlock != bytes32(0) || result.length != 0 || seededTokenAmount == 0
+                || initialTokensOut < minimumTokensOut_
+        ) revert InvalidUnlock();
         emit TokenInventorySeeded(token_, hook_, lockedLiquidity, seededTokenAmount);
+        emit InitialBuyExecuted(buyer_, token_, msg.value, initialTokensOut);
     }
 
     function unlockCallback(bytes calldata data) external returns (bytes memory) {
-        if (msg.sender != address(poolManager) || pendingUnlock == bytes32(0) || keccak256(data) != pendingUnlock) {
+        if (msg.sender != address(poolManager)) revert InvalidUnlock();
+        if (pendingUnlock == bytes32(0) || keccak256(data) != pendingUnlock) {
             revert InvalidUnlock();
         }
         pendingUnlock = bytes32(0);
@@ -117,6 +136,22 @@ contract RobinhoodNative20Initializer is IUnlockCallback {
         poolManager.sync(Currency.wrap(token));
         if (!RobinhoodNative20Token(token).transfer(address(poolManager), owed)) revert TokenSettlementMismatch();
         if (poolManager.settle() != owed) revert TokenSettlementMismatch();
+        BalanceDelta buy = poolManager.swap(
+            _poolKey(),
+            SwapParams({
+                zeroForOne: true,
+                amountSpecified: -int256(initialBuyWei),
+                sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+            }),
+            ""
+        );
+        if (int256(buy.amount0()) != -int256(initialBuyWei) || buy.amount1() <= 0) revert InvalidInitialBuy();
+        uint256 tokensOut = uint256(int256(buy.amount1()));
+        if (tokensOut < minimumInitialTokensOut) revert InvalidInitialBuy();
+        initialTokensOut = tokensOut;
+        poolManager.sync(Currency.wrap(address(0)));
+        if (poolManager.settle{ value: initialBuyWei }() != initialBuyWei) revert InvalidInitialBuy();
+        poolManager.take(Currency.wrap(token), initialBuyer, tokensOut);
         return "";
     }
 
