@@ -338,3 +338,14 @@ paths = [
   '''^tests/robinhood-explore-read\.test\.ts$''',
 ]
 regexes = ['''(?i)^0x15fca474b23cafe775120b1fafbcff0e7a827af2$''']
+
+[[allowlists]]
+description = "Attested Robinhood 4.1 clean-room proof pins its public predicted token address"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "match"
+paths = [
+  '''^docs/operations/releases/custom-launch-v4\.1/api-activation\.json$''',
+  '''^release/robinhood-chain-4663/v4\.1/programmable-launch-v41-clean-room-evidence\.json$''',
+]
+regexes = ['''^tokenAddress":\s*"0xA49217CD2bef0b96313D62a58423F2c778147e9C"$''']
