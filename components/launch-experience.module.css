@@ -2003,70 +2003,8 @@
   margin: 0;
 }
 
-.chainChoice {
-  border: 1px solid var(--webde-line);
-  border-radius: var(--webde-radius-control);
-  background: var(--webde-surface);
-  display: inline-flex;
-  gap: 4px;
-  margin: 0;
-  max-width: 100%;
-  min-inline-size: 0;
-  padding: 4px;
-}
-
-.chainOption {
-  align-items: center;
-  border: 1px solid transparent;
-  border-radius: calc(var(--webde-radius-control) - 4px);
-  color: var(--webde-muted);
-  cursor: pointer;
-  display: flex;
-  flex: none;
-  font-size: 14px;
-  font-weight: 550;
-  justify-content: center;
-  min-height: 44px;
-  min-width: 44px;
-  padding: 0;
-  position: relative;
-}
-
-.chainMark { display: block; height: 20px; width: 20px; }
-.robinhoodMark {
-  background: currentColor;
-  display: block;
-  height: 21px;
-  mask: url("/brand/networks/robinhood-feather-white.svg") center / contain no-repeat;
-  width: 16px;
-}
-
-.chainOption:has(input:checked) {
-  background: var(--webde-surface-raised);
-  border-color: var(--webde-line);
-  color: var(--webde-ink);
-}
-
-.chainOption:has(input:focus-visible) {
-  outline: 2px solid var(--webde-muted);
-  outline-offset: 2px;
-}
-
-@media (forced-colors: active) {
-  .chainOption:has(input:checked) { border-color: Highlight; }
-  .chainOption:has(input:focus-visible) { outline-color: Highlight; }
-  .robinhoodMark { background: CanvasText; forced-color-adjust: none; }
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .chainOption:hover {
-    color: var(--webde-ink);
-  }
-}
-
-.chainChoice:disabled .chainOption {
-  cursor: default;
-  opacity: 0.6;
+.chainChoice.chainChoice {
+  margin: 0 auto;
 }
 
 .modelGrid {

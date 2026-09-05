@@ -10,7 +10,6 @@ import {
 } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronDown } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   DiscordBrandIcon,
@@ -20,6 +19,7 @@ import {
 } from "@/components/brand-icons";
 import {
   NavigationCloseIcon,
+  NavigationChevronIcon,
   NavigationMenuIcon,
 } from "@/components/navigation-icons";
 import { useWallet } from "@/components/wallet-provider";
@@ -45,7 +45,9 @@ function warmNavigationRoute(
 ) {
   if (warmedNavigationRoutes.has(href)) return;
   warmedNavigationRoutes.add(href);
-  router.prefetch(href);
+  router.prefetch(href, {
+    onInvalidate: () => warmedNavigationRoutes.delete(href),
+  });
 }
 
 function HeaderSocialLinks({ mobile = false }: { mobile?: boolean }) {
@@ -200,7 +202,7 @@ function HeaderWalletButton({
         }}
       >
         <span>{label}</span>
-        {wallet && !connecting && !disconnecting ? <ChevronDown size={14} aria-hidden="true" /> : null}
+        {wallet && !connecting && !disconnecting ? <NavigationChevronIcon /> : null}
       </button>
       {menuOpen && wallet ? (
         <div className={styles.walletMenu} id={menuId} role="group" aria-label="Wallet actions">
@@ -271,6 +273,7 @@ function DesktopNavigation() {
             aria-current={current ? "page" : undefined}
             onFocus={() => warmNavigationRoute(router, item.href)}
             onPointerEnter={() => warmNavigationRoute(router, item.href)}
+            onPointerDown={() => warmNavigationRoute(router, item.href)}
           >
             {item.label}
           </Link>
@@ -456,6 +459,7 @@ export function MobileNavigation({
             tabIndex={open ? undefined : -1}
             onFocus={() => warmNavigationRoute(router, item.href)}
             onPointerEnter={() => warmNavigationRoute(router, item.href)}
+            onPointerDown={() => warmNavigationRoute(router, item.href)}
             onClick={onNavigate}
           >
             <span>{item.label}</span>

@@ -93,7 +93,18 @@
   inset-inline-end: 0;
   padding: 8px;
   top: calc(100% + 8px);
+  transform-origin: top right;
+  transition:
+    opacity 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 180ms cubic-bezier(0.32, 0.72, 0, 1);
   width: 216px;
+}
+
+@starting-style {
+  .walletMenu {
+    opacity: 0;
+    transform: translate3d(0, -4px, 0) scale(0.98);
+  }
 }
 
 .walletMenu > a,
@@ -153,22 +164,19 @@
   inset: 0;
   position: absolute;
   transition:
-    filter 200ms cubic-bezier(0.2, 0, 0, 1),
     opacity 180ms cubic-bezier(0.2, 0, 0, 1),
     transform 200ms cubic-bezier(0.2, 0, 0, 1);
   width: 24px;
 }
 
 .iconVisible {
-  filter: blur(0);
   opacity: 1;
   transform: scale(1);
 }
 
 .iconHidden {
-  filter: blur(4px);
   opacity: 0;
-  transform: scale(0.25);
+  transform: scale(0.9);
 }
 
 .mobileSheet {
@@ -373,6 +381,7 @@
 @media (prefers-reduced-motion: reduce) {
   .menuButton,
   .menuIcon svg,
+  .walletMenu,
   .mobileSheet,
   .mobileSheet.mobileSheet :global(.mobile-nav a),
   .headerWalletButton {

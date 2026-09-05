@@ -83,7 +83,8 @@ describe("topbar and Explore hero polish", () => {
     expect(navigation).toContain('if (activePath === "/docs")');
     expect(navigation).toContain("prefetch={false}");
     expect(navigation).toContain("warmedNavigationRoutes.has(href)");
-    expect(navigation).toContain("router.prefetch(href)");
+    expect(navigation).toContain("router.prefetch(href,");
+    expect(navigation).toContain("onInvalidate: () => warmedNavigationRoutes.delete(href)");
     for (const label of [
       "Explore",
       "Launch",
