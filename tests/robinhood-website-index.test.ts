@@ -255,6 +255,21 @@ describe("Robinhood website index synchronization", () => {
     expect(memory.saved()).toEqual(original);
   });
 
+  it("retains verified pending launches when a canonical block retry omits their logs", async () => {
+    const accepted = launch(1, 190);
+    const pending = launch(2, 250);
+    const memory = memoryStore(snapshot([accepted], {
+      cursor: point(199), checkpoints: [point(199)],
+      pending: { block: point(250), items: [pending] },
+    }));
+    const source = indexSource([], 399n);
+
+    const result = await syncRobinhoodIndex(source, memory.store, OPTIONS);
+
+    expect(result).toMatchObject({ status: "ready", indexedThrough: "399", launches: 2 });
+    expect(memory.saved()).toMatchObject({ pending: null, items: [accepted, pending] });
+  });
+
   it("keeps default RPC ranges within the provider's 10,000-block inclusive limit", async () => {
     const source = indexSource([], 20_100n);
     const memory = memoryStore();

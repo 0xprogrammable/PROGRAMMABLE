@@ -78,7 +78,8 @@ export async function syncRobinhoodIndex(source: IndexSource, store: IndexStore,
       if ((await source.block(to)).hash.toLowerCase() !== end.hash.toLowerCase()) throw new Error("Range changed");
       // Previously verified rows are removed only by the explicit reorg rewind.
       // An incomplete-but-successful overlap response cannot erase their origin.
-      const byLaunchId = new Map(snapshot.items.map((row) => [row.launchId.toLowerCase(), row]));
+      const accepted = [...snapshot.items, ...(snapshot.pending?.items ?? [])];
+      const byLaunchId = new Map(accepted.map((row) => [row.launchId.toLowerCase(), row]));
       for (const row of rows) {
         const existing = byLaunchId.get(row.launchId.toLowerCase());
         if (existing && (existing.blockHash !== row.blockHash || existing.logIndex !== row.logIndex)) {
