@@ -23,8 +23,12 @@ export function createPackConfigFromCapabilities({
   tokenSupply,
   projectMetadata,
   checkedAt,
+  hookImmutableId,
 }) {
   assertProductionV4Capabilities(capabilities);
+  if (typeof hookImmutableId !== "string" || !/^(?:0|[1-9][0-9]*)$/u.test(hookImmutableId)) {
+    throw new TypeError("the compiled hook PoolManager immutable ID is required");
+  }
   if (!ADDRESS.test(launchWallet)
     || /^0x0{40}$/u.test(launchWallet)
     || !/^0x(?!0{64}$)[0-9a-f]{64}$/u.test(nonce)
@@ -96,7 +100,7 @@ export function createPackConfigFromCapabilities({
         initializerValueWei: "0",
         componentKind: "hook",
         declaredHookPermissions: ["beforeSwap"],
-        runtimeImmutables: [],
+        runtimeImmutables: [{ immutableId: hookImmutableId, abiType: "address", literal: poolManager }],
       },
       {
         targetId: "initializer",

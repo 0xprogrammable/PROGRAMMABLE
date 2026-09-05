@@ -7,7 +7,8 @@ chain-deployment descriptor and integer-revision profile reference into the gene
 that route, any required trust root, the finality digest, or the production profile digest is unavailable.
 
 The request declares funding mode `none`, value `0`, an uninitialized empty pool, and no liquidity action. The hook
-authenticates `beforeSwap` calls against the capabilities-bound PoolManager. This fixture does not claim a fee,
+authenticates `beforeSwap` calls against the capabilities-bound immutable PoolManager. The build binds the compiler's
+exact immutable reference to the same address passed to the constructor. This fixture does not claim a fee,
 claiming, liquidity, deployment, or launched-token outcome. A successful local build, pack, or validation is not API
 admission, wallet approval, onchain deployment, or public availability.
 
@@ -29,12 +30,14 @@ pre-release source candidate supports local preparation only.
 stop. This conditional procedure does not assert today's release state; this example still never submits,
 signs or broadcasts.
 
-Set `PACKAGE_ROOT` to that verified package directory, or the reviewed checkout's `packages/launch` directory for
-local preparation, then copy the project and install its exact compiler lock:
+Use the verified CLI with the project from the current reviewed protected checkout. The immutable `4.0.0` release
+contains an older example with a mutable PoolManager; that example is rejected by production admission. The CLI
+itself supports the corrected immutable binding. Set `PROJECT_SOURCE_ROOT` to the reviewed checkout, then copy
+the corrected project and install its exact compiler lock:
 
 ```sh
-PACKAGE_ROOT="/absolute/path/to/package-root"
-cp -R "$PACKAGE_ROOT/examples/robinhood-v4-no-broadcast/project" ./robinhood-v4-clean-room
+PROJECT_SOURCE_ROOT="/absolute/path/to/reviewed-programmable-checkout"
+cp -R "$PROJECT_SOURCE_ROOT/packages/launch/examples/robinhood-v4-no-broadcast/project" ./robinhood-v4-clean-room
 cd ./robinhood-v4-clean-room
 npm ci --ignore-scripts --no-audit --no-fund
 mkdir -p assets

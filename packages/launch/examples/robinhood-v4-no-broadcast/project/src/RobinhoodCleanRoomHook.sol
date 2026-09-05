@@ -21,7 +21,7 @@ struct SwapParams {
 contract RobinhoodCleanRoomHook {
     error NotPoolManager();
 
-    address public poolManager;
+    address public immutable poolManager;
 
     constructor(address poolManager_) {
         require(poolManager_ != address(0), "zero PoolManager");
