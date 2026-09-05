@@ -58,10 +58,16 @@ export function getProfileStorageKey(address: string) {
   const normalizedAddress = address.trim().toLowerCase();
 
   if (!ethereumAddressPattern.test(normalizedAddress)) {
-    throw new Error("A valid Ethereum wallet address is required");
+    throw new Error("A valid wallet address is required");
   }
 
   return `${PROFILE_STORAGE_PREFIX}:${normalizedAddress}`;
+}
+
+export function profileDraftBelongsToAccount(editingAccount: string, account: string) {
+  const normalizedAccount = account.trim().toLowerCase();
+  return ethereumAddressPattern.test(normalizedAccount)
+    && editingAccount.toLowerCase() === normalizedAccount;
 }
 
 export function normalizeProfileUsername(username: string) {

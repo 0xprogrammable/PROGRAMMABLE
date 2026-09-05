@@ -1,8 +1,10 @@
 export type ViewChainId = 1 | 4663;
 
-export const DEFAULT_VIEW_CHAIN_ID: ViewChainId = 1;
-export const VIEW_CHAIN_COOKIE_NAME = "programmable-view-chain";
-export const VIEW_CHAIN_STORAGE_KEY = "programmable:view-chain:v1";
+export const DEFAULT_VIEW_CHAIN_ID: ViewChainId = 4663;
+// Earlier releases saved Ethereum automatically. Start the Robinhood default
+// once under a new preference version, then keep subsequent explicit choices.
+export const VIEW_CHAIN_COOKIE_NAME = "programmable-view-chain-v2";
+export const VIEW_CHAIN_STORAGE_KEY = "programmable:view-chain:v2";
 export const VIEW_CHAIN_CHANGE_EVENT = "programmable:view-chain-change";
 export const VIEW_CHAIN_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
 

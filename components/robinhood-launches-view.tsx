@@ -1,18 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Pin, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 
 import { ExploreChainSelector } from "@/components/explore-chain-selector";
 import { ExploreFilters } from "@/components/explore-filters";
 import { AnimatedMarketCap } from "@/components/animated-market-cap";
 import { ExploreIndexResetView } from "@/components/explore-index-reset-view";
-import { useViewChain } from "@/components/view-chain";
+import { useViewChain, type ViewChainId } from "@/components/view-chain";
 import { RobinhoodCoinArtwork } from "@/components/robinhood-coin-artwork";
 import { coinAge, coinTicker, mergeRobinhoodPresentations, type RobinhoodCoinPresentation } from "@/lib/robinhood-presentation";
 import { activeExploreFilterCount, DEFAULT_EXPLORE_FILTERS, type RobinhoodExploreFilters } from "@/lib/robinhood-explore-filters";
-import { isPinnedRobinhoodToken } from "@/lib/robinhood-explore-policy";
 import styles from "@/components/robinhood-launches-view.module.css";
 
 type Launch = {
@@ -111,20 +110,18 @@ function readResponse(value: unknown): LaunchResponse {
 
 export function RobinhoodLaunchesView({
   embedded = false,
-}: Readonly<{ embedded?: boolean }>) {
+  chainId,
+}: Readonly<{ embedded?: boolean; chainId?: ViewChainId }>) {
   const { hydrated, viewChainId, setViewChainId } = useViewChain();
 
   useEffect(() => {
-    if (!hydrated) return;
-    const chains = new URLSearchParams(window.location.search).getAll("chain");
-    if (chains.length === 1 && (chains[0] === "1" || chains[0] === "4663")) {
-      // Apply an explicit link after the provider has restored its saved preference.
-      const timer = window.setTimeout(() => setViewChainId(chains[0] === "4663" ? 4663 : 1), 0);
-      return () => window.clearTimeout(timer);
-    }
-  }, [hydrated, setViewChainId]);
+    if (!hydrated || chainId === undefined) return;
+    // The explicit route wins after the shared preference is restored.
+    const timer = window.setTimeout(() => setViewChainId(chainId), 0);
+    return () => window.clearTimeout(timer);
+  }, [chainId, hydrated, setViewChainId]);
 
-  if (viewChainId !== 4663) return <ExploreIndexResetView embedded={embedded} />;
+  if ((chainId ?? viewChainId) !== 4663) return <ExploreIndexResetView embedded={embedded} />;
 
   return <RobinhoodLaunchList embedded={embedded} enabled={hydrated} />;
 }
@@ -292,7 +289,7 @@ function RobinhoodLaunchList({ embedded, enabled }: { embedded: boolean; enabled
               </button>
             ) : null}
           </form>
-          <ExploreChainSelector />
+          <ExploreChainSelector chainId={4663} />
           <ExploreFilters value={request} onApply={applyFilters} />
         </div>
 
@@ -306,7 +303,7 @@ function RobinhoodLaunchList({ embedded, enabled }: { embedded: boolean; enabled
               const details = presentations.get(launch.tokenAddress.toLowerCase());
               return (
               <li key={launch.launchId} className={styles.item}>
-                <Link className={styles.row} href={`/token/${launch.tokenAddress}?chain=4663`} prefetch={false}>
+                <Link className={styles.row} href={`/token/${launch.tokenAddress}`} prefetch={false}>
                   <RobinhoodCoinArtwork
                     imageUrl={details?.imageUrl} loading={loading && !details}
                     className={styles.artwork}
@@ -314,7 +311,6 @@ function RobinhoodLaunchList({ embedded, enabled }: { embedded: boolean; enabled
                   <div className={styles.identity}>
                     <div className={styles.nameRow}>
                       <strong className={styles.name} title={launch.name?.trim() || "Unnamed token"}>{launch.name?.trim() || "Unnamed token"}</strong>
-                      {isPinnedRobinhoodToken(launch.tokenAddress) ? <span className={styles.pin} title="Pinned"><Pin size={14} aria-hidden="true" /><span className="sr-only">Pinned</span></span> : null}
                     </div>
                     <span className={styles.symbol} title={launch.symbol || undefined}>{coinTicker(launch.symbol)}</span>
                   </div>

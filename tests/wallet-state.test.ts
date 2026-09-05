@@ -56,7 +56,6 @@ type WalletProviderContract = {
     wallets: readonly T[],
     primaryAddress?: string,
   ) => T | undefined;
-  requiresLinkedWallet: (pathname: string) => boolean;
   getWalletProfileStorageKey: (account: string) => string;
   readUsernameFromProfileValue: (value: string | null) => string;
   getWalletLoginErrorMessage: (errorCode: string) => string;
@@ -200,9 +199,7 @@ describe("wallet recovery state", () => {
     expect(provider).toContain("scheduleWalletRuntimeIdlePreload(preload)");
     expect(provider).toContain("window.requestIdleCallback(preload");
     expect(provider).toContain("configuredValue={configuredValue}");
-    expect(provider).toContain(
-      "configuredSnapshot?.linkedWalletOnly === linkedWalletOnly",
-    );
+    expect(provider).not.toContain("linkedWalletOnly");
     expect(provider).toContain("onValueChange={acceptConfiguredValue}");
     expect(provider).toContain(
       "const ConfiguredWalletProvider = memo(function ConfiguredWalletProvider",
@@ -831,7 +828,7 @@ describe("wallet recovery state", () => {
     ]);
   });
 
-  it("only exposes a connected wallet to the app after authentication", () => {
+  it("exposes only an authenticated linked wallet, never another detected external account", () => {
     const externalWallet = {
       address: "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
       connectedAt: 20,
@@ -859,7 +856,7 @@ describe("wallet recovery state", () => {
         [embeddedWallet, externalWallet],
         embeddedWallet.address,
       ),
-    ).toBe(externalWallet);
+    ).toBe(embeddedWallet);
   });
 
   it("uses the most recently connected external wallet when more than one is available", () => {
@@ -910,12 +907,20 @@ describe("wallet recovery state", () => {
     expect(subject.selectLinkedWallet([unlinkedExternal])).toBeUndefined();
   });
 
-  it("requires linked-wallet selection for partner admin and API key routes", () => {
-    expect(subject.requiresLinkedWallet("/admin/partners")).toBe(true);
-    expect(subject.requiresLinkedWallet("/admin/partners/example")).toBe(true);
-    expect(subject.requiresLinkedWallet("/developers/api-keys")).toBe(true);
-    expect(subject.requiresLinkedWallet("/developers/api-keys/example")).toBe(true);
-    expect(subject.requiresLinkedWallet("/admin/partnerships")).toBe(false);
-    expect(subject.requiresLinkedWallet("/developers/api-key")).toBe(false);
+  it("keeps a primary linked wallet on every page and rejects stale wallets from another session", () => {
+    const primary = { address: APPLICANT_WALLET, connectedAt: 1, linked: true, walletClientType: "privy" };
+    const stale = { address: OTHER_WALLET, connectedAt: 100, linked: true, walletClientType: "metamask" };
+    expect(walletProvider.selectAuthenticatedWallet(true, [stale, primary], primary.address,
+      new Set([primary.address]))).toBe(primary);
+    expect(walletProvider.selectAuthenticatedWallet(true, [stale], primary.address,
+      new Set([primary.address]))).toBeUndefined();
+  });
+
+  it("waits for wallet hydration and reconnects an existing account instead of linking it twice", () => {
+    const pending = subject.getWalletSessionAction(subject.isWalletProviderSettled(true, false, true), true);
+    expect(walletProvider.getWalletOpenAction(pending, false, true)).toBe("wait");
+    expect(walletProvider.getWalletOpenAction("manage", false, true)).toBe("reconnect");
+    expect(subject.getWalletLoginErrorMessage("linked_to_another_user"))
+      .toBe("This wallet belongs to another account. Sign out, then sign in with that wallet.");
   });
 });

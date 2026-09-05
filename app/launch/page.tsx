@@ -7,7 +7,7 @@ import { parseViewChainId, VIEW_CHAIN_COOKIE_NAME } from "@/lib/view-chain";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Create a launch · Programmable",
+  title: "Launch · Programmable",
   description:
     "Choose Classic for a guided token launch or use the Custom Launch API for a custom Uniswap v4 hook.",
   alternates: {

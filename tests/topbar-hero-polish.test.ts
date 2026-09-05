@@ -86,7 +86,7 @@ describe("topbar and Explore hero polish", () => {
     expect(navigation).toContain("router.prefetch(href)");
     for (const label of [
       "Explore",
-      "Create",
+      "Launch",
       "Docs",
       "API keys",
       "Profile",

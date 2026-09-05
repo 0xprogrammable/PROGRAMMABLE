@@ -1,9 +1,20 @@
 import {
+  DEFAULT_VIEW_CHAIN_ID,
   tryParseViewChainId,
   type ViewChainId,
 } from "@/lib/view-chain";
 
-export const DEFAULT_EXPLORE_CHAIN_ID = 1 as const;
+export const DEFAULT_EXPLORE_CHAIN_ID = DEFAULT_VIEW_CHAIN_ID;
+
+export function exploreChainPath(chainId: ViewChainId): string {
+  return chainId === 4663 ? "/explore/robinhood" : "/explore/ethereum";
+}
+
+export function exploreChainIdFromSlug(slug: string): ViewChainId | null {
+  if (slug === "robinhood") return 4663;
+  if (slug === "ethereum") return 1;
+  return null;
+}
 
 export function resolveExploreChainId(value: unknown): ViewChainId {
   const viewChainId = tryParseViewChainId(value);

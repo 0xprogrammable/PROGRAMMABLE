@@ -301,13 +301,16 @@ describe("developer API key interface", () => {
       /\.workspace\s*\{[^}]*align-items:\s*start;/su,
     );
     expect(apiKeysStyles).toMatch(
-      /\.workspace\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*0\.72fr\)\s+minmax\(0,\s*1\.28fr\);/su,
+      /\.workspace\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/su,
     );
     expect(apiKeysStyles).toMatch(
       /\.listToolbar\s*\{[^}]*display:\s*flex;[^}]*justify-content:\s*flex-end;/su,
     );
     expect(apiKeysStyles).toContain("--api-key-row-min-height");
-    expect(apiKeysStyles).toContain("grid-template-rows: repeat(");
+    expect(apiKeysStyles).not.toContain("grid-template-rows: repeat(");
+    expect(apiKeysSource.indexOf('aria-labelledby="api-keys-title"')).toBeLessThan(
+      apiKeysSource.indexOf('aria-labelledby="agent-setup-title"'),
+    );
     expect(apiKeysSource.indexOf('aria-label="API key pages"')).toBeLessThan(
       apiKeysSource.indexOf('className={styles.keyList}'),
     );
@@ -373,6 +376,8 @@ describe("developer API key interface", () => {
     expect(setupButton).toBeDefined();
     expect(setupButton).not.toContain("disabled");
     expect(html).toContain('aria-labelledby="agent-setup-title"');
+    expect(html).toMatch(/<details[^>]*aria-labelledby="agent-setup-title"[^>]*>/u);
+    expect(html).not.toMatch(/<details[^>]*\bopen[^>]*aria-labelledby="agent-setup-title"/u);
     expect(html).toContain("new or existing key");
     expect(html).not.toContain(">Copy key</button>");
     expect(html).not.toContain("api-key-mutation-result-title");

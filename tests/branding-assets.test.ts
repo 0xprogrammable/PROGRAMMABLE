@@ -45,8 +45,8 @@ describe("Programmable branding assets", () => {
         'title: "Programmable · Custom Uniswap v4 hooks"',
       ],
       ["app/page.tsx", 'title: "Programmable · Custom Uniswap v4 hooks"'],
-      ["app/explore/page.tsx", 'title: "Explore launches · Programmable"'],
-      ["app/launch/page.tsx", 'title: "Create a launch · Programmable"'],
+      ["app/explore/page.tsx", 'title: "Explore · Programmable"'],
+      ["app/launch/page.tsx", 'title: "Launch · Programmable"'],
     ] as const;
 
     for (const [path, title] of metadataSources) {

@@ -1901,7 +1901,7 @@ function TokenDetailContent({
       throw new Error("Trading is not enabled for this pool");
     }
     if (!wallet) {
-      throw new Error("Connect an Ethereum wallet before continuing");
+      throw new Error("Connect your wallet before continuing");
     }
     if (
       (chainId !== 1 && chainId !== 11_155_111) ||
@@ -1989,7 +1989,7 @@ function TokenDetailContent({
       throw new Error("Trading is not enabled for this pool");
     }
     if (!wallet) {
-      throw new Error("Connect an Ethereum wallet before continuing");
+      throw new Error("Connect your wallet before continuing");
     }
     if (prepared.token.toLowerCase() !== token.tokenAddress.toLowerCase()) {
       throw new Error("The prepared trade does not match this token");

@@ -42,7 +42,7 @@ export function RobinhoodTokenView({ address, token, status }: {
 
   return (
     <div className={`${styles.page} page-width`}>
-      <Link className={styles.back} href="/explore?chain=4663"><ArrowLeft aria-hidden="true" size={16} /> Explore</Link>
+      <Link className={styles.back} href="/explore/robinhood"><ArrowLeft aria-hidden="true" size={16} /> Explore</Link>
       {token ? <>
         <section className={styles.market} aria-label={`${name} market`}>
         <header className={styles.header}>

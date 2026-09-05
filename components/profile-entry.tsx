@@ -44,7 +44,7 @@ function ProfileEntryFrame({
   loading,
   onConnect,
   onPrepareProfile,
-  viewChainId = 1,
+  viewChainId = 4663,
   onChangeChain,
 }: Readonly<{
   loading: boolean;
