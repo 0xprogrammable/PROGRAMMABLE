@@ -122,9 +122,9 @@ function identifier(value, path, allowSelf = false) {
 }
 
 function unit(value, path) {
-  requireThat(typeof value === 'string' && value.length <= L.unitLength
-    && /^[A-Za-z][A-Za-z0-9]*(?:[._:/-][A-Za-z0-9]+)*$/.test(value),
-  'CONSTRAINT_UNIT', 'Expected a namespaced unit token', path);
+  requireThat(typeof value === 'string' && value.length > 0 && value.length <= L.unitLength
+    && value.isWellFormed() && encoder.encode(value).length <= L.unitLength,
+  'CONSTRAINT_UNIT', 'Expected nonempty, well-formed unit text of at most 128 UTF-8 bytes', path);
   return value;
 }
 

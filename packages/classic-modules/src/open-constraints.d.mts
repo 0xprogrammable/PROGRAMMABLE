@@ -1,4 +1,5 @@
 export type OpenConstraintPath = readonly (string | number)[];
+/** Units are opaque, nonempty UTF-8 text up to 128 bytes; comparisons never normalize or convert them. */
 export type OpenConstraintExpression =
   | { literal: string; unit: string }
   | { ref: { instance: string; path: OpenConstraintPath } }

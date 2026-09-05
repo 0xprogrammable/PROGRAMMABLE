@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   assertOpenConstraints, evaluateOpenConstraints, OpenConstraintError, OPEN_CONSTRAINT_LIMITS as L,
 } from '../src/open-constraints.mjs';
+import { assertOpenConfigSchema } from '../src/open-config.mjs';
 
 const uint = (unit, extra = {}) => ({ type: 'uint', ...(unit === undefined ? {} : { unit }), ...extra });
 const record = (fields, required = Object.keys(fields)) => ({ type: 'record', fields, required });
@@ -63,7 +64,48 @@ test('units are required, case sensitive and compared without conversion', () =>
   assert.equal(evaluateOpenConstraints([constraint('unitless', ref('a', 'share'), 'eq', literal('5', 'unitless'))],
     { a: binding({ share: '5' }, schema) }).ok, true);
   malformed([constraint('unit', { literal: '1' })], 'CONSTRAINT_SHAPE');
-  malformed([constraint('unit', literal('1', 'USD per share'))], 'CONSTRAINT_UNIT');
+});
+
+test('schema and constraints accept identical opaque unit text through literals, references and empty sums', () => {
+  const units = ['%', 'USD per share', '€ pro Anteil', '引用/単位', ' ', 'é', 'e\u0301',
+    'a'.repeat(128), 'é'.repeat(64), '🙂'.repeat(32)];
+  for (const name of units) {
+    const schema = record({ share: uint(name) });
+    const conditions = [constraint('opaque', ref('a', 'share'), 'eq', literal('1', name))];
+    assert.doesNotThrow(() => assertOpenConfigSchema(schema));
+    assert.doesNotThrow(() => assertOpenConstraints(conditions));
+    assert.deepEqual(evaluateOpenConstraints(conditions, { a: binding({ share: '1' }, schema) }),
+      { ok: true, violations: [] });
+    assert.deepEqual(evaluateOpenConstraints([constraint('empty', sum('a'), 'eq', literal('0', name))], {
+      a: binding({ recipients: [] }, sharesSchema(uint(name))),
+    }), { ok: true, violations: [] });
+    assert.equal(schema.fields.share.unit, name);
+    assert.equal(conditions[0].right.unit, name);
+  }
+});
+
+test('opaque units retain whitespace, case and Unicode normalization differences', () => {
+  for (const [left, right] of [['USD per share', 'USD per share '], ['É', 'é'], ['é', 'e\u0301']]) {
+    const schema = record({ share: uint(left) });
+    assert.doesNotThrow(() => assertOpenConfigSchema(schema));
+    const conditions = [constraint('exact', ref('a', 'share'), 'eq', literal('1', right))];
+    assert.doesNotThrow(() => assertOpenConstraints(conditions));
+    code(evaluateOpenConstraints(conditions, { a: binding({ share: '1' }, schema) }), 'CONSTRAINT_UNIT_MISMATCH');
+  }
+});
+
+test('schema and constraints both reject empty, overlong UTF-8 and malformed surrogate unit text', () => {
+  for (const name of ['', 'a'.repeat(129), 'é'.repeat(65), '🙂'.repeat(33), '\ud800', '\udfff', 'prefix\ud800suffix']) {
+    const schema = record({ share: uint(name) });
+    assert.throws(() => assertOpenConfigSchema(schema), (error) => typeof error.code === 'string'
+      && typeof error.path === 'string');
+    const conditions = [constraint('invalid', literal('1', name))];
+    const expected = name.isWellFormed() ? 'CONSTRAINT_UNIT' : 'CONSTRAINT_JSON_DATA';
+    malformed(conditions, expected);
+    code(evaluateOpenConstraints([constraint('invalid-schema', ref('a', 'share'))], {
+      a: binding({ share: '1' }, schema),
+    }), name.isWellFormed() ? 'CONSTRAINT_BINDING_SCHEMA' : 'CONSTRAINT_JSON_DATA');
+  }
 });
 
 test('array sums infer units from declared members even when no rows exist', () => {
