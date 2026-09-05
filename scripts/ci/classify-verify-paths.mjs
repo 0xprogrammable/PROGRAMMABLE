@@ -43,6 +43,9 @@ const ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATH_SET = new Set(
   ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATHS,
 );
 
+export const ROBINHOOD_V41_CLI_COORDINATE_PATH =
+  "docs/operations/releases/custom-launch-v4.1/clean-room-release-coordinate.json";
+
 const CUSTOM_V2_EXACT_PATHS = new Set([
   "config/custom-registry-v2.deployment.prelaunch.json",
   "config/generic-launch-foundation.prelaunch.v1.json",
@@ -147,6 +150,17 @@ export function classifyVerifyPaths(
     // stage binding, and unchanged ten-minute authorization window before merge.
     if (ROBINHOOD_PHASE_B_BACKEND_EVIDENCE_PATH_SET.has(path)
       || ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATH_SET.has(path)) continue;
+
+    // This exact JSON document selects an immutable CLI release; it does not
+    // change Solidity, database, indexer, or dependency inputs. The Interface
+    // lane builds its public discovery consumer and authenticates the complete
+    // V4.1 coordinate/activation closure, including producer and asset hashes.
+    // Schemas, sibling release records, verifier changes, and mixed code
+    // changes still select their own full gates below.
+    if (path === ROBINHOOD_V41_CLI_COORDINATE_PATH) {
+      scope.interface = true;
+      continue;
+    }
 
     // This closed generation-2 surface has its own production proof and
     // staged health contract. In particular, flipping the versioned Registry
