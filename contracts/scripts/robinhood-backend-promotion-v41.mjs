@@ -6,7 +6,7 @@ import { createRobinhoodBackendPromotionTools } from "./robinhood-backend-promot
 export const ROBINHOOD_V41_BACKEND_RELEASE_PINS = Object.freeze({
   migrationSha256: null,
   apiContractSha256: null,
-  providerProfileDigest: null,
+  providerProfileDigest: "sha256:ea5b5884b2b09775da760f65ba998c4ab68319e8567fa1d05072943c4bf8eb16",
   captureWorkflow: null,
   captureWorkflowName: null,
 });
