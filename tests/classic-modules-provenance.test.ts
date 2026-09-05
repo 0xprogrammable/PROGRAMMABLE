@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { encodeAbiParameters, encodeEventTopics, keccak256, parseAbi, parseAbiParameters, toHex, type Address, type Hex } from "viem";
+import { encodeAbiParameters, encodeEventTopics, getCreate2Address, keccak256, parseAbi, parseAbiParameters, toHex, type Address, type Hex } from "viem";
 
 import preview from "../config/classic-modules/robinhood.preview.json";
 import {
@@ -31,11 +31,22 @@ function fixture(seed = 0, moduleCount = 2) {
     registryRuntimeCodeHash: keccak256(codes[2]),
     poolManager: a(4),
     poolManagerRuntimeCodeHash: keccak256(codes[3]),
-    tokenRuntimeCodeHash: keccak256(codes[4]),
+    tokenFactory: a(5),
+    tokenFactoryRuntimeCodeHash: keccak256(codes[4]),
+    tokenCreationCodeHash: keccak256("0x60066006"),
     startBlock: "50",
     minimumInitialBuyNative: "1000",
   };
-  const token = a(0xabcd + seed);
+  const launchWallet = a(0xfff);
+  const name = `Fixture ${seed}`;
+  const symbol = `F${seed}`;
+  const creatorSalt = h(9000 + seed);
+  const graffiti = keccak256(encodeAbiParameters(parseAbiParameters("string,uint256,address,address,bytes32"),
+    ["programmable.classic-module-token.v1", 4663n, profile.launcher, launchWallet, creatorSalt]));
+  const salt = keccak256(encodeAbiParameters(parseAbiParameters("string,string,uint8,address,bytes32"),
+    [name, symbol, 18, profile.launcher, graffiti]));
+  const token = getCreate2Address({ from: profile.tokenFactory, salt, bytecodeHash: profile.tokenCreationCodeHash }).toLowerCase() as Address;
+  const tokenRuntime = toHex(`synthetic runtime with token immutables: ${name}:${graffiti}`);
   const block = { chainId: 4663, blockNumber: "100", blockHash: h(100) };
   const transactionHash = h(200 + seed);
   const modules = Array.from({ length: moduleCount }, (_, index) => {
@@ -61,7 +72,7 @@ function fixture(seed = 0, moduleCount = 2) {
   const poolId = keccak256(encodeAbiParameters(parseAbiParameters("address,address,uint24,int24,address"),
     [key.currency0, key.currency1, key.fee, key.tickSpacing, key.hooks]));
   const launch = {
-    launchId: h(300 + seed), launchWallet: a(0xfff), token, poolId, recipeHash, hook: profile.hook,
+    launchId: h(300 + seed), launchWallet, token, poolId, recipeHash, hook: profile.hook,
     positionRecipient: a(0xccc + seed), positionTokenId: "7", initialBuyNative: "2000", initialBuyTokens: "1000000000000000000",
   };
   const topics = encodeEventTopics({ abi: eventAbi, eventName: "ClassicModuleLaunched", args: {
@@ -75,7 +86,14 @@ function fixture(seed = 0, moduleCount = 2) {
     header: { ...block },
     receipt: { ...block, transactionHash, status: "success" },
     event: { ...block, transactionHash, logIndex: 4, address: profile.launcher, topics, data, removed: false },
-    getLaunch: { ...block, address: profile.launcher, token, record: launch },
+    getLaunch: { ...block, address: profile.launcher, token, tokenFactory: profile.tokenFactory, record: launch },
+    token: {
+      ...block, address: token, name, symbol, decimals: 18, totalSupply: "1000000000000000000000000000",
+      creator: profile.launcher, graffiti, creatorSalt,
+    },
+    factoryPrediction: {
+      ...block, address: profile.tokenFactory, name, symbol, decimals: 18, creator: profile.launcher, graffiti, token,
+    },
     pool: { ...block, address: profile.poolManager, poolId, key, sqrtPriceX96: (1n << 96n).toString() },
     recipe: {
       ...block, address: profile.hook, poolId, recipeHash, registry: profile.registry,
@@ -91,9 +109,10 @@ function fixture(seed = 0, moduleCount = 2) {
       })),
     },
     runtimeReads: [
-      ...[profile.launcher, profile.hook, profile.registry, profile.poolManager, token].map((address, index) => ({
+      ...[profile.launcher, profile.hook, profile.registry, profile.poolManager, profile.tokenFactory].map((address, index) => ({
         ...block, address, code: codes[index] as Hex,
       })),
+      { ...block, address: token, code: tokenRuntime },
       ...modules.map((module, index) => ({ ...block, address: module.implementation, code: toHex(`module ${index}`) })),
     ],
     verification: {
@@ -140,11 +159,13 @@ describe("Classic module provenance boundary", () => {
     expect(preview.status).toBe("preview");
     expect(preview.enabled).toBe(false);
     for (const key of ["releaseDigest", "launcher", "launcherRuntimeCodeHash", "hook", "hookRuntimeCodeHash",
-      "registry", "registryRuntimeCodeHash", "poolManager", "poolManagerRuntimeCodeHash", "tokenRuntimeCodeHash",
+      "registry", "registryRuntimeCodeHash", "poolManager", "poolManagerRuntimeCodeHash", "tokenFactory",
+      "tokenFactoryRuntimeCodeHash", "tokenCreationCodeHash",
       "startBlock", "minimumInitialBuyNative"] as const) expect(preview[key]).toBeNull();
     expect(() => bindActiveClassicModuleSource(preview)).toThrow(ClassicModuleProvenanceError);
     expect(() => normalizeClassicModuleLaunch(fixture().evidence, preview)).toThrow(ClassicModuleProvenanceError);
     expect(() => normalizeClassicModuleLaunches([], preview)).toThrow(ClassicModuleProvenanceError);
+    expect(preview).not.toHaveProperty("tokenRuntimeCodeHash");
   });
 
   it.each([
@@ -153,6 +174,10 @@ describe("Classic module provenance boundary", () => {
     ["the wrong chain", "chainId", 1],
     ["an unpinned launcher", "launcher", null],
     ["a missing registry runtime", "registryRuntimeCodeHash", null],
+    ["a missing factory runtime", "tokenFactoryRuntimeCodeHash", null],
+    ["an unpinned factory", "tokenFactory", null],
+    ["a missing token creation artifact", "tokenCreationCodeHash", null],
+    ["a substituted token creation artifact", "tokenCreationCodeHash", h(999)],
     ["an absent release digest", "releaseDigest", null],
     ["zero native minimum", "minimumInitialBuyNative", "0"],
     ["a fractional native minimum", "minimumInitialBuyNative", "1.5"],
@@ -179,6 +204,19 @@ describe("Classic module provenance boundary", () => {
     ["getter from another block", "getLaunch.blockNumber", "99"],
     ["getter for another token", "getLaunch.token", a(999)],
     ["getter from another source", "getLaunch.address", a(999)],
+    ["forged launcher factory binding", "getLaunch.tokenFactory", a(999)],
+    ["token state from another block", "token.blockHash", h(999)],
+    ["a forged token creator", "token.creator", a(999)],
+    ["changed token decimals", "token.decimals", 6],
+    ["changed token supply", "token.totalSupply", "2000000000000000000000000000"],
+    ["forged token name", "token.name", "Another name"],
+    ["forged token graffiti", "token.graffiti", h(999)],
+    ["forged creator salt", "token.creatorSalt", h(999)],
+    ["an unknown token factory", "factoryPrediction.address", a(999)],
+    ["a forged factory prediction", "factoryPrediction.token", a(999)],
+    ["another predicted token name", "factoryPrediction.name", "Another name"],
+    ["a substituted factory runtime", "runtimeReads.4.code", "0x600099"],
+    ["empty token runtime", "runtimeReads.5.code", "0x"],
     ["uninitialized pool", "pool.sqrtPriceX96", "0"],
     ["wrong pool currency", "pool.key.currency1", a(999)],
     ["wrong pool ID", "pool.poolId", h(999)],
@@ -219,6 +257,21 @@ describe("Classic module provenance boundary", () => {
     const row = normalizeClassicModuleLaunch(evidence, profile);
     expect(row.modules).toEqual([]);
     expect(row.versions).toEqual([]);
+  });
+
+  it("accepts different named tokens with different immutable runtimes under one released factory", () => {
+    const first = fixture();
+    const second = fixture(1);
+    const rows = normalizeClassicModuleLaunches([first.evidence, second.evidence], first.profile);
+    expect(rows[0].tokenIdentity.name).toBe("Fixture 0");
+    expect(rows[1].tokenIdentity.name).toBe("Fixture 1");
+    expect(rows[0].tokenIdentity.graffiti).not.toBe(rows[1].tokenIdentity.graffiti);
+    expect(rows[0].tokenRuntimeCodeHash).not.toBe(rows[1].tokenRuntimeCodeHash);
+    expect(rows[0].tokenRuntimeCodeHash).toBe(keccak256(first.evidence.runtimeReads[5].code));
+    expect(rows[1].tokenRuntimeCodeHash).toBe(keccak256(second.evidence.runtimeReads[5].code));
+    expect(rows[0].tokenFactory).toBe(rows[1].tokenFactory);
+    expect(rows[0].tokenCreationCodeHash).toBe(rows[1].tokenCreationCodeHash);
+    expect(() => normalizeClassicModuleLaunch({ ...first.evidence, expectedTokenRuntimeCodeHash: h(999) }, first.profile)).toThrow(/evidence.keys/);
   });
 
   it("recomputes the pool and recipe rather than trusting repeated forged hashes", () => {

@@ -2,6 +2,7 @@ import {
   decodeEventLog,
   encodeAbiParameters,
   encodeEventTopics,
+  getCreate2Address,
   isAddress,
   keccak256,
   parseAbi,
@@ -20,6 +21,20 @@ export const MAX_CLASSIC_MODULES = 8;
 export const classicModuleProvenanceAbi = parseAbi([
   "event ClassicModuleLaunched(bytes32 indexed launchId,address indexed launchWallet,address indexed token,bytes32 poolId,bytes32 recipeHash,address hook,address positionRecipient,uint256 positionTokenId,uint256 initialBuyNative,uint256 initialBuyTokens)",
   "function getLaunch(address token) view returns ((bytes32 launchId,address launchWallet,address token,bytes32 poolId,bytes32 recipeHash,address hook,address positionRecipient,uint256 positionTokenId,uint256 initialBuyNative,uint256 initialBuyTokens) record)",
+  "function tokenFactory() view returns (address)",
+]);
+
+export const classicModuleTokenIdentityAbi = parseAbi([
+  "function name() view returns (string)",
+  "function symbol() view returns (string)",
+  "function decimals() view returns (uint8)",
+  "function totalSupply() view returns (uint256)",
+  "function creator() view returns (address)",
+  "function graffiti() view returns (bytes32)",
+]);
+
+export const classicModuleTokenFactoryAbi = parseAbi([
+  "function getUERC20Address(string name,string symbol,uint8 decimals,address creator,bytes32 graffiti) view returns (address token)",
 ]);
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
@@ -27,7 +42,7 @@ const UINT256_MAX = (1n << 256n) - 1n;
 const PROFILE_KEYS = [
   "schemaVersion", "chainId", "sourceVersion", "status", "enabled", "releaseDigest",
   "launcher", "launcherRuntimeCodeHash", "hook", "hookRuntimeCodeHash", "registry", "registryRuntimeCodeHash", "poolManager",
-  "poolManagerRuntimeCodeHash", "tokenRuntimeCodeHash", "startBlock", "minimumInitialBuyNative",
+  "poolManagerRuntimeCodeHash", "tokenFactory", "tokenFactoryRuntimeCodeHash", "tokenCreationCodeHash", "startBlock", "minimumInitialBuyNative",
   "poolFee", "tickSpacing", "finalityPolicy",
 ] as const;
 const RECORD_KEYS = [
@@ -89,6 +104,13 @@ function integer(value: unknown, label: string, maximum = Number.MAX_SAFE_INTEGE
   return value;
 }
 
+function tokenText(value: unknown, label: string, maximumBytes: number): string {
+  if (typeof value !== "string" || value.length === 0 || new TextEncoder().encode(value).length > maximumBytes) {
+    fail(`${label}.text`);
+  }
+  return value;
+}
+
 function equal(actual: unknown, expected: unknown, label: string): void {
   if (actual !== expected) fail(`${label}.mismatch`);
 }
@@ -108,7 +130,9 @@ export type ClassicModuleSource = Readonly<{
   registryRuntimeCodeHash: Hex;
   poolManager: Address;
   poolManagerRuntimeCodeHash: Hex;
-  tokenRuntimeCodeHash: Hex;
+  tokenFactory: Address;
+  tokenFactoryRuntimeCodeHash: Hex;
+  tokenCreationCodeHash: Hex;
   startBlock: string;
   minimumInitialBuyNative: string;
   poolFee: 0;
@@ -131,7 +155,8 @@ export function bindActiveClassicModuleSource(value: unknown): ClassicModuleSour
   const hook = address(profile.hook, "source.hook");
   const registry = address(profile.registry, "source.registry");
   const poolManager = address(profile.poolManager, "source.poolManager");
-  if (new Set([launcher, hook, registry, poolManager]).size !== 4) fail("source.duplicate-address");
+  const tokenFactory = address(profile.tokenFactory, "source.tokenFactory");
+  if (new Set([launcher, hook, registry, poolManager, tokenFactory]).size !== 5) fail("source.duplicate-address");
   return Object.freeze({
     schemaVersion: CLASSIC_MODULE_SOURCE_SCHEMA,
     chainId: 4663,
@@ -147,7 +172,9 @@ export function bindActiveClassicModuleSource(value: unknown): ClassicModuleSour
     registryRuntimeCodeHash: hash(profile.registryRuntimeCodeHash, "source.registryRuntimeCodeHash"),
     poolManager,
     poolManagerRuntimeCodeHash: hash(profile.poolManagerRuntimeCodeHash, "source.poolManagerRuntimeCodeHash"),
-    tokenRuntimeCodeHash: hash(profile.tokenRuntimeCodeHash, "source.tokenRuntimeCodeHash"),
+    tokenFactory,
+    tokenFactoryRuntimeCodeHash: hash(profile.tokenFactoryRuntimeCodeHash, "source.tokenFactoryRuntimeCodeHash"),
+    tokenCreationCodeHash: hash(profile.tokenCreationCodeHash, "source.tokenCreationCodeHash"),
     startBlock: uint(profile.startBlock, "source.startBlock", true),
     minimumInitialBuyNative: uint(profile.minimumInitialBuyNative, "source.minimumInitialBuyNative", true),
     poolFee: 0,
@@ -280,7 +307,7 @@ function normalizeModules(value: unknown): readonly ClassicModuleSnapshot[] {
 export function normalizeClassicModuleLaunch(evidence: unknown, profile: unknown) {
   const source = bindActiveClassicModuleSource(profile);
   const input = record(evidence, [
-    "schemaVersion", "header", "receipt", "event", "getLaunch", "pool", "recipe", "registry", "runtimeReads", "verification",
+    "schemaVersion", "header", "receipt", "event", "getLaunch", "token", "factoryPrediction", "pool", "recipe", "registry", "runtimeReads", "verification",
   ], "evidence");
   equal(input.schemaVersion, CLASSIC_MODULE_EVIDENCE_SCHEMA, "evidence.schemaVersion");
   const header = record(input.header, ["chainId", "blockNumber", "blockHash"], "header");
@@ -333,13 +360,51 @@ export function normalizeClassicModuleLaunch(evidence: unknown, profile: unknown
     BigInt(emitted.initialBuyNative), BigInt(emitted.initialBuyTokens)]), "event.canonical-data");
   equal(emitted.hook, source.hook, "event.hook");
   if (BigInt(emitted.initialBuyNative) < BigInt(source.minimumInitialBuyNative)) fail("event.initial-buy-below-minimum");
-  if ([source.launcher, source.hook, source.poolManager].includes(emitted.token)) fail("event.token-infrastructure");
-  const getter = record(input.getLaunch, ["chainId", "blockNumber", "blockHash", "address", "token", "record"], "getLaunch");
+  if ([source.launcher, source.hook, source.registry, source.poolManager, source.tokenFactory].includes(emitted.token)) {
+    fail("event.token-infrastructure");
+  }
+  const getter = record(input.getLaunch, ["chainId", "blockNumber", "blockHash", "address", "token", "tokenFactory", "record"], "getLaunch");
   boundBlock(getter, block, "getLaunch");
   equal(address(getter.address, "getLaunch.address"), source.launcher, "getLaunch.address");
   equal(address(getter.token, "getLaunch.token"), emitted.token, "getLaunch.token");
+  // This wrapper field is a separate launcher.tokenFactory() read, not a LaunchRecord ABI field.
+  equal(address(getter.tokenFactory, "getLaunch.tokenFactory"), source.tokenFactory, "getLaunch.tokenFactory");
   const stored = normalizeRecord(getter.record);
   for (const key of RECORD_KEYS) equal(stored[key], emitted[key], `getLaunch.record.${key}`);
+
+  const token = record(input.token, [
+    "chainId", "blockNumber", "blockHash", "address", "name", "symbol", "decimals", "totalSupply", "creator", "graffiti", "creatorSalt",
+  ], "token");
+  boundBlock(token, block, "token");
+  equal(address(token.address, "token.address"), emitted.token, "token.address");
+  const name = tokenText(token.name, "token.name", 48);
+  const symbol = tokenText(token.symbol, "token.symbol", 12);
+  equal(token.decimals, 18, "token.decimals");
+  equal(uint(token.totalSupply, "token.totalSupply", true), "1000000000000000000000000000", "token.totalSupply");
+  equal(address(token.creator, "token.creator"), source.launcher, "token.creator");
+  const creatorSalt = bytes(token.creatorSalt, "token.creatorSalt", 32);
+  if (creatorSalt.length !== 66) fail("token.creatorSalt.length");
+  const graffiti = hash(token.graffiti, "token.graffiti");
+  equal(graffiti, keccak256(encodeAbiParameters([
+    { type: "string" }, { type: "uint256" }, { type: "address" }, { type: "address" }, { type: "bytes32" },
+  ], ["programmable.classic-module-token.v1", BigInt(source.chainId), source.launcher, emitted.launchWallet, creatorSalt])),
+  "token.computedGraffiti");
+  const tokenSalt = keccak256(encodeAbiParameters([
+    { type: "string" }, { type: "string" }, { type: "uint8" }, { type: "address" }, { type: "bytes32" },
+  ], [name, symbol, 18, source.launcher, graffiti]));
+  const predictedToken = getCreate2Address({ from: source.tokenFactory, salt: tokenSalt, bytecodeHash: source.tokenCreationCodeHash }).toLowerCase();
+  equal(predictedToken, emitted.token, "token.computedAddress");
+  const prediction = record(input.factoryPrediction, [
+    "chainId", "blockNumber", "blockHash", "address", "name", "symbol", "decimals", "creator", "graffiti", "token",
+  ], "factoryPrediction");
+  boundBlock(prediction, block, "factoryPrediction");
+  equal(address(prediction.address, "factoryPrediction.address"), source.tokenFactory, "factoryPrediction.address");
+  equal(prediction.name, name, "factoryPrediction.name");
+  equal(prediction.symbol, symbol, "factoryPrediction.symbol");
+  equal(prediction.decimals, 18, "factoryPrediction.decimals");
+  equal(address(prediction.creator, "factoryPrediction.creator"), source.launcher, "factoryPrediction.creator");
+  equal(hash(prediction.graffiti, "factoryPrediction.graffiti"), graffiti, "factoryPrediction.graffiti");
+  equal(address(prediction.token, "factoryPrediction.token"), emitted.token, "factoryPrediction.token");
 
   const pool = record(input.pool, ["chainId", "blockNumber", "blockHash", "address", "poolId", "key", "sqrtPriceX96"], "pool");
   boundBlock(pool, block, "pool");
@@ -416,25 +481,32 @@ export function normalizeClassicModuleLaunch(evidence: unknown, profile: unknown
   const expectedRuntime = new Map<Address, Hex>([
     [source.launcher, source.launcherRuntimeCodeHash], [source.hook, source.hookRuntimeCodeHash],
     [source.registry, source.registryRuntimeCodeHash],
-    [source.poolManager, source.poolManagerRuntimeCodeHash], [emitted.token, source.tokenRuntimeCodeHash],
+    [source.poolManager, source.poolManagerRuntimeCodeHash], [source.tokenFactory, source.tokenFactoryRuntimeCodeHash],
   ]);
   for (const snapshot of modules) {
+    if (snapshot.implementation === emitted.token) fail("recipe.token-as-module");
     const existing = expectedRuntime.get(snapshot.implementation);
     if (existing && existing !== snapshot.codeHash) fail("recipe.runtime-conflict");
     expectedRuntime.set(snapshot.implementation, snapshot.codeHash);
   }
-  if (!Array.isArray(input.runtimeReads) || input.runtimeReads.length !== expectedRuntime.size) fail("runtimeReads.length");
+  if (!Array.isArray(input.runtimeReads) || input.runtimeReads.length !== expectedRuntime.size + 1) fail("runtimeReads.length");
   const seen = new Set<Address>();
+  let tokenRuntimeCodeHash: Hex | null = null;
   for (const raw of input.runtimeReads) {
     const runtime = record(raw, ["chainId", "blockNumber", "blockHash", "address", "code"], "runtime");
     boundBlock(runtime, block, "runtime");
     const account = address(runtime.address, "runtime.address");
-    if (seen.has(account) || !expectedRuntime.has(account)) fail("runtime.address-set");
+    if (seen.has(account) || (!expectedRuntime.has(account) && account !== emitted.token)) fail("runtime.address-set");
     seen.add(account);
     const code = bytes(runtime.code, "runtime.code");
     if (code === "0x") fail("runtime.empty");
-    equal(keccak256(code), expectedRuntime.get(account), "runtime.codehash");
+    const runtimeHash = keccak256(code);
+    // UERC20 runtime contains per-token immutables. Identity is authenticated through the released
+    // factory + launcher creation path above; this observed hash is not an independent source match.
+    if (account === emitted.token) tokenRuntimeCodeHash = runtimeHash;
+    else equal(runtimeHash, expectedRuntime.get(account), "runtime.codehash");
   }
+  if (tokenRuntimeCodeHash === null) fail("runtime.token-missing");
   return Object.freeze({
     schemaVersion: CLASSIC_MODULE_PROVENANCE_SCHEMA,
     id: `${source.chainId}:${emitted.token}`,
@@ -448,6 +520,10 @@ export function normalizeClassicModuleLaunch(evidence: unknown, profile: unknown
     sourceReleaseDigest: source.releaseDigest,
     poolManager: source.poolManager,
     registry: source.registry,
+    tokenFactory: source.tokenFactory,
+    tokenCreationCodeHash: source.tokenCreationCodeHash,
+    tokenRuntimeCodeHash,
+    tokenIdentity: Object.freeze({ name, symbol, decimals: 18, totalSupply: token.totalSupply as string, creator: source.launcher, graffiti, creatorSalt }),
     ...emitted,
     modules,
     versions: Object.freeze(modules.map((snapshot) => versions.find((version) => version.versionId === snapshot.versionId)!)),
