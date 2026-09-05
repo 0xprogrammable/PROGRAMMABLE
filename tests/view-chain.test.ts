@@ -34,10 +34,10 @@ describe("view chain", () => {
   });
 
   it("serializes a long-lived, site-wide preference cookie", () => {
-    expect(VIEW_CHAIN_COOKIE_NAME).toBe("programmable-view-chain");
-    expect(VIEW_CHAIN_STORAGE_KEY).toBe("programmable:view-chain:v1");
+    expect(VIEW_CHAIN_COOKIE_NAME).toBe("programmable-view-chain-v2");
+    expect(VIEW_CHAIN_STORAGE_KEY).toBe("programmable:view-chain:v2");
     expect(serializeViewChainCookie(4663)).toContain(
-      "programmable-view-chain=4663",
+      "programmable-view-chain-v2=4663",
     );
     expect(serializeViewChainCookie(4663)).toContain("Path=/");
     expect(serializeViewChainCookie(4663)).toContain("SameSite=Lax");
