@@ -12,6 +12,7 @@ import { Deployers } from "@uniswap/v4-core/test/utils/Deployers.sol";
 import { HookMiner } from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
 import { PoolSwapTest } from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
 import { MockERC20 } from "solmate/src/test/utils/mocks/MockERC20.sol";
+import { Vm } from "forge-std/Vm.sol";
 import { ClassicModuleTypes as T } from "../../src/classic-modules/ClassicModuleTypes.sol";
 import { ClassicModuleHookV1 } from "../../src/classic-modules/ClassicModuleHookV1.sol";
 import { ClassicModuleRegistryV1 } from "../../src/classic-modules/ClassicModuleRegistryV1.sol";
@@ -110,10 +111,10 @@ contract ClassicModuleHookV1Test is Deployers {
     }
 
     function test_allFourSwapQuadrantsAccrueBackedFees() public {
-        _swap(true, -int256(0.1 ether), 0.1 ether);
-        _swap(false, -int256(0.05 ether), 0);
-        _swap(true, int256(0.025 ether), 0.1 ether);
-        _swap(false, int256(0.01 ether), 0);
+        _assertSwapFees(true, -int256(0.1 ether), 0.1 ether);
+        _assertSwapFees(false, -int256(0.05 ether), 0);
+        _assertSwapFees(true, int256(0.025 ether), 0.1 ether);
+        _assertSwapFees(false, int256(0.01 ether), 0);
         assertGt(ledger.claimable(treasury), 0);
         assertEq(ledger.claimable(authorA), ledger.claimable(authorB));
         assertGt(ledger.claimable(creator), 0);
@@ -121,6 +122,37 @@ contract ClassicModuleHookV1Test is Deployers {
         uint256 amount = ledger.claimable(authorA);
         ledger.claim(authorA);
         assertEq(authorA.balance, amount);
+    }
+
+    function test_eventsUseActualRouterSender() public {
+        vm.recordLogs();
+        _swap(true, -int256(0.1 ether), 0.1 ether);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 topic = keccak256("HookSwap(bytes32,address,int128,int128,uint24)");
+        uint256 matches;
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter == address(hook) && logs[i].topics[0] == topic) {
+                assertEq(address(uint160(uint256(logs[i].topics[2]))), address(swapRouter));
+                ++matches;
+            }
+        }
+        assertEq(matches, 1);
+    }
+
+    function test_disclosureReadsSeparateMutableUniswapProtocolFees() public {
+        vm.warp(block.timestamp + 60);
+        manager.setProtocolFeeController(address(this));
+        manager.setProtocolFee(key, uint24(1000 | (500 << 12)));
+        (uint16 creatorBps, uint16 platformBps, uint16 protocolPips, uint24 lpPips) = hook.feeComponents(poolId, true);
+        assertEq(creatorBps, 0);
+        assertEq(platformBps, 20);
+        assertEq(protocolPips, 1000);
+        assertEq(lpPips, 0);
+        (,, protocolPips,) = hook.feeComponents(poolId, false);
+        assertEq(protocolPips, 500);
+        _swap(true, -int256(0.1 ether), 0.1 ether);
+        assertEq(ledger.totalFeesReceived(), 0.0002 ether);
+        assertEq(manager.protocolFeesAccrued(Currency.wrap(address(0))), 0.000_099_8 ether);
     }
 
     function test_disabledCatalogueVersionLeavesExistingRecipeAndFeesUnchanged() public {
@@ -277,5 +309,38 @@ contract ClassicModuleHookV1Test is Deployers {
         return swapRouter.swap{ value: value }(
             key, SwapParams(buy, amount, buy ? MIN_PRICE_LIMIT : MAX_PRICE_LIMIT), settings, ZERO_BYTES
         );
+    }
+
+    function _assertSwapFees(bool buy, int256 specified, uint256 value) private {
+        (uint256 priorPlatform, uint256 priorCreator,,,) = ledger.poolAccounting(poolId);
+        uint256 balanceBefore = address(this).balance;
+        uint256 managerBefore = address(manager).balance;
+        BalanceDelta delta = _swap(buy, specified, value);
+        (uint256 platform, uint256 creatorFee,,,) = ledger.poolAccounting(poolId);
+        platform -= priorPlatform;
+        creatorFee -= priorCreator;
+        uint256 actualNative = buy ? uint256(-int256(delta.amount0())) : uint256(int256(delta.amount0()));
+        uint256 gross = buy ? actualNative : actualNative + platform + creatorFee;
+        uint256 totalBps = buy ? 120 : 220;
+        assertEq(platform, gross * 20 / 10_000);
+        if (specified < 0) {
+            assertEq(platform + creatorFee, gross * totalBps / 10_000);
+        } else {
+            uint256 net = gross - platform - creatorFee;
+            assertEq(gross, (net * 10_000 + (10_000 - totalBps) - 1) / (10_000 - totalBps));
+        }
+        if (buy) {
+            assertEq(balanceBefore - address(this).balance, actualNative);
+            assertEq(address(manager).balance - managerBefore, actualNative);
+        } else {
+            assertEq(address(this).balance - balanceBefore, actualNative);
+            assertEq(managerBefore - address(manager).balance, actualNative);
+        }
+        if (buy == (specified < 0)) {
+            assertEq(actualNative, specified < 0 ? uint256(-specified) : uint256(specified));
+        } else {
+            uint256 tokens = buy ? uint256(int256(delta.amount1())) : uint256(-int256(delta.amount1()));
+            assertEq(tokens, specified < 0 ? uint256(-specified) : uint256(specified));
+        }
     }
 }

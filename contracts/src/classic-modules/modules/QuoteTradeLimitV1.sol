@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import { IClassicModuleV1 } from "../IClassicModuleV1.sol";
 import { ClassicModuleTypes as T } from "../ClassicModuleTypes.sol";
 
-/// @notice Caps native quote per transaction. It is not an anti-Sybil or guaranteed anti-sniping mechanism.
+/// @notice Caps native quote per swap. It is not an anti-Sybil or guaranteed anti-sniping mechanism.
 contract QuoteTradeLimitV1 is IClassicModuleV1 {
     function moduleKind() external pure returns (uint8) {
         return T.TRADE_LIMIT;

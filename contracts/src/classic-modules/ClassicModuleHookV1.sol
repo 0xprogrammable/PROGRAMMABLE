@@ -9,6 +9,8 @@ import { IHooks } from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import { FullMath } from "@uniswap/v4-core/src/libraries/FullMath.sol";
 import { Hooks } from "@uniswap/v4-core/src/libraries/Hooks.sol";
+import { StateLibrary } from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
+import { ProtocolFeeLibrary } from "@uniswap/v4-core/src/libraries/ProtocolFeeLibrary.sol";
 import { BalanceDelta } from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {
     BeforeSwapDelta,
@@ -21,6 +23,7 @@ import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
 import { SwapParams } from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import { IHookSwapEvents } from "../interfaces/IHookSwapEvents.sol";
 import { ClassicModuleTypes as T } from "./ClassicModuleTypes.sol";
+import { ClassicModuleRecipeV1 } from "./ClassicModuleRecipeV1.sol";
 import { IClassicModuleV1 } from "./IClassicModuleV1.sol";
 import { ClassicModuleCalls } from "./ClassicModuleCalls.sol";
 import { ClassicModuleRegistryV1 } from "./ClassicModuleRegistryV1.sol";
@@ -57,6 +60,7 @@ contract ClassicModuleHookV1 is BaseHook, IHookEvents, IHookSwapEvents {
 
     struct PendingSwap {
         bytes32 requestHash;
+        address sender;
         uint16 creatorFeeBps;
         uint256 quoteLimit;
     }
@@ -177,20 +181,10 @@ contract ClassicModuleHookV1 is BaseHook, IHookEvents, IHookSwapEvents {
                 hasFeePolicy = true;
             }
             snapshots[i] = snapshot;
-            hashes[i] = keccak256(
-                abi.encode(
-                    snapshot.versionId,
-                    snapshot.familyId,
-                    snapshot.implementation,
-                    snapshot.codeHash,
-                    snapshot.kind,
-                    keccak256(snapshot.config)
-                )
-            );
+            hashes[i] = ClassicModuleRecipeV1.snapshotHash(snapshot);
         }
-        recipeHash = keccak256(
-            abi.encode(T.RECIPE_DOMAIN, block.chainid, address(this), address(registry), buyFee, sellFee, hashes)
-        );
+        recipeHash =
+            ClassicModuleRecipeV1.recipeHash(block.chainid, address(this), address(registry), buyFee, sellFee, hashes);
     }
 
     function _snapshot(T.ModuleSelection calldata selection, uint16 buyFee, uint16 sellFee)
@@ -254,10 +248,9 @@ contract ClassicModuleHookV1 is BaseHook, IHookEvents, IHookSwapEvents {
                 policy.buyCreatorFeeBps = effect.buyCreatorFeeBps;
                 policy.sellCreatorFeeBps = effect.sellCreatorFeeBps;
             } else if (module.kind == T.TRADE_LIMIT) {
-                if (
-                    effect.buyCreatorFeeBps != 0 || effect.sellCreatorFeeBps != 0
-                        || (effect.buyQuoteLimit == 0 && effect.sellQuoteLimit == 0)
-                ) revert InvalidModuleEffect(module.versionId);
+                if (effect.buyCreatorFeeBps != 0 || effect.sellCreatorFeeBps != 0) {
+                    revert InvalidModuleEffect(module.versionId);
+                }
                 policy.buyQuoteLimit = _intersection(policy.buyQuoteLimit, effect.buyQuoteLimit);
                 policy.sellQuoteLimit = _intersection(policy.sellQuoteLimit, effect.sellQuoteLimit);
             } else {
@@ -272,6 +265,23 @@ contract ClassicModuleHookV1 is BaseHook, IHookEvents, IHookSwapEvents {
         returns (uint256 creatorFee, uint256 platformFee)
     {
         return _fees(grossNative, creatorFeeBps, false);
+    }
+
+    /// @notice Current hook rates and separate PoolManager fees. Pool protocol fees can be set by Uniswap authority.
+    /// @dev These use different bases; a UI must quote the route, not add pips and bps as a single flat rate.
+    function feeComponents(bytes32 poolId, bool isBuy)
+        external
+        view
+        returns (uint16 creatorBps, uint16 platformBps, uint16 poolProtocolPips, uint24 poolLpPips)
+    {
+        T.Effect memory policy = quotePolicy(poolId);
+        creatorBps = isBuy ? policy.buyCreatorFeeBps : policy.sellCreatorFeeBps;
+        platformBps = PROTOCOL_FEE_BPS;
+        uint24 packedProtocol;
+        (,, packedProtocol, poolLpPips) = StateLibrary.getSlot0(poolManager, PoolId.wrap(poolId));
+        poolProtocolPips = isBuy
+            ? ProtocolFeeLibrary.getZeroForOneFee(packedProtocol)
+            : ProtocolFeeLibrary.getOneForZeroFee(packedProtocol);
     }
 
     function quoteExactOutputFees(uint256 netNative, uint16 creatorFeeBps)
@@ -308,6 +318,7 @@ contract ClassicModuleHookV1 is BaseHook, IHookEvents, IHookSwapEvents {
         T.Effect memory policy = quotePolicy(poolId);
         PendingSwap memory pending = PendingSwap(
             keccak256(abi.encode(sender, params)),
+            sender,
             params.zeroForOne ? policy.buyCreatorFeeBps : policy.sellCreatorFeeBps,
             params.zeroForOne ? policy.buyQuoteLimit : policy.sellQuoteLimit
         );
@@ -360,10 +371,10 @@ contract ClassicModuleHookV1 is BaseHook, IHookEvents, IHookSwapEvents {
         // Mint fully backed native claims before notifying the fixed ledger. It never calls recipients during accrual.
         NATIVE.take(poolManager, address(ledger), fee, true);
         ledger.accrue(poolId, platformFee, creatorFee);
-        emit HookFee(poolId, address(this), fee.toUint128(), 0);
+        emit HookFee(poolId, pending.sender, fee.toUint128(), 0);
         emit HookSwap(
             PoolId.wrap(poolId),
-            address(this),
+            pending.sender,
             -fee.toInt256().toInt128(),
             0,
             uint24(pending.creatorFeeBps + PROTOCOL_FEE_BPS) * 100
