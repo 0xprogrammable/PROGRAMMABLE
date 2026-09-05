@@ -11,7 +11,8 @@
     "./io": { "types": "./src/io.d.mts", "default": "./src/io.mjs" },
     "./open": { "types": "./src/open-packages.d.mts", "default": "./src/open-packages.mjs" },
     "./open-io": { "types": "./src/open-package-io.d.mts", "default": "./src/open-package-io.mjs" },
-    "./open-transport": { "types": "./src/open-transport.d.mts", "default": "./src/open-transport.mjs" }
+    "./open-transport": { "types": "./src/open-transport.d.mts", "default": "./src/open-transport.mjs" },
+    "./open-client": { "types": "./src/open-client.d.mts", "default": "./src/open-client.mjs" }
   },
   "scripts": { "test": "node --test test/*.test.mjs" },
   "engines": { "node": ">=24.14.0 <25" },
