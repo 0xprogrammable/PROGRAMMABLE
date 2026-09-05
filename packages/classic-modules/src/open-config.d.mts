@@ -18,7 +18,10 @@ export const OPEN_CONFIG_LIMITS: Readonly<{
   stringBytes: 16384; bytesLength: 16384; schemaBytes: 65536; valueBytes: 131072;
   contextBytes: 131072; jsonDepth: 32; jsonNodes: 16384; encodedBytes: 262144;
 }>;
-/** Local Node API. Throws OpenConfigError with a JSON-pointer path; rejects getters and Proxies. */
+/**
+ * Throws OpenConfigError with a JSON-pointer path; checks inert JSON descriptors.
+ * The direct JavaScript API is not a sandbox for executable objects such as Proxies.
+ */
 export function assertOpenConfigSchema(schema: unknown): asserts schema is OpenConfigSchema;
 export type OpenConfigHex = `0x${string}`;
 export interface OpenAssetContext { chainId: OpenConfigUintInput; address: OpenConfigHex; decimals: number }

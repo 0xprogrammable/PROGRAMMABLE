@@ -1,6 +1,5 @@
 import { canonicalJson } from './canonical-json.mjs';
 import { encodeAbiParameters, isAddress } from 'viem';
-import { isProxy } from 'node:util/types';
 
 /** Local candidate limits, not a promise about an onchain engine's execution budget. */
 export const OPEN_CONFIG_LIMITS = Object.freeze({
@@ -75,7 +74,6 @@ function inspectJson(value, path, maximumBytes) {
       charge(String(item).length, location); return;
     }
     need(item !== null && typeof item === 'object', 'OPEN_CONFIG_JSON_TYPE', location, 'Expected plain JSON data');
-    need(!isProxy(item), 'OPEN_CONFIG_PROXY', location, 'Proxy objects are not inert JSON data');
     need(!ancestors.has(item), 'OPEN_CONFIG_CYCLE', location, 'Cyclic data is not supported');
     need(Array.isArray(item) ? Object.getPrototypeOf(item) === Array.prototype : plain(item),
       'OPEN_CONFIG_PROTOTYPE', location, 'Only plain records and ordinary arrays are supported');
@@ -340,7 +338,8 @@ function encodeChecked(parameters, values, path) {
  * asset metadata, chain readiness or possession of a role. No RPC/schema fetch occurs.
  * String maxLength counts UTF-8 bytes; bytes maxLength counts decoded bytes. uint
  * unit is exact declarative metadata and never causes implicit amount conversion.
- * This local Node SDK rejects Proxies before reading their traps or descriptors.
+ * Inputs must be inert JSON data. The direct JavaScript API is not a sandbox for
+ * executable JavaScript objects such as Proxies; parse JSON at untrusted boundaries.
  */
 export function compileOpenConfig(schema, values, context = { roles: {}, assets: {}, components: {} }) {
   assertOpenConfigSchema(schema);

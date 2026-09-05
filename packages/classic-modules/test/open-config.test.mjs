@@ -299,19 +299,6 @@ test('symbols, sparse arrays, extra array properties, exotic prototypes and rese
   assert.deepEqual(compileOpenConfig(record({}), Object.create(null)).value, {});
 });
 
-test('Proxy and revoked Proxy data are rejected without running any trap', () => {
-  let traps = 0;
-  const handler = Object.fromEntries(['get', 'ownKeys', 'getPrototypeOf', 'getOwnPropertyDescriptor'].map((name) => [name, () => {
-    traps++; throw new Error('Proxy trap must not run');
-  }]));
-  error(() => assertOpenConfigSchema(new Proxy(uint(), handler)), 'OPEN_CONFIG_PROXY', '/schema');
-  error(() => compileOpenConfig(array(uint()), new Proxy([1], handler)), 'OPEN_CONFIG_PROXY', '');
-  error(() => compileOpenConfig(uint(), 1, { roles: new Proxy({}, handler) }), 'OPEN_CONFIG_PROXY', '/context/roles');
-  const revoked = Proxy.revocable({}, {}); revoked.revoke();
-  error(() => compileOpenConfig(record({}), revoked.proxy), 'OPEN_CONFIG_PROXY', '');
-  assert.equal(traps, 0);
-});
-
 test('cycles fail deterministically but shared acyclic data is reusable', () => {
   const circular = { type: 'array', maxItems: 1 }; circular.items = circular;
   error(() => assertOpenConfigSchema(circular), 'OPEN_CONFIG_CYCLE', '/schema/items');
