@@ -3,45 +3,39 @@
   "assets": [
     {
       "name": "programmable-launch-4.0.0.cdx.json",
-      "sha256": null
+      "sha256": "sha256:83d6653f0b4550b9f4a159166cc6b40beec6dcdd26866e4d5ce5341b2f95cbde"
     },
     {
       "name": "programmable-launch-4.0.0.release.json",
-      "sha256": null
+      "sha256": "sha256:d4d5df7ce7d986ecbbed4a0b9052884a76fe00d22725ed1efd51397da2af1568"
     },
     {
       "name": "programmable-launch-4.0.0.tgz",
-      "sha256": null
+      "sha256": "sha256:f6b1ff121f147d415a22589dac2dcc50ceb3fc4aa12067584696dc35377d18e6"
     },
     {
       "name": "programmable-launch-4.0.0.tgz.sha256",
-      "sha256": null
+      "sha256": "sha256:ba61fc41255028c1a23a7e07cf7f29820bca672dde4b9de2a0774e580760976c"
     }
   ],
-  "blockers": [
-    "releaseBindingReady",
-    "releaseSourceCoordinate",
-    "releaseManifestDigest",
-    "releaseAssetDigests",
-    "machineContractBindingDigest"
-  ],
+  "blockers": [],
   "machineContractBinding": {
     "path": "docs/operations/releases/custom-launch-v4/cli-release-binding.json",
     "schemaVersion": "programmable.launch-cli-v4-release-binding.v1",
-    "sha256": null
+    "sha256": "sha256:b642d4bc65ea8e15a5e6f9ad53a94279e9efbc88203b49056681478ef86b7d02"
   },
-  "manifestSha256": null,
+  "manifestSha256": "sha256:d4d5df7ce7d986ecbbed4a0b9052884a76fe00d22725ed1efd51397da2af1568",
   "releaseBinding": {
     "path": "docs/operations/releases/custom-launch-v4/cli-release-binding.json",
-    "sha256": null
+    "sha256": "sha256:b642d4bc65ea8e15a5e6f9ad53a94279e9efbc88203b49056681478ef86b7d02"
   },
-  "releaseReady": false,
+  "releaseReady": true,
   "repository": "programmablehq/PROGRAMMABLE",
   "schemaVersion": "programmable.launch-v4-clean-room-release-coordinate.v1",
   "source": {
-    "commitSha": null,
+    "commitSha": "5e1e0f9fffe6bbdb09fabab2f68814d1c9ef2d36",
     "ref": "refs/heads/production",
-    "treeSha": null
+    "treeSha": "088623a11fcfecfe4754189f6668685c6e6f7838"
   },
   "tag": "programmable-launch-v4.0.0",
   "version": "4.0.0"
