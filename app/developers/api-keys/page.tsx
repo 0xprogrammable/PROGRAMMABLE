@@ -5,7 +5,7 @@ import { DeveloperApiKeys } from "@/components/developer-api-keys";
 export const metadata: Metadata = {
   title: "API keys · Programmable",
   description:
-    "Create scoped Programmable API keys for custom launch agents while your wallet keeps control of final transactions.",
+    "Manage Programmable API keys for launch agents on Ethereum and Robinhood.",
   alternates: {
     canonical: "/developers/api-keys",
   },

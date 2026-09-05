@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import {
   useCallback,
@@ -1227,51 +1226,12 @@ export function DeveloperApiKeysView({
 
       <header className={styles.hero}>
         <div className={styles.heroCopy}>
-          <p className={styles.kicker}>Developer access</p>
           <h1>API keys</h1>
           <p className={styles.intro}>
-            Create and revoke keys for Custom launch workflows. A key can
-            inspect, preflight and submit a request, but only your wallet can
-            sign funding or send the launch transaction.
+            Manage access for your launch agents on Ethereum and Robinhood.
           </p>
         </div>
       </header>
-
-      {activeSection === "keys" ? (
-        <section
-          className={styles.agentSetup}
-          aria-labelledby="agent-setup-title"
-        >
-          <div className={styles.agentSetupCopy}>
-            <h2 id="agent-setup-title">Set up your agent</h2>
-            <p>
-              Your agent asks which chain to use and collects your complete
-              project details. Review the prepared launch on this website
-              before confirming it in your wallet.
-            </p>
-            <p className={styles.setupNote}>
-              Use these instructions with a new or existing key. They include
-              the <code>$PROGRAMMABLE_API_KEY</code> placeholder, never your secret.
-            </p>
-          </div>
-          <div className={styles.agentSetupActions}>
-            <button
-              className={styles.secondaryButton}
-              type="button"
-              onClick={() => void copyAgentSetup()}
-            >
-              {setupCopyState === "copied"
-                ? "Setup copied"
-                : "Copy agent setup"}
-            </button>
-            {setupCopyState === "error" ? (
-              <p className={styles.inlineError} role="alert">
-                Agent setup could not be copied. Try again.
-              </p>
-            ) : null}
-          </div>
-        </section>
-      ) : null}
 
       {activeSection === "launch" ? (
         <RobinhoodFeePolicyDisclosure />
@@ -1280,16 +1240,10 @@ export function DeveloperApiKeysView({
       {!authReady ? (
         walletSessionTimedOut ? (
           <section className={styles.walletGate} role="alert">
-            <Image
-              className={styles.loopMark}
-              src="/brand/loop/programmable-loop-mark-header-warm-ivory-v1-1536.png"
-              alt=""
-              width={1168}
-              height={1536}
-              sizes="52px"
-            />
-            <h2>Wallet access is unavailable</h2>
-            <p>Reload the page or try again shortly.</p>
+            <div className={styles.walletGateCopy}>
+              <h2>Wallet access is unavailable</h2>
+              <p>Reload the page or try again shortly.</p>
+            </div>
             <button
               className={styles.secondaryButton}
               type="button"
@@ -1300,9 +1254,10 @@ export function DeveloperApiKeysView({
           </section>
         ) : (
           <section className={styles.walletGate} aria-busy="true">
-            <span className={styles.walletGateMark} aria-hidden="true" />
-            <span className={styles.walletGateTitle} aria-hidden="true" />
-            <span className={styles.walletGateLine} aria-hidden="true" />
+            <div className={styles.walletGateCopy} aria-hidden="true">
+              <span className={styles.walletGateTitle} />
+              <span className={styles.walletGateLine} />
+            </div>
             <span className={styles.visuallyHidden} role="status">
               Loading wallet session
             </span>
@@ -1310,19 +1265,10 @@ export function DeveloperApiKeysView({
         )
       ) : !account ? (
         <section className={styles.walletGate} aria-labelledby="connect-title">
-          <Image
-            className={styles.loopMark}
-            src="/brand/loop/programmable-loop-mark-header-warm-ivory-v1-1536.png"
-            alt=""
-            width={1168}
-            height={1536}
-            sizes="52px"
-          />
-          <h2 id="connect-title">Connect your wallet</h2>
-          <p>
-            Use the wallet that will own these keys. Connecting does not request
-            a signature.
-          </p>
+          <div className={styles.walletGateCopy}>
+            <h2 id="connect-title">Connect your wallet</h2>
+            <p>Connect to view and manage your API keys.</p>
+          </div>
           <button
             className={styles.primaryButton}
             disabled={connecting}
@@ -1416,9 +1362,8 @@ export function DeveloperApiKeysView({
             </div>
           ) : null}
 
-          <div
+          <nav
             className={styles.sectionSwitch}
-            role="group"
             aria-label="Developer access view"
           >
             <button
@@ -1442,7 +1387,7 @@ export function DeveloperApiKeysView({
             >
               Launch history
             </button>
-          </div>
+          </nav>
 
           {activeSection === "keys" ? (
             <div className={styles.workspace}>
@@ -1452,10 +1397,7 @@ export function DeveloperApiKeysView({
                 aria-busy={mutationState.kind === "issue"}
               >
                 <div className={styles.panelHeading}>
-                  <div>
-                    <p className={styles.kicker}>New key</p>
-                    <h2 id="create-key-title">Create key</h2>
-                  </div>
+                  <h2 id="create-key-title">Create key</h2>
                 </div>
 
                 <form className={styles.createForm} onSubmit={createApiKey}>
@@ -1497,6 +1439,22 @@ export function DeveloperApiKeysView({
                       value={expiresInDays}
                       onChange={setExpiresInDays}
                     />
+
+                    <button
+                      ref={createButtonRef}
+                      className={styles.primaryButton}
+                      disabled={
+                        mutationState.kind !== "idle"
+                        || mutationResult?.result.secretState === "delivered-once"
+                      }
+                      type="submit"
+                    >
+                      {mutationState.kind === "issue"
+                        ? "Creating key"
+                        : mutationResult?.result.secretState === "delivered-once"
+                          ? "Save current key first"
+                          : "Create key"}
+                    </button>
                   </div>
 
                   <details className={styles.scopeLedger}>
@@ -1522,22 +1480,6 @@ export function DeveloperApiKeysView({
                       {createError}
                     </p>
                   ) : null}
-
-                  <button
-                    ref={createButtonRef}
-                    className={styles.primaryButton}
-                    disabled={
-                      mutationState.kind !== "idle"
-                      || mutationResult?.result.secretState === "delivered-once"
-                    }
-                    type="submit"
-                  >
-                    {mutationState.kind === "issue"
-                      ? "Creating key"
-                      : mutationResult?.result.secretState === "delivered-once"
-                        ? "Save current key first"
-                        : "Create key"}
-                  </button>
                 </form>
               </section>
 
@@ -1551,10 +1493,7 @@ export function DeveloperApiKeysView({
                 }
               >
                 <div className={styles.panelHeading}>
-                  <div>
-                    <p className={styles.kicker}>Existing</p>
-                    <h2 id="api-keys-title">Your keys</h2>
-                  </div>
+                  <h2 id="api-keys-title">Your keys</h2>
                   <div className={styles.listToolbar}>
                     {keyPageCount > 1 ? (
                       <nav
@@ -1648,7 +1587,7 @@ export function DeveloperApiKeysView({
                 {listState === "ready" && apiKeys.length === 0 ? (
                   <div className={styles.statePanel}>
                     <h3>No keys yet</h3>
-                    <p>Create a key to start preparing Custom launches.</p>
+                    <p>Keys you create will appear here.</p>
                   </div>
                 ) : null}
 
@@ -1858,6 +1797,46 @@ export function DeveloperApiKeysView({
           )}
         </>
       )}
+
+      {activeSection === "keys" ? (
+        <details
+          className={styles.agentSetup}
+          aria-labelledby="agent-setup-title"
+        >
+          <summary>
+            <span id="agent-setup-title">Set up your agent</span>
+            <ChevronDown aria-hidden="true" size={18} strokeWidth={1.8} />
+          </summary>
+          <div className={styles.agentSetupBody}>
+            <div className={styles.agentSetupCopy}>
+              <p>
+                Use these instructions with a new or existing key. Your agent
+                prepares the launch; you review and approve it in your wallet.
+              </p>
+              <p className={styles.setupNote}>
+                The instructions use
+                the <code>$PROGRAMMABLE_API_KEY</code> placeholder, never your secret.
+              </p>
+            </div>
+            <div className={styles.agentSetupActions}>
+              <button
+                className={styles.secondaryButton}
+                type="button"
+                onClick={() => void copyAgentSetup()}
+              >
+                {setupCopyState === "copied"
+                  ? "Setup copied"
+                  : "Copy agent setup"}
+              </button>
+              {setupCopyState === "error" ? (
+                <p className={styles.inlineError} role="alert">
+                  Agent setup could not be copied. Try again.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }
