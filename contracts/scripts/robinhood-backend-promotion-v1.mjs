@@ -123,6 +123,7 @@ const COMPOSITION_KEYS = Object.freeze([
   "sourceVerificationWorkerConfigured",
   "sourceVerificationWorkerStarted",
   "sourceVerificationWorkerLifecycle",
+  ...(release?.profile?.profileVersion === "4.1.0" ? ["nativeInitialBuyQuote"] : []),
 ]);
 
 function failFlyV1TokenWire() {

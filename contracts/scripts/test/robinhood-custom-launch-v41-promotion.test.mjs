@@ -129,6 +129,59 @@ test("exact successor backend identity accepts its own pins and rejects predeces
   assert.deepEqual(bytes(stage), originalBytes);
 });
 
+test("successor requires the initial-buy quote in raw and public readiness while predecessor stays closed", (t) => {
+  const { root, stage } = fixture(t);
+  const context = robinhoodV41BackendStageContext({ repositoryRoot: root, stageBundle: stage });
+  const successor = backend.buildRobinhoodBackendPromotionPublicFixture(context);
+  const predecessor = previousBackend.buildRobinhoodBackendPromotionPublicFixture(stage);
+  const oldComposition = predecessor.publicInput.runtimeReadiness.releaseIdentity.composition;
+  assert.equal(Object.keys(oldComposition).length, 17);
+  assert.equal(Object.hasOwn(oldComposition, "nativeInitialBuyQuote"), false);
+  assert.deepEqual(successor.publicInput.runtimeReadiness.releaseIdentity.composition, {
+    ...oldComposition, nativeInitialBuyQuote: true,
+  });
+
+  for (const [tools, stageBundle, sample] of [
+    [backend, context, successor],
+    [previousBackend, stage, predecessor],
+  ]) {
+    const now = () => new Date(sample.publicInput.observedAt);
+    assert.doesNotThrow(() => tools.validateRobinhoodBackendPromotionInput({
+      input: sample.privateInput, stageBundle, now,
+    }));
+    assert.doesNotThrow(() => tools.validateRobinhoodBackendPromotionPublicInput({
+      input: sample.publicInput, stageBundle, now,
+    }));
+    const mutations = tools === backend ? [
+      [(value) => { delete value.nativeInitialBuyQuote; }, /backend readiness composition/u],
+      [(value) => { value.nativeInitialBuyQuote = false; }, /production composition is incomplete/u],
+      [(value) => { value.unreviewedCapability = true; }, /backend readiness composition/u],
+    ] : [
+      [(value) => { value.nativeInitialBuyQuote = true; }, /backend readiness composition/u],
+    ];
+    for (const [mutate, expected] of mutations) {
+      const raw = structuredClone(sample.privateInput);
+      const response = raw.readinessReadback.response;
+      const readiness = JSON.parse(Buffer.from(response.bodyBytesBase64, "base64").toString("utf8"));
+      mutate(readiness.composition);
+      const bodyBytes = bytes(readiness);
+      response.bodyBytesBase64 = bodyBytes.toString("base64");
+      response.bodyByteLength = String(bodyBytes.byteLength);
+      response.bodySha256 = sha256Digest(bodyBytes);
+      assert.throws(() => tools.validateRobinhoodBackendPromotionInput({
+        input: tools.buildRobinhoodBackendPromotionInput(raw), stageBundle, now,
+      }), expected);
+
+      const safe = structuredClone(sample.publicInput);
+      mutate(safe.runtimeReadiness.releaseIdentity.composition);
+      // Refresh the outer digest so the exact composition guard is reached first.
+      assert.throws(() => tools.validateRobinhoodBackendPromotionPublicInput({
+        input: tools.buildRobinhoodBackendPromotionPublicInput(safe), stageBundle, now,
+      }), expected);
+    }
+  }
+});
+
 test("successor authorization cannot borrow a redigested predecessor workflow or path", (t) => {
   const { root, stage } = fixture(t);
   const context = robinhoodV41BackendStageContext({ repositoryRoot: root, stageBundle: stage });
