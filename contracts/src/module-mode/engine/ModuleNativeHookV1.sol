@@ -119,7 +119,8 @@ contract ModuleNativeHookV1 is BaseHook {
         address noModuleRecipient
     ) BaseHook(poolManager_) {
         if (
-            address(poolManager_).code.length == 0 || address(registry_).code.length == 0
+            address(poolManager_).code.length == 0
+                || address(registry_).codehash != keccak256(type(ModuleNativeRegistryV1).runtimeCode)
                 || address(runtimeFactory_).codehash != keccak256(type(ModuleNativeRuntimeFactoryV1).runtimeCode)
         ) revert InvalidDependency();
         registry = registry_;

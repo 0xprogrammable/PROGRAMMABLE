@@ -598,6 +598,17 @@ contract ModuleNativeEngineV1Test is Deployers {
         assertEq(address(hook.runtimeFactory().runtimeOf(address(hook))), initial);
     }
 
+    function test_hookDeploymentRejectsUnreviewedRegistryCodeEvenWhenAddressHasCode() public {
+        ModuleNativeRuntimeFactoryV1 factory = hook.runtimeFactory();
+        address alternate = makeAddr("alternate-no-module-recipient");
+        address administrator = ledger.rewardAdmin();
+        bytes memory args = abi.encode(manager, registry, factory, treasury, administrator, alternate);
+        (, bytes32 salt) = HookMiner.find(address(this), HOOK_FLAGS, type(ModuleNativeHookV1).creationCode, args);
+        vm.etch(address(registry), hex"00");
+        vm.expectRevert(ModuleNativeHookV1.InvalidDependency.selector);
+        new ModuleNativeHookV1{ salt: salt }(manager, registry, factory, treasury, administrator, alternate);
+    }
+
     function test_smartWalletLaunchEmitsSaltAndGraffitiWithoutOuterCalldataAssumptions() public {
         EngineSmartWalletFixtureV1 wallet = new EngineSmartWalletFixtureV1();
         ModuleNativeLaunchV1.LaunchParameters memory p = _parameters();
