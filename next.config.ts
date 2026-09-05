@@ -30,6 +30,7 @@ export function createContentSecurityPolicy(isDevelopment: boolean) {
     ].filter(Boolean).join(" "),
     [
       "frame-src 'self'",
+      "https://dexscreener.com",
       "https://auth.privy.io",
       "https://*.privy.io",
       "https://verify.walletconnect.com",

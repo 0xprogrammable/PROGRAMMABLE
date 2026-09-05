@@ -1,0 +1,23 @@
+.artwork {
+  align-items: center;
+  aspect-ratio: 1;
+  background: var(--webde-surface-raised);
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+
+.artwork img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.artwork span {
+  color: var(--webde-muted);
+  font-size: clamp(24px, 4vw, 48px);
+  font-weight: 500;
+  letter-spacing: -.04em;
+}

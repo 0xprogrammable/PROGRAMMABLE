@@ -7,6 +7,9 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { ExploreChainSelector } from "@/components/explore-chain-selector";
 import { ExploreIndexResetView } from "@/components/explore-index-reset-view";
 import { useViewChain } from "@/components/view-chain";
+import { RobinhoodCoinArtwork } from "@/components/robinhood-coin-artwork";
+import { useRobinhoodPresentation } from "@/components/use-robinhood-presentation";
+import { coinAge, coinDollars, coinTicker } from "@/lib/robinhood-presentation";
 import styles from "@/components/robinhood-launches-view.module.css";
 
 type Launch = {
@@ -92,10 +95,6 @@ function readResponse(value: unknown): LaunchResponse {
   return value as LaunchResponse;
 }
 
-function shortAddress(address: string) {
-  return `${address.slice(0, 8)}…${address.slice(-6)}`;
-}
-
 function launchTime(value: string | null) {
   return value ? DATE_FORMAT.format(new Date(value)) : "Time unavailable";
 }
@@ -131,6 +130,11 @@ function RobinhoodLaunchList({ embedded, enabled }: { embedded: boolean; enabled
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [now, setNow] = useState(Date.now);
+  const presentation = useRobinhoodPresentation(
+    new URLSearchParams({ page: String(request.page), q: request.q }).toString(), enabled, refresh,
+  );
+  const presentations = new Map(presentation.items.map((item) => [item.tokenAddress.toLowerCase(), item]));
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -173,6 +177,7 @@ function RobinhoodLaunchList({ embedded, enabled }: { embedded: boolean; enabled
           return { request, data };
         });
         setFailed(false);
+        setNow(Date.now());
       } catch {
         if (!disposed && isVisible()) setFailed(true);
       } finally {
@@ -287,27 +292,34 @@ function RobinhoodLaunchList({ embedded, enabled }: { embedded: boolean; enabled
 
         {hasRows ? (
           <ul className={styles.list} aria-label="Robinhood token launches" aria-busy={loading}>
-            {items.map((launch) => (
+            {items.map((launch) => {
+              const details = presentations.get(launch.tokenAddress.toLowerCase());
+              return (
               <li key={launch.launchId} className={styles.item}>
                 <Link className={styles.row} href={`/token/${launch.tokenAddress}?chain=4663`} prefetch={false}>
+                  <RobinhoodCoinArtwork
+                    imageUrl={details?.imageUrl} name={launch.name} symbol={launch.symbol}
+                    className={styles.artwork}
+                  />
                   <div className={styles.identity}>
-                    <div className={styles.nameLine}>
-                      <strong title={launch.name || launch.tokenAddress}>{launch.name?.trim() || shortAddress(launch.tokenAddress)}</strong>
-                      {launch.symbol?.trim() ? <span className={styles.symbol}>{launch.symbol}</span> : null}
+                    <strong className={styles.name} title={launch.name?.trim() || "Unnamed token"}>{launch.name?.trim() || "Unnamed token"}</strong>
+                    <span className={styles.symbol} title={launch.symbol || undefined}>{coinTicker(launch.symbol)}</span>
+                  </div>
+                  <div className={styles.cardFooter}>
+                    <div className={styles.marketCap}>
+                      <span>Market cap</span>
+                      <strong title={details?.market ? `DEX Screener · ${new Date(details.market.observedAt).toUTCString()}` : "Market data is not available yet"}>{coinDollars(details?.market?.marketCapUsd)}</strong>
                     </div>
-                    <span className={styles.address} title={launch.tokenAddress}>{launch.tokenAddress}</span>
+                    {launch.launchedAt ? <time className={styles.launched} dateTime={launch.launchedAt} title={`Launched ${new Date(launch.launchedAt).toUTCString()}`}>{coinAge(launch.launchedAt, now)}</time> : null}
                   </div>
-                  <div className={styles.details}>
-                    <span className={styles.classification}>Programmable Custom</span>
-                    <span className={styles.launched}>
-                      {launch.launchedAt ? <>Launched <time dateTime={launch.launchedAt} title={new Date(launch.launchedAt).toUTCString()}>{launchTime(launch.launchedAt)}</time></> : "Launch time unavailable"}
-                    </span>
-                  </div>
-                  <ChevronRight className={styles.rowArrow} aria-hidden="true" size={18} />
                 </Link>
               </li>
-            ))}
+            );})}
           </ul>
+        ) : loading ? (
+          <div className={styles.skeletonGrid} aria-label="Loading Robinhood launches" role="status">
+            {Array.from({ length: 5 }, (_, index) => <div className={styles.skeletonCard} aria-hidden="true" key={index}><div /><span /><span /></div>)}
+          </div>
         ) : (
           <div className={styles.empty} aria-busy={loading}>
             <StateHeading>{emptyTitle}</StateHeading>
