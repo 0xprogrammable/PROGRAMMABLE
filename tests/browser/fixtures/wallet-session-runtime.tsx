@@ -17,8 +17,11 @@ type FixtureWallet = {
   linked: boolean;
   connectedAt: number;
   walletClientType: string;
+  connectorType: string;
+  isConnected: () => Promise<boolean>;
+  switchChain: (chainId: number) => Promise<void>;
   disconnect: () => Promise<void>;
-  getEthereumProvider: () => Promise<never>;
+  getEthereumProvider: () => Promise<{ request: (input: { method: string }) => Promise<string | string[]> }>;
 };
 type FixtureState = {
   ready: boolean;
@@ -30,6 +33,10 @@ type FixtureState = {
   calls: { method: string; options?: unknown }[];
   delayedLocks: boolean;
   waitingLocks: number;
+  delayedNetworkSwitch: boolean;
+  waitingNetworkSwitches: number;
+  providerAccountOverride: string | null;
+  providerChainOverride: string | null;
 };
 
 function user(id: string, primary: string | null, addresses: string[]): FixtureUser {
@@ -42,14 +49,46 @@ function user(id: string, primary: string | null, addresses: string[]): FixtureU
 
 const forbidden = async (): Promise<never> => {
   record("forbidden-wallet-operation");
-  throw new Error("Wallet signing, provider requests and transactions are not available in this fixture.");
+  throw new Error("Wallet signing and transactions are not available in this fixture.");
 };
 
-function wallet(address: string, linked = true, connectedAt = 1): FixtureWallet {
+const pendingNetworkSwitches: { resolve: () => void; reject: (error: Error) => void }[] = [];
+
+function wallet(address: string, linked = true, connectedAt = 1, initialChain = "eip155:4663"): FixtureWallet {
+  let networkChain = initialChain;
+  const provider = {
+    request: async ({ method }: { method: string }) => {
+      record(method, { address });
+      if (method === "eth_chainId") return state.providerChainOverride
+        ?? `0x${Number(networkChain.slice("eip155:".length)).toString(16)}`;
+      if (method === "eth_accounts") return [state.providerAccountOverride ?? address];
+      return forbidden();
+    },
+  };
+  const getEthereumProvider = async () => {
+    record("getEthereumProvider", { address });
+    return provider;
+  };
   return {
-    address, linked, connectedAt, chainId: "eip155:4663", walletClientType: "metamask",
+    address, linked, connectedAt, chainId: initialChain, walletClientType: "metamask", connectorType: "injected",
+    isConnected: async () => true,
+    switchChain: async (chainId) => {
+      record("switchChain", { address, chainId });
+      if (state.delayedNetworkSwitch) {
+        await new Promise<void>((resolve, reject) => {
+          pendingNetworkSwitches.push({ resolve, reject });
+          update({ waitingNetworkSwitches: pendingNetworkSwitches.length });
+        });
+      }
+      networkChain = `eip155:${chainId}`;
+      // Privy 3.35.2 rewraps its connector wallet on chainChanged. The public
+      // object changes, while connection methods survive the object spread.
+      update({ wallets: state.wallets.map((candidate) => candidate.getEthereumProvider === getEthereumProvider
+        ? { ...candidate, chainId: networkChain } : candidate) });
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+    },
     disconnect: async () => { record("disconnect-provider", { address }); },
-    getEthereumProvider: forbidden,
+    getEthereumProvider,
   };
 }
 
@@ -62,6 +101,8 @@ let state: FixtureState = {
   ready: true, authenticated: true, user: alpha, walletsReady: true,
   wallets: [wallet(accountB, false, 900), wallet(accountA)],
   isOpen: false, calls: [], delayedLocks: false, waitingLocks: 0,
+  delayedNetworkSwitch: false, waitingNetworkSwitches: 0,
+  providerAccountOverride: null, providerChainOverride: null,
 };
 
 function update(patch: Partial<FixtureState>) {
@@ -157,12 +198,19 @@ export function useSignMessage() { return { signMessage: forbidden }; }
 export function useLoginWithSiwe() { return { generateSiweMessage: forbidden, loginWithSiwe: forbidden }; }
 
 function chooseScenario(scenario: string) {
-  const base = { ready: true, authenticated: true, walletsReady: true, isOpen: false, calls: [] };
+  const base = {
+    ready: true, authenticated: true, walletsReady: true, isOpen: false, calls: [],
+    providerAccountOverride: null, providerChainOverride: null,
+  };
   switch (scenario) {
     case "both-owned":
       update({ ...base, user: alphaBoth, wallets: [wallet(accountB, true, 900), wallet(accountA)] }); break;
     case "foreign-linked":
       update({ ...base, user: alpha, wallets: [wallet(accountB, true, 900), wallet(accountA)] }); break;
+    case "owned-with-foreign":
+      update({ ...base, user: alphaBoth, wallets: [wallet(accountC, true, 1000), wallet(accountB, true, 900), wallet(accountA)] }); break;
+    case "unsupported-network":
+      update({ ...base, user: alpha, wallets: [wallet(accountA, true, 1, "eip155:8453")] }); break;
     case "stale-user-wallets":
       update({ ...base, user: betaC, wallets: [wallet(accountA), wallet(accountB, true, 900)] }); break;
     case "hydrating":
@@ -190,6 +238,8 @@ export function FixtureControls() {
       <option value="primary">Primary wallet with unlinked recent wallet</option>
       <option value="both-owned">Two linked owned wallets</option>
       <option value="foreign-linked">Foreign linked recent wallet</option>
+      <option value="owned-with-foreign">Two owned wallets and one foreign wallet</option>
+      <option value="unsupported-network">Connected wallet on an unsupported network</option>
       <option value="stale-user-wallets">New user with stale previous wallets</option>
       <option value="hydrating">Wallet list still hydrating</option>
       <option value="linked-disconnected">Known account, wallet disconnected</option>
@@ -200,6 +250,9 @@ export function FixtureControls() {
     <button onClick={() => update({ authenticated: true, user: betaC })}>Change SDK user, keep old wallets</button>
     <button onClick={() => update({ authenticated: true, user: betaBoth })}>Change SDK user, same linked addresses</button>
     <button onClick={() => update({ authenticated: true, user: alpha, wallets: [wallet(accountA)] })}>Restore SDK session</button>
+    <button onClick={() => update({ wallets: state.wallets.map((candidate) => wallet(
+      candidate.address, candidate.linked, candidate.connectedAt + 1, candidate.chainId,
+    )) })}>Replace connected wallet capability</button>
     <button onClick={() => update({ isOpen: true })}>Open SDK modal</button>
     <button onClick={() => update({ isOpen: false })}>Close SDK modal</button>
     <button onClick={() => update({ delayedLocks: !current.delayedLocks })} aria-pressed={current.delayedLocks}>Delay browser lock</button>
@@ -209,6 +262,21 @@ export function FixtureControls() {
       pending.forEach((resolve) => resolve());
     }}>Resume browser lock</button>
     <output aria-label="Pending browser locks">{current.waitingLocks}</output>
+    <button onClick={() => update({ delayedNetworkSwitch: !current.delayedNetworkSwitch })}
+      aria-pressed={current.delayedNetworkSwitch}>Delay network switch</button>
+    <button onClick={() => {
+      const pending = pendingNetworkSwitches.shift();
+      update({ waitingNetworkSwitches: pendingNetworkSwitches.length, delayedNetworkSwitch: false });
+      pending?.resolve();
+    }}>Resolve network switch</button>
+    <button onClick={() => {
+      const pending = pendingNetworkSwitches.shift();
+      update({ waitingNetworkSwitches: pendingNetworkSwitches.length, delayedNetworkSwitch: false });
+      pending?.reject(Object.assign(new Error("User rejected network switch"), { code: 4001 }));
+    }}>Reject network switch</button>
+    <button onClick={() => update({ providerAccountOverride: accountC })}>Return a different provider account</button>
+    <button onClick={() => update({ providerChainOverride: "0x1237" })}>Return the wrong provider network</button>
+    <output aria-label="Pending network switches">{current.waitingNetworkSwitches}</output>
     <output aria-label="SDK calls">{JSON.stringify(current.calls)}</output>
     <output aria-label="SDK user">{current.user?.id ?? "anonymous"}</output>
     {current.isOpen ? <section role="dialog" aria-label="SDK wallet dialog">

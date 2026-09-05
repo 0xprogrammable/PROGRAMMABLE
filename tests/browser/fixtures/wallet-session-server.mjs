@@ -9,27 +9,43 @@ export async function createWalletSessionServer() {
   const bundled = await build({
     stdin: {
       contents: `
-        import React from 'react';
+        import React, {useState} from 'react';
         import {createRoot} from 'react-dom/client';
         import {WalletProvider, WalletButton, useWallet} from './components/wallet-provider';
+        import {SiteHeader} from './components/site-navigation';
         import {FixtureControls} from './tests/browser/fixtures/wallet-session-runtime';
         import './app/globals.css';
         import './app/interface.css';
+        import './app/programmable-experience.css';
+        import './app/webde-final-ui.css';
         function Consumer() {
           const value = useWallet();
+          const [networkResults, setNetworkResults] = useState([]);
+          const switchNetwork = () => {
+            void value.switchNetwork('1').then(
+              result => setNetworkResults(previous => [...previous, result]),
+              () => setNetworkResults(previous => [...previous, 'rejected']),
+            );
+          };
           return <main>
             <h1>{location.pathname === '/profile' ? 'Profile' : 'API keys'} wallet session regression</h1>
-            <WalletButton/>
+            <section aria-label="Inline wallet controls"><WalletButton/></section>
             <output aria-label="Selected account">{value.wallet?.account ?? 'none'}</output>
+            <output aria-label="Selected wallet network">{value.wallet?.chainId ?? 'none'}</output>
             <output aria-label="Wallet linked">{String(value.walletLinked)}</output>
             <output aria-label="Session authenticated">{String(value.authenticated)}</output>
+            <output aria-label="Session ready">{String(value.sessionReady)}</output>
+            <output aria-label="Wallet opening">{String(value.openingWallet)}</output>
             <output aria-label="Wallet busy">{String(value.connecting)}</output>
+            <output aria-label="Network switch busy">{String(value.switchingNetwork)}</output>
+            <output aria-label="Network switch results">{JSON.stringify(networkResults)}</output>
             <button onClick={value.openWallet}>Open account</button>
+            <button onClick={switchNetwork}>Request Ethereum wallet network</button>
             <button onClick={() => void value.disconnect({showDialogOnFailure:false})}>Sign out of app</button>
             <FixtureControls/>
           </main>;
         }
-        createRoot(document.getElementById('root')).render(<WalletProvider><Consumer/></WalletProvider>);
+        createRoot(document.getElementById('root')).render(<WalletProvider><SiteHeader/><Consumer/></WalletProvider>);
       `,
       loader: "tsx", resolveDir: root,
     },
@@ -47,7 +63,7 @@ export async function createWalletSessionServer() {
       plugin.onLoad({ filter: /.*/, namespace: "fixture" }, (args) => ({
         loader: "tsx", resolveDir: root,
         contents: args.path === "next/navigation"
-          ? `export const usePathname=()=>window.location.pathname;`
+          ? `export const usePathname=()=>window.location.pathname; const router={prefetch:()=>{},push:(url)=>window.history.pushState(null,'',url),replace:(url)=>window.history.replaceState(null,'',url)}; export const useRouter=()=>router;`
           : args.path === "next/link"
             ? `import React from 'react'; export default function Link({prefetch,...props}) { return <a {...props}/>; }`
             : `import React from 'react'; export default function Image({priority,fill,...props}) { return <img {...props}/>; }`,
