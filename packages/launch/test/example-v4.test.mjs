@@ -7,6 +7,7 @@ import Ajv2020 from "ajv/dist/2020.js";
 import {
   assertProductionV4Capabilities,
   createPackConfigFromCapabilities,
+  createPermitWindowFromFinalizedBlock,
 } from "../examples/robinhood-v4-no-broadcast/project/config-from-capabilities.mjs";
 import { assertExactProjectImageV4 } from
   "../examples/robinhood-v4-no-broadcast/project/image-precheck.mjs";
@@ -43,6 +44,23 @@ ajv.addKeyword({
   validate: (minimum, value) => [...value.matchAll(/[\p{L}\p{N}]/gu)].length >= minimum,
 });
 const validate = ajv.compile(schema);
+
+test("Robinhood permit includes a finalized checkpoint fifteen minutes behind the API clock", () => {
+  const nowSeconds = 1_800_000_000;
+  const block = { number: "0x123", hash: `0x${"44".repeat(32)}`,
+    timestamp: `0x${(nowSeconds - 900).toString(16)}` };
+  const permit = createPermitWindowFromFinalizedBlock({ rpcChainId: "0x1237", block, nowSeconds });
+  assert.ok(BigInt(permit.validAfter) <= BigInt(block.timestamp));
+  assert.equal(BigInt(permit.deadline) - BigInt(permit.validAfter), 3_600n);
+  assert.ok(BigInt(permit.deadline) >= BigInt(nowSeconds + 300));
+  for (const [rpcChainId, timestamp] of [
+    ["0x1", nowSeconds - 900],
+    ["0x1237", nowSeconds - 3_600],
+    ["0x1237", nowSeconds + 1],
+  ]) assert.throws(() => createPermitWindowFromFinalizedBlock({
+    rpcChainId, block: { ...block, timestamp: `0x${timestamp.toString(16)}` }, nowSeconds,
+  }), /Robinhood|finalized/u);
+});
 
 test("Robinhood V4 example materializes a schema-valid funding-none config from capabilities", () => {
   const capabilities = validV4Capabilities();
@@ -81,6 +99,10 @@ test("Robinhood V4 example materializes a schema-valid funding-none config from 
   assert.deepEqual(hook.runtimeImmutables, [{ immutableId: "7", abiType: "address",
     literal: capabilities.chainDeployment.contracts.poolManager.address }]);
   assert.equal(hook.constructorArguments[0], hook.runtimeImmutables[0].literal);
+  assert.deepEqual(config.targets.find(target => target.targetId === "initializer").constructorArguments,
+    [capabilities.chainDeployment.contracts.poolManager.address, { target: "token" }, { target: "hook" }]);
+  assert.equal(config.liquidityModel.declaredLaunchState, "pool-initialized-empty");
+  assert.deepEqual(config.liquidityModel.targetIds, []);
   assert.equal(config.profile.profileRevision, 1);
   assert.equal(config.chainDeployment,
     capabilities.chainDeployment,

@@ -13,6 +13,26 @@ const TRUST_ROOTS = Object.freeze([
   "universalRouter",
 ]);
 
+export function createPermitWindowFromFinalizedBlock({ rpcChainId, block, nowSeconds }) {
+  const quantity = /^0x(?:0|[1-9a-f][0-9a-f]*)$/u;
+  if (!quantity.test(rpcChainId ?? "") || BigInt(rpcChainId) !== 4_663n
+    || !quantity.test(block?.number ?? "") || !quantity.test(block?.timestamp ?? "")
+    || !/^0x[0-9a-f]{64}$/u.test(block?.hash ?? "")
+    || !Number.isSafeInteger(nowSeconds) || nowSeconds <= 0) {
+    throw new TypeError("a Robinhood finalized block and current API time are required");
+  }
+  const timestamp = BigInt(block.timestamp);
+  const now = BigInt(nowSeconds);
+  // The production simulator uses an independently agreed finalized checkpoint.
+  // Leave one minute for provider skew while retaining the existing one-hour cap.
+  const validAfter = timestamp - 60n;
+  const deadline = validAfter + 3_600n;
+  if (timestamp > now || validAfter < now - 3_600n || deadline < now + 300n) {
+    throw new TypeError("the finalized checkpoint cannot provide a fresh one-hour permit with five minutes remaining");
+  }
+  return { validAfter: validAfter.toString(), deadline: deadline.toString() };
+}
+
 export function createPackConfigFromCapabilities({
   capabilities,
   launchWallet,
@@ -107,7 +127,7 @@ export function createPackConfigFromCapabilities({
         compilationUnitId: "robinhood-v4-clean-room",
         artifact: "out/initializer.json",
         applicantSalt: `0x${"03".repeat(32)}`,
-        constructorArguments: [],
+        constructorArguments: [poolManager, { target: "token" }, { target: "hook" }],
         initializer: null,
         deploymentValueWei: "0",
         initializerValueWei: "0",
@@ -132,7 +152,7 @@ export function createPackConfigFromCapabilities({
     liquidityModel: {
       schemaVersion: "programmable.custom-launch-liquidity-model.v1",
       model: "none-empty-pool",
-      declaredLaunchState: "pool-not-initialized",
+      declaredLaunchState: "pool-initialized-empty",
       targetIds: [],
     },
     agentAttestation: {

@@ -930,7 +930,7 @@ export function buildCleanRoomEvidence(input) {
   requireValue(request.funding?.mode === "none" && request.funding.valueWei === "0",
     "REQUEST_FUNDING_INVALID");
   requireValue(request.liquidityModel?.model === "none-empty-pool"
-    && request.liquidityModel.declaredLaunchState === "pool-not-initialized"
+    && request.liquidityModel.declaredLaunchState === "pool-initialized-empty"
     && Array.isArray(request.liquidityModel.targetIds)
     && request.liquidityModel.targetIds.length === 0,
   "REQUEST_LIQUIDITY_INVALID");
