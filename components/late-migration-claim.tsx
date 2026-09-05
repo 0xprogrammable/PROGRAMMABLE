@@ -7,6 +7,7 @@ import { formatUnits, getAddress, type Address } from "viem";
 
 import styles from "@/components/late-migration-claim.module.css";
 import { useWallet } from "@/components/wallet-provider";
+import { MigrationPermitWalletError } from "@/lib/main-token-migration-wallet-error";
 import {
   LATE_MIGRATION_UNTRACKED_DEPOSIT_MESSAGE,
   lateMigrationIntakeFailureMessageV1,
@@ -330,6 +331,7 @@ export function lateMigrationIntakeUiErrorMessage(
   if (context === "status_unknown") {
     return "Deposit status is temporarily unavailable. A saved deposit may already be processing.";
   }
+  if (error instanceof MigrationPermitWalletError) return error.message;
   if (!(error instanceof Error)) {
     return "Deposits are temporarily unavailable. Nothing was moved.";
   }

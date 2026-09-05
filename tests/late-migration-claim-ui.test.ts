@@ -8,6 +8,7 @@ import {
   lateMigrationIntakeFailureMessageV1, lateMigrationIntakeProgressCopyV1,
   parseLateMigrationIntakeResponseV1, type LateMigrationIntakeExpectationV1,
 } from "../lib/late-migration-intake-client-v1";
+import { MigrationPermitWalletError } from "../lib/main-token-migration-wallet-error";
 
 const walletAddress = "0x228Be90653fDDAa408fB6cf9ca0AEC311dbE9A0D";
 const otherWallet = "0x1111111111111111111111111111111111111111";
@@ -99,6 +100,15 @@ describe("intake response and permit binding", () => {
 });
 
 describe("intake error context", () => {
+  it.each(["network", "connection", "request_pending", "browser_unavailable", "signing_unsupported", "account_changed", "session_changed", "invalid_signature"] as const)("shows actionable %s errors only before a returned signature", (kind) => {
+    const error = new MigrationPermitWalletError(kind, "signature");
+    expect(lateMigrationIntakeUiErrorMessage(error)).toBe(error.message);
+    expect(lateMigrationIntakeUiErrorMessage(error)).not.toBe("The wallet could not complete this deposit. Nothing was moved.");
+    for (const context of ["after_signature", "status_unknown"] as const) {
+      expect(lateMigrationIntakeUiErrorMessage(error, context)).toContain("may already be processing");
+      expect(lateMigrationIntakeUiErrorMessage(error, context)).not.toContain("Nothing was moved");
+    }
+  });
   it("preserves recovery instructions for an existing onchain deposit", () => {
     const message = lateMigrationIntakeFailureMessageV1(409, { error: { code: "deposit_already_recorded" } });
     expect(message).toBe("An Ethereum deposit already exists for this wallet. Do not sign again. Contact support.");

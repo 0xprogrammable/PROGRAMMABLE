@@ -59,11 +59,10 @@ import { parseLocalProfile } from "@/lib/profile/local-profile";
 import { robinhoodChain } from "@/lib/chains";
 import {
   assertMainTokenMigrationTransaction,
-  buildMainTokenMigrationPermitTypedData,
-  parseMainTokenMigrationPermitSignature,
-  serializeMainTokenMigrationPermitTypedData,
   type MainTokenMigrationPermitSignature,
 } from "@/lib/main-token-migration";
+import { signMainTokenMigrationPermitWithWallet } from "@/lib/main-token-migration-wallet";
+import { MigrationPermitWalletError } from "@/lib/main-token-migration-wallet-error";
 import {
   buildPredictionPermitTypedData,
   buildUsdgPermitTypedData,
@@ -2207,66 +2206,27 @@ function PrivyWalletBridge({
     value: bigint;
   }>) => {
     if (!connectedWallet || !wallet) {
-      throw new Error("Connect an Ethereum wallet before continuing");
+      throw new MigrationPermitWalletError("connection", "session");
     }
     const sessionSubject = user?.id ?? null;
     if (sessionSubject === null) {
-      throw new Error("Your wallet session expired. Reconnect and try again");
+      throw new MigrationPermitWalletError("session_changed", "session");
     }
     const expectedAccount = wallet.account.toLowerCase();
     const assertCurrentSession = () => {
       const current = walletRequestSessionRef.current;
       if (!current.authenticated || current.privyUserId !== sessionSubject ||
         current.account?.toLowerCase() !== expectedAccount) {
-        throw new Error("The wallet session changed. Reconnect and try again");
+        throw new MigrationPermitWalletError("session_changed", "session");
       }
     };
-    const typedData = buildMainTokenMigrationPermitTypedData({
-      ...input,
-      owner: wallet.account,
+    return signMainTokenMigrationPermitWithWallet({
+      account: wallet.account,
+      sessionSubject,
+      wallet: connectedWallet,
+      assertCurrentSession,
+      permit: input,
     });
-    const mainnetChainHex = `0x${mainnet.id.toString(16)}`;
-
-    try {
-      if (normalizeChainId(wallet.chainId) !== mainnetChainHex) {
-        await connectedWallet.switchChain(mainnet.id);
-        assertCurrentSession();
-      }
-      const provider = await connectedWallet.getEthereumProvider();
-      await assertExternalWalletAuthorityCurrent({
-        expectedAccount: wallet.account,
-        expectedChainId: mainnetChainHex,
-        networkName: mainnet.name,
-        request: (method) => provider.request({ method }),
-      });
-      const signature = await runWithBrowserWalletRequestLock({
-        sessionSubject,
-        account: wallet.account,
-        chainId: String(mainnet.id),
-        requestSubject: JSON.stringify([
-          "main-token-migration-permit-v1",
-          input.spender.toLowerCase(),
-          input.value.toString(),
-          input.nonce.toString(),
-          input.deadline.toString(),
-        ]),
-        assertCurrentSession,
-        execute: () => provider.request({
-          method: "eth_signTypedData_v4",
-          params: [
-            wallet.account,
-            serializeMainTokenMigrationPermitTypedData(typedData),
-          ],
-        }),
-      });
-      assertCurrentSession();
-      if (typeof signature !== "string") {
-        throw new Error("The wallet returned an invalid migration permit signature");
-      }
-      return parseMainTokenMigrationPermitSignature(signature as Hex);
-    } catch (caught) {
-      throw new Error(getWalletTransactionErrorMessage(caught));
-    }
   }, [connectedWallet, user?.id, wallet]);
 
   const signLaunchMessage = useCallback(async (
