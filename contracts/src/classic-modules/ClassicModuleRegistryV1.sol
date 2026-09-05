@@ -93,7 +93,8 @@ contract ClassicModuleRegistryV1 is Ownable2Step {
         if (implementation.code.length == 0 || (kind != T.FEE_POLICY && kind != T.TRADE_LIMIT)) {
             revert InvalidModule();
         }
-        bytes memory result = ClassicModuleCalls.read(implementation, abi.encodeCall(IClassicModuleV1.moduleKind, ()), 32);
+        bytes memory result =
+            ClassicModuleCalls.read(implementation, abi.encodeCall(IClassicModuleV1.moduleKind, ()), 32);
         if (abi.decode(result, (uint256)) != kind) revert InvalidModule();
         bytes32 codeHash = implementation.codehash;
         _versions[versionId] = Version(familyId, version, implementation, codeHash, manifestHash, kind, true);

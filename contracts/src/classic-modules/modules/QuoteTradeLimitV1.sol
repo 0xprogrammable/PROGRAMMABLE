@@ -6,7 +6,9 @@ import { ClassicModuleTypes as T } from "../ClassicModuleTypes.sol";
 
 /// @notice Caps native quote per transaction. It is not an anti-Sybil or guaranteed anti-sniping mechanism.
 contract QuoteTradeLimitV1 is IClassicModuleV1 {
-    function moduleKind() external pure returns (uint8) { return T.TRADE_LIMIT; }
+    function moduleKind() external pure returns (uint8) {
+        return T.TRADE_LIMIT;
+    }
 
     function validateConfig(bytes calldata config, uint16, uint16) external pure returns (bool) {
         if (config.length != 64) return false;

@@ -10,7 +10,11 @@ import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import { FullMath } from "@uniswap/v4-core/src/libraries/FullMath.sol";
 import { Hooks } from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import { BalanceDelta } from "@uniswap/v4-core/src/types/BalanceDelta.sol";
-import { BeforeSwapDelta, BeforeSwapDeltaLibrary, toBeforeSwapDelta } from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
+import {
+    BeforeSwapDelta,
+    BeforeSwapDeltaLibrary,
+    toBeforeSwapDelta
+} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
 import { Currency } from "@uniswap/v4-core/src/types/Currency.sol";
 import { PoolId } from "@uniswap/v4-core/src/types/PoolId.sol";
 import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
@@ -87,7 +91,9 @@ contract ClassicModuleHookV1 is BaseHook, IHookEvents, IHookSwapEvents {
         uint8 kind,
         bytes config
     );
-    event NativeFeesAccrued(bytes32 indexed poolId, bool isBuy, uint256 grossNative, uint256 platformFee, uint256 creatorFee);
+    event NativeFeesAccrued(
+        bytes32 indexed poolId, bool isBuy, uint256 grossNative, uint256 platformFee, uint256 creatorFee
+    );
 
     constructor(
         IPoolManager poolManager_,
@@ -96,7 +102,9 @@ contract ClassicModuleHookV1 is BaseHook, IHookEvents, IHookSwapEvents {
         address rewardAdmin,
         address noModuleRecipient
     ) BaseHook(poolManager_) {
-        if (address(poolManager_).code.length == 0 || address(registry_).code.length == 0) revert InvalidDependency();
+        if (address(poolManager_).code.length == 0 || address(registry_).code.length == 0) {
+            revert InvalidDependency();
+        }
         registry = registry_;
         ledger = new ClassicModuleFeeLedgerV1(
             poolManager_, IClassicModuleAuthorRegistry(address(registry_)), treasury, rewardAdmin, noModuleRecipient
@@ -110,12 +118,15 @@ contract ClassicModuleHookV1 is BaseHook, IHookEvents, IHookSwapEvents {
     {
         _validateShape(key);
         bytes32 poolId = PoolId.unwrap(key.toId());
-        if (poolConfig[poolId].registrar != address(0) || registration.launchWallet == address(0)) revert InvalidPool();
-        if (IClassicModuleTokenCreator(Currency.unwrap(key.currency1)).creator() != msg.sender) revert InvalidRegistrar();
+        if (poolConfig[poolId].registrar != address(0) || registration.launchWallet == address(0)) {
+            revert InvalidPool();
+        }
+        if (IClassicModuleTokenCreator(Currency.unwrap(key.currency1)).creator() != msg.sender) {
+            revert InvalidRegistrar();
+        }
         T.ModuleSnapshot[] memory snapshots;
-        (recipeHash, snapshots) = previewRecipe(
-            registration.buyCreatorFeeBps, registration.sellCreatorFeeBps, registration.modules
-        );
+        (recipeHash, snapshots) =
+            previewRecipe(registration.buyCreatorFeeBps, registration.sellCreatorFeeBps, registration.modules);
         poolConfig[poolId] = PoolConfig(
             msg.sender,
             registration.launchWallet,
@@ -130,8 +141,13 @@ contract ClassicModuleHookV1 is BaseHook, IHookEvents, IHookSwapEvents {
             _modules[poolId].push(snapshot);
             families[i] = snapshot.familyId;
             emit RecipeModuleBound(
-                poolId, snapshot.versionId, snapshot.familyId, snapshot.implementation, snapshot.codeHash,
-                snapshot.kind, snapshot.config
+                poolId,
+                snapshot.versionId,
+                snapshot.familyId,
+                snapshot.implementation,
+                snapshot.codeHash,
+                snapshot.kind,
+                snapshot.config
             );
         }
         ledger.registerPool(poolId, registration.creatorWallets, registration.creatorSharesBps, families);
@@ -153,37 +169,58 @@ contract ClassicModuleHookV1 is BaseHook, IHookEvents, IHookSwapEvents {
         bool hasFeePolicy;
         bytes32 previousFamily;
         for (uint256 i; i < selections.length; ++i) {
-            T.ModuleSelection calldata selection = selections[i];
-            ClassicModuleRegistryV1.Version memory version = registry.getVersion(selection.versionId);
-            if (!version.enabled) revert UnavailableModule(selection.versionId);
-            if (version.familyId <= previousFamily) revert InvalidModuleOrder(version.familyId);
-            previousFamily = version.familyId;
-            if (version.implementation.codehash != version.codeHash) revert ModuleCodeChanged(selection.versionId);
-            if (version.kind == T.FEE_POLICY) {
+            T.ModuleSnapshot memory snapshot = _snapshot(selections[i], buyFee, sellFee);
+            if (snapshot.familyId <= previousFamily) revert InvalidModuleOrder(snapshot.familyId);
+            previousFamily = snapshot.familyId;
+            if (snapshot.kind == T.FEE_POLICY) {
                 if (hasFeePolicy) revert ExclusiveEffectConflict();
                 hasFeePolicy = true;
             }
-            if (selection.config.length > T.MAX_CONFIG_BYTES) revert InvalidModuleConfig(selection.versionId);
-            bytes memory valid = ClassicModuleCalls.read(
-                version.implementation,
-                abi.encodeCall(IClassicModuleV1.validateConfig, (selection.config, buyFee, sellFee)),
-                32
+            snapshots[i] = snapshot;
+            hashes[i] = keccak256(
+                abi.encode(
+                    snapshot.versionId,
+                    snapshot.familyId,
+                    snapshot.implementation,
+                    snapshot.codeHash,
+                    snapshot.kind,
+                    keccak256(snapshot.config)
+                )
             );
-            if (abi.decode(valid, (uint256)) != 1) revert InvalidModuleConfig(selection.versionId);
-            snapshots[i] = T.ModuleSnapshot(
-                selection.versionId, version.familyId, version.implementation, version.codeHash, version.kind, selection.config
-            );
-            hashes[i] = keccak256(abi.encode(
-                selection.versionId, version.familyId, version.implementation, version.codeHash, version.kind,
-                keccak256(selection.config)
-            ));
         }
-        recipeHash = keccak256(abi.encode(
-            T.RECIPE_DOMAIN, block.chainid, address(this), address(registry), buyFee, sellFee, hashes
-        ));
+        recipeHash = keccak256(
+            abi.encode(T.RECIPE_DOMAIN, block.chainid, address(this), address(registry), buyFee, sellFee, hashes)
+        );
     }
 
-    function recipeOf(bytes32 poolId) external view returns (bytes32) { return _config(poolId).recipeHash; }
+    function _snapshot(T.ModuleSelection calldata selection, uint16 buyFee, uint16 sellFee)
+        private
+        view
+        returns (T.ModuleSnapshot memory)
+    {
+        ClassicModuleRegistryV1.Version memory version = registry.getVersion(selection.versionId);
+        if (!version.enabled) revert UnavailableModule(selection.versionId);
+        if (version.implementation.codehash != version.codeHash) revert ModuleCodeChanged(selection.versionId);
+        if (selection.config.length > T.MAX_CONFIG_BYTES) revert InvalidModuleConfig(selection.versionId);
+        bytes memory valid = ClassicModuleCalls.read(
+            version.implementation,
+            abi.encodeCall(IClassicModuleV1.validateConfig, (selection.config, buyFee, sellFee)),
+            32
+        );
+        if (abi.decode(valid, (uint256)) != 1) revert InvalidModuleConfig(selection.versionId);
+        return T.ModuleSnapshot(
+            selection.versionId,
+            version.familyId,
+            version.implementation,
+            version.codeHash,
+            version.kind,
+            selection.config
+        );
+    }
+
+    function recipeOf(bytes32 poolId) external view returns (bytes32) {
+        return _config(poolId).recipeHash;
+    }
 
     function recipeModules(bytes32 poolId) external view returns (T.ModuleSnapshot[] memory) {
         _config(poolId);
@@ -205,16 +242,22 @@ contract ClassicModuleHookV1 is BaseHook, IHookEvents, IHookSwapEvents {
             T.Effect memory effect = abi.decode(
                 ClassicModuleCalls.read(
                     module.implementation, abi.encodeCall(IClassicModuleV1.evaluate, (context, module.config)), 128
-                ), (T.Effect)
+                ),
+                (T.Effect)
             );
             if (module.kind == T.FEE_POLICY) {
-                if (effect.buyCreatorFeeBps > config.buyCreatorFeeBps || effect.sellCreatorFeeBps > config.sellCreatorFeeBps
-                    || effect.buyQuoteLimit != 0 || effect.sellQuoteLimit != 0) revert InvalidModuleEffect(module.versionId);
+                if (
+                    effect.buyCreatorFeeBps > config.buyCreatorFeeBps
+                        || effect.sellCreatorFeeBps > config.sellCreatorFeeBps || effect.buyQuoteLimit != 0
+                        || effect.sellQuoteLimit != 0
+                ) revert InvalidModuleEffect(module.versionId);
                 policy.buyCreatorFeeBps = effect.buyCreatorFeeBps;
                 policy.sellCreatorFeeBps = effect.sellCreatorFeeBps;
             } else if (module.kind == T.TRADE_LIMIT) {
-                if (effect.buyCreatorFeeBps != 0 || effect.sellCreatorFeeBps != 0
-                    || (effect.buyQuoteLimit == 0 && effect.sellQuoteLimit == 0)) revert InvalidModuleEffect(module.versionId);
+                if (
+                    effect.buyCreatorFeeBps != 0 || effect.sellCreatorFeeBps != 0
+                        || (effect.buyQuoteLimit == 0 && effect.sellQuoteLimit == 0)
+                ) revert InvalidModuleEffect(module.versionId);
                 policy.buyQuoteLimit = _intersection(policy.buyQuoteLimit, effect.buyQuoteLimit);
                 policy.sellQuoteLimit = _intersection(policy.sellQuoteLimit, effect.sellQuoteLimit);
             } else {
@@ -224,13 +267,17 @@ contract ClassicModuleHookV1 is BaseHook, IHookEvents, IHookSwapEvents {
     }
 
     function quoteGrossFees(uint256 grossNative, uint16 creatorFeeBps)
-        external pure returns (uint256 creatorFee, uint256 platformFee)
+        external
+        pure
+        returns (uint256 creatorFee, uint256 platformFee)
     {
         return _fees(grossNative, creatorFeeBps, false);
     }
 
     function quoteExactOutputFees(uint256 netNative, uint16 creatorFeeBps)
-        external pure returns (uint256 creatorFee, uint256 platformFee)
+        external
+        pure
+        returns (uint256 creatorFee, uint256 platformFee)
     {
         return _fees(netNative, creatorFeeBps, true);
     }
@@ -250,25 +297,34 @@ contract ClassicModuleHookV1 is BaseHook, IHookEvents, IHookSwapEvents {
     }
 
     function _beforeSwap(address sender, PoolKey calldata key, SwapParams calldata params, bytes calldata)
-        internal override returns (bytes4, BeforeSwapDelta, uint24)
+        internal
+        override
+        returns (bytes4, BeforeSwapDelta, uint24)
     {
         _validateShape(key);
         bytes32 poolId = PoolId.unwrap(key.toId());
         if (_pending[poolId].requestHash != bytes32(0)) revert SwapAlreadyActive();
         if (params.amountSpecified == 0) revert InvalidSwapContext();
         T.Effect memory policy = quotePolicy(poolId);
-        uint16 creatorFeeBps = params.zeroForOne ? policy.buyCreatorFeeBps : policy.sellCreatorFeeBps;
-        uint256 limit = params.zeroForOne ? policy.buyQuoteLimit : policy.sellQuoteLimit;
-        _pending[poolId] = PendingSwap(keccak256(abi.encode(sender, params)), creatorFeeBps, limit);
+        PendingSwap memory pending = PendingSwap(
+            keccak256(abi.encode(sender, params)),
+            params.zeroForOne ? policy.buyCreatorFeeBps : policy.sellCreatorFeeBps,
+            params.zeroForOne ? policy.buyQuoteLimit : policy.sellQuoteLimit
+        );
+        _pending[poolId] = pending;
         bool nativeSpecified = params.zeroForOne == (params.amountSpecified < 0);
         if (!nativeSpecified) return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
-        uint256 fee = _charge(poolId, params.zeroForOne, _absolute(params.amountSpecified), params.amountSpecified > 0, creatorFeeBps, limit);
+        uint256 fee = _charge(poolId, params, _absolute(params.amountSpecified), pending);
         return (IHooks.beforeSwap.selector, toBeforeSwapDelta(fee.toInt256().toInt128(), 0), 0);
     }
 
-    function _afterSwap(address sender, PoolKey calldata key, SwapParams calldata params, BalanceDelta delta, bytes calldata)
-        internal override returns (bytes4, int128)
-    {
+    function _afterSwap(
+        address sender,
+        PoolKey calldata key,
+        SwapParams calldata params,
+        BalanceDelta delta,
+        bytes calldata
+    ) internal override returns (bytes4, int128) {
         _validateShape(key);
         bytes32 poolId = PoolId.unwrap(key.toId());
         PendingSwap memory pending = _pending[poolId];
@@ -277,38 +333,48 @@ contract ClassicModuleHookV1 is BaseHook, IHookEvents, IHookSwapEvents {
         bool nativeSpecified = params.zeroForOne == (params.amountSpecified < 0);
         uint256 specified = _absolute(params.amountSpecified);
         if (nativeSpecified) {
-            (uint256 creatorFee, uint256 platformFee) = _fees(specified, pending.creatorFeeBps, params.amountSpecified > 0);
+            (uint256 creatorFee, uint256 platformFee) =
+                _fees(specified, pending.creatorFeeBps, params.amountSpecified > 0);
             uint256 fee = creatorFee + platformFee;
             uint256 expected = params.amountSpecified > 0 ? specified + fee : specified - fee;
             if (_absolute(int256(delta.amount0())) != expected) revert PartialFillUnsupported();
             return (IHooks.afterSwap.selector, 0);
         }
         if (_absolute(int256(delta.amount1())) != specified) revert PartialFillUnsupported();
-        uint256 charged = _charge(
-            poolId, params.zeroForOne, _absolute(int256(delta.amount0())), params.amountSpecified > 0,
-            pending.creatorFeeBps, pending.quoteLimit
-        );
+        uint256 charged = _charge(poolId, params, _absolute(int256(delta.amount0())), pending);
         return (IHooks.afterSwap.selector, charged.toInt256().toInt128());
     }
 
-    function _charge(bytes32 poolId, bool isBuy, uint256 nativeAmount, bool amountIsNet, uint16 creatorBps, uint256 limit)
-        private returns (uint256 fee)
+    function _charge(bytes32 poolId, SwapParams calldata params, uint256 nativeAmount, PendingSwap memory pending)
+        private
+        returns (uint256 fee)
     {
-        (uint256 creatorFee, uint256 platformFee) = _fees(nativeAmount, creatorBps, amountIsNet);
+        bool amountIsNet = params.amountSpecified > 0;
+        (uint256 creatorFee, uint256 platformFee) = _fees(nativeAmount, pending.creatorFeeBps, amountIsNet);
         fee = creatorFee + platformFee;
         uint256 gross = nativeAmount + (amountIsNet ? fee : 0);
-        if (limit != 0 && gross > limit) revert QuoteLimitExceeded(gross, limit);
+        if (pending.quoteLimit != 0 && gross > pending.quoteLimit) {
+            revert QuoteLimitExceeded(gross, pending.quoteLimit);
+        }
         if (fee == 0) return 0;
         // Mint fully backed native claims before notifying the fixed ledger. It never calls recipients during accrual.
         NATIVE.take(poolManager, address(ledger), fee, true);
         ledger.accrue(poolId, platformFee, creatorFee);
         emit HookFee(poolId, address(this), fee.toUint128(), 0);
-        emit HookSwap(PoolId.wrap(poolId), address(this), -fee.toInt256().toInt128(), 0, uint24(creatorBps + PROTOCOL_FEE_BPS) * 100);
-        emit NativeFeesAccrued(poolId, isBuy, gross, platformFee, creatorFee);
+        emit HookSwap(
+            PoolId.wrap(poolId),
+            address(this),
+            -fee.toInt256().toInt128(),
+            0,
+            uint24(pending.creatorFeeBps + PROTOCOL_FEE_BPS) * 100
+        );
+        emit NativeFeesAccrued(poolId, params.zeroForOne, gross, platformFee, creatorFee);
     }
 
     function _fees(uint256 nativeAmount, uint16 creatorBps, bool amountIsNet)
-        private pure returns (uint256 creatorFee, uint256 platformFee)
+        private
+        pure
+        returns (uint256 creatorFee, uint256 platformFee)
     {
         if (creatorBps > MAX_CREATOR_FEE_BPS) revert InvalidCreatorFee();
         uint256 totalBps = creatorBps + PROTOCOL_FEE_BPS;
@@ -324,8 +390,10 @@ contract ClassicModuleHookV1 is BaseHook, IHookEvents, IHookSwapEvents {
     }
 
     function _validateShape(PoolKey calldata key) private view {
-        if (Currency.unwrap(key.currency0) != address(0) || Currency.unwrap(key.currency1).code.length == 0
-            || address(key.hooks) != address(this) || key.fee != LP_FEE_PIPS || key.tickSpacing != TICK_SPACING) {
+        if (
+            Currency.unwrap(key.currency0) != address(0) || Currency.unwrap(key.currency1).code.length == 0
+                || address(key.hooks) != address(this) || key.fee != LP_FEE_PIPS || key.tickSpacing != TICK_SPACING
+        ) {
             revert InvalidPool();
         }
     }
