@@ -37,17 +37,13 @@ const menuNavItems = [
 ];
 
 const mobileNavItems = [...desktopNavItems, ...menuNavItems];
-const warmedNavigationRoutes = new Set<string>();
 
 function warmNavigationRoute(
   router: ReturnType<typeof useRouter>,
   href: string,
 ) {
-  if (warmedNavigationRoutes.has(href)) return;
-  warmedNavigationRoutes.add(href);
-  router.prefetch(href, {
-    onInvalidate: () => warmedNavigationRoutes.delete(href),
-  });
+  // The router deduplicates fresh entries and renews expired route data.
+  router.prefetch(href);
 }
 
 function HeaderSocialLinks({ mobile = false }: { mobile?: boolean }) {
