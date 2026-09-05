@@ -15,6 +15,8 @@ Keep source/package revision, chain-specific activation, reusable template, reso
 
 A template binds exact package versions, input definitions, defaults and unresolved account/component references. A resolved recipe binds the actual chain, admitted code, complete dependency/instance graph, initialization, configuration, rights, funding and connections. Running state includes counters, claims and action progress allowed by the immutable rules. Permitted state transitions must not imply permission to change the rules.
 
+Classify values as fixed launch rules, evolving runtime state, explicitly controlled parameters, or external inputs. A future package may expose a controlled parameter only under a launch-bound policy declaring the role, scope, limits and effects of that change. This does not authorize changing previously fixed parameters or existing launches. Preserve the agreed Classic guarantees, including protected funds, fee rights and code bindings. A module-operator role and the Creator-payout CTO role are independent unless an explicitly admitted launch policy defines a compatible relationship.
+
 Sharing or importing a template grants no authority and executes no contributor code. Resolve a symbolic launch-creator role from the actual launch authorization. Preserve a deliberately literal third-party recipient and clearly disclose it; do not silently retain another user's resolved creator wallet when reusing a role-based template. Defaults cannot replace registry-bound module authors or reward attribution. Re-resolve chain-sensitive assets and component references before preview and signing. Existing launches never follow a preset's latest version.
 
 The full dependency graph must distinguish shared instances from separate instances of identical code. Their behavior is different and therefore their commitments must differ. Bind transitive dependencies, exact connections, initialization and externally controlled assumptions. No dependency may be silently resolved through a mutable `latest` pointer.
@@ -53,11 +55,42 @@ The no-module destination for the intended author bucket remains an unresolved r
 
 Each package describes its reads and actions: instance, version, typed inputs/outputs, actor role, prerequisites, approvals, funding limits and meaningful state/result. The host can therefore offer new actions through a generic coin view without handwritten central integration for every contribution. Prepare, simulate, explain effects, authorize, execute and resolve the canonical outcome through the same path for UI/API/agent.
 
-Automatic forms are a complete fallback. Optional custom presentation runs in isolation, submits typed inputs/action intents to the host, and never gets a direct privileged wallet provider. The host validates, encodes and discloses the actual operation. The fixed recipe and configuration remain inspectable even when a custom UI or author service is unavailable.
+Automatic controls provide a fallback for essential state, financial actions and administration. They need not reproduce every custom game interaction or visualization. A custom surface that is essential to the promised behavior must be declared required and delivered before availability. Custom presentation runs in isolation, submits typed inputs/action intents to the host, and never gets a direct privileged wallet provider. The host validates, encodes and discloses the actual operation. The fixed recipe and control policy remain inspectable even when a custom UI or author service is unavailable.
 
 An asynchronous job needs a specified caller, execution-cost source, available/reserved budget, request identifier, authenticated completion and bounded retries. Distinguish settlement-critical dependencies from later fulfillment. The recipe defines terminal handling for a genuine timeout: an enforceable refund or another explicitly agreed result. A generic timeout must never permit selecting a favorable random result after it becomes observable. Services/bridges have external assumptions; a pinned address does not guarantee delivery or remove external control.
 
 Preserve accessible claims and agreed exit paths without a live Programmable frontend or author server. Catalogue deprecation affects future selection, not accrued entitlements or existing code. Do not add a hidden emergency upgrade or transfer of existing funds as an incident response. Optional failure handling may skip a component only where the admitted composition preserves all promised rights under that exact failure mode.
+
+## Required website integration and documentation
+
+A publicly available module ships its complete intended management experience with its contribution. An automatically operating module can declare that it needs no manual controls. Source acceptance and complete website/chain availability are distinct states. Contract review alone must not make an incompletely integrated module selectable for a new public launch.
+
+The package's version-bound management description must include:
+
+| Area | Required declaration |
+| --- | --- |
+| Configuration | Typed launch inputs, defaults, units, validation and role/component binding phases. |
+| Reads and history | Actual source, chain/instance/asset binding, schema, freshness/finality, pagination and unavailable-data handling. |
+| Actions and controls | Complete relevant operation inventory, inputs, target/function binding, effects, funding/approvals, preconditions and result states. |
+| Roles and policy | Source of authority, scope, permitted changes, bounds and allowed role transfers. UI visibility never grants authority. |
+| Presentation | Clear labels/help and public, personal or management placement; custom UI requirements where needed. Role names can be contributed and are not limited to these view groupings. |
+| Host requirements | Required and optional versioned rendering, data, execution and integration capabilities. |
+| Services and jobs | Operators, actual data use, scoped access, financing, dependencies, retry and terminal outcome. |
+| Documentation and evidence | Setup/use/control/failure guidance and local role/state previews matched to the exact code and descriptors. |
+
+Maintain a complete inventory of externally reachable operations with relevant effects on rights, balances, settings or promised service. Map each to a user action, administrative action, system/automation call, or a justified non-applicable interface. Include inherited privileged functions and supporting components. Internal helpers do not each require a button. Review/tests compare declared behavior with actual callable code rather than trusting the descriptor's self-report.
+
+Enforce authority in the relevant contract or service for direct calls as well as host-mediated calls. Hiding a control is not enforcement. At action preparation and execution, account for changed roles, stale values and current revisions where applicable. Explain current value, permitted change, economic effect and acting authority for controlled parameters. Keep a verified history of consequential changes. Account login, gas payer and authenticated module operator are not interchangeable identities.
+
+Bind reads to their actual sources and show absent/stale data as such. Extend module data views and event projections without changing common launch identity. Module-supplied transformations/indexing must be isolated from privileged infrastructure. Backend observation alone does not establish onchain authority. Preserve the distinction between broadcast, confirmation, finalized chain result and external service fulfillment.
+
+Longer workflows declare their step order, approvals, costs, retries and recovery after browser reload, wallet/network change or an uncertain transaction outcome. Do not resubmit blindly and create duplicate jobs. Reconcile the relevant receipt, operation ID and current state before resuming. The host derives the actual transaction/authorization from the admitted action; custom UI cannot silently substitute targets, recipients, scopes or amounts.
+
+Resolve required versus optional host capabilities before availability. A missing capability produces a specific integration requirement in the contributor preview. The author may supply a reviewed renderer, adapter or service implementation through the same package workflow. Capability registration does not by itself grant privileged authority or create a financial obligation for the platform. Existing UI widgets are reusable starting points, not a permanent limit on possible module interfaces.
+
+The local preview must render the package's real configuration, data and action model with controlled fixtures for each meaningful role/state, including pending, failed, stale and unavailable conditions. Require relevant mobile and keyboard coverage. Product controls use understandable effects and labels; implementation details need not leak into the user's normal flow.
+
+Documentation is a required part of the same reviewed package: setup, operation, roles, financial effects, mutability, external requirements, failure recovery and maintenance of existing instances. Record code, schema, action/data and presentation revisions. Presentation-only fixes can preserve the established action contract; changes to targets, rights or economic semantics need their own review. A mutable UI URL cannot redefine a launch's operation. Keep older active instances resolvable and preserve essential management/claim fallback when a version is closed to new launches.
 
 ## Composition review and financial claims
 
@@ -73,7 +106,7 @@ Source-first packages must validate before a chain deployment exists. Keep contr
 
 Prefetch exact dependencies into a bounded cache before offline untrusted builds. Builds receive no production secrets, signing credentials, OIDC or publishing authority. Contributors cannot alter the trusted review harness via their intake descriptor. Provide status and actionable machine-readable errors. Apply proportionate spam/rate/resource controls without assuming a platform-token purchase requirement.
 
-A high-volume catalogue needs paginated/searchable metadata and reproducible exact-revision retrieval, not a download of one enormous catalogue JSON for each request. Reuse review evidence only for matching code and admitted configuration/composition bounds. Novel protected rights and interactions need substantive review. A growing reviewer process is necessary; a single daily manual pass is not a million-contributor operating model.
+The initial operating assumption is several contributions and a manageable review queue, not millions of submissions. Start with one durable intake, clear feedback, isolated checks and explicit review ownership. Keep searchable metadata and exact-revision retrieval extensible; add workers or infrastructure only when measured demand warrants them. Reuse review evidence only for matching code and admitted configuration/composition bounds. Novel protected rights and interactions still need substantive review.
 
 An admitted version remains directly configurable and launchable inside its reviewed parameter/composition envelope. Each new permitted recipient or percentage must not require a fresh manual per-coin approval. The execution path still checks that envelope; a new right or unreviewed interaction does not inherit approval merely because the code version is unchanged.
 
@@ -87,5 +120,7 @@ The starter must let an independent developer create, locally simulate, check an
 4. Demonstrate canonical graph commitments for shared versus separate dependency instances and unchanged old recipes after catalogue/template updates.
 5. Exercise delayed/reordered/failed external completion and terminal recovery without forfeiting existing claims or creating unfunded liabilities.
 6. Submit a source package with no deployment, reproduce its isolated build, receive usable review status, then separately bind a chain activation. Preserve the open architecture's independent unforeseen-contribution and new-engine acceptance tests.
+7. Ship one controllable module's full management description and local website preview: all relevant operations accounted for, legitimate controls usable, direct unauthorized calls rejected, controlled values within launch-bound policy, and required capabilities/data/services actually resolved before availability.
+8. Prove that the displayed operation and actual authorization agree, interrupted workflows reconcile without duplicate execution, and an older live instance remains usable after a new package/presentation release. Documentation must describe the same tested roles and behavior.
 
 Passing these concrete demonstrations supports a bounded contributor preview. Production availability additionally requires appropriate independent review and actual deployment, source, lifecycle, indexing and payout evidence.

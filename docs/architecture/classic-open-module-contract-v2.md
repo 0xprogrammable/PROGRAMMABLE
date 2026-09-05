@@ -4,6 +4,8 @@ Status: architecture specification, 5 September 2026. The general stateful modul
 
 The subsequent [configuration and contribution gap review](classic-configurable-packages.md) specifies template/instance separation, typed roles and structured inputs, canonical financial allocation, the CTO/module-funding conflict, generic post-launch actions and source-first contribution acceptance. Those requirements are part of this architecture; a descriptor with arbitrary business names alone does not satisfy them.
 
+The [website integration requirement](classic-configurable-packages.md#required-website-integration-and-documentation) additionally makes complete reads, management/actions, role/control policies, host requirements, documentation and a local UI preview part of every available contribution. Launch-bound immutability protects the selected rules and their control policy; it does not forbid executing expressly permitted controls under those rules. Previously fixed parameters do not become editable through this clarification.
+
 ## Product contract
 
 A Classic launch has one canonical token and primary bonding-curve pool. Its launch-time recipe may bind multiple modules and supporting contracts. Adding a reusable module using supported execution primitives must not require changing the token, launcher, hook, common identity reader, indexer identity schema, or a handwritten frontend form. Catalogue size is not a runtime instruction to execute every entry.
@@ -58,7 +60,7 @@ A first implementation may use an immutable execution adapter which authenticate
 - Swap, state transitions, funding, core fees and reward credits succeed or revert together. The guard must cover the whole lifecycle, including external module calls; deleting the current V1 pending slot before a new callback is not sufficient protection.
 - Protected operations may fund a module budget or credit a beneficiary from that budget. The operation checks actual backing and cannot spend another instance's assets or existing claims.
 - Swaps create backed claims; claim recipients are not called during the swap. A rejecting recipient must not freeze trading.
-- Resource limits cover callback gas, state/return-data exposure, operation count and transaction size. They must be measured and published; no million-module synchronous execution claim follows from an open catalogue.
+- Resource limits cover callback gas, state/return-data exposure, operation count and transaction size. They must be measured and published for the selected execution profile; growing the catalogue does not add every catalogue entry to a swap's execution.
 - The selected immutable code revision, dependencies, initialization, execution order, funding rules and failure behavior belong in the recipe. Catalogue approval updates apply only to new launches.
 
 The fixed 20 bps assessment retains its 10 bps Programmable and 10 bps equal-per-selected-family author allocation. Module budgets have an explicit additional source. Splitting one module implementation into internal helper contracts does not create extra paid module families. New action paths must independently prove correct fee coverage; the native V1 swap formula proves nothing about an unspecified future settlement model.
