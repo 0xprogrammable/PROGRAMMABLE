@@ -142,6 +142,7 @@ function HeaderWalletButton({
     preloadWallet,
     disconnect,
   } = useWallet();
+  const router = useRouter();
   const menuId = useId();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const busyRef = useRef(false);
@@ -206,7 +207,11 @@ function HeaderWalletButton({
       </button>
       {menuOpen && wallet ? (
         <div className={styles.walletMenu} id={menuId} role="group" aria-label="Wallet actions">
-          <Link href="/profile" prefetch={false} onClick={onClose}>Profile</Link>
+          <Link href="/profile" prefetch={false}
+            onFocus={() => warmNavigationRoute(router, "/profile")}
+            onPointerEnter={() => warmNavigationRoute(router, "/profile")}
+            onPointerDown={() => warmNavigationRoute(router, "/profile")}
+            onClick={onClose}>Profile</Link>
           <button type="button" disabled={disconnecting} onClick={() => {
             onClose();
             triggerRef.current?.focus();
