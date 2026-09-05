@@ -65,6 +65,10 @@ Legacy Registry and GitHub intake are closed.
 V4 metadata images are exactly PNG or single-frame GIF, as published by `metadataImage.mediaTypes` and `gifFrames`.
 JPEG, WebP, and animated GIF are rejected by the V4 packer before any network request.
 
+For a minimal zero-funding project, use the corrected [Robinhood V4 example](https://github.com/programmablehq/PROGRAMMABLE/tree/production/packages/launch/examples/robinhood-v4-no-broadcast) from the protected production checkout with the verified CLI `4.0.0`. The older example bundled in the immutable CLI tarball does not pass current production admission and simulation. Pin the checked-out project revision as described in the example.
+
+The example keeps its PoolManager immutable and rejects callbacks from other callers. Its permit includes the current finalized Robinhood checkpoint while preserving the one-hour maximum lifetime; finalized blocks can trail the API clock by many minutes. The Router also requires the pool to be initialized before stamping. A zero-funding request can initialize an empty pool without adding liquidity and declares `model: none-empty-pool`, `declaredLaunchState: pool-initialized-empty` and no liquidity target IDs.
+
 A bounded external-contract reference is allowed only when the protected API server verifies its exact
 `eip155:4663` address, live runtime hash, source-verification evidence, declared graph role and checkpoint. Arbitrary
 or unbound references gain no trust and block admission. These checks are not public-activation or behavior evidence.
