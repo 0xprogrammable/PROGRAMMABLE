@@ -105,7 +105,7 @@ describe("wallet login lock", () => {
       "if (!walletLoginAttemptGateRef.current.tryStart()) return;",
     );
     expect(provider).toMatch(
-      /onComplete: \(\) => \{\s+settleWalletLoginAttempt\(\);/u,
+      /onComplete: \(\{ user: signedInUser, loginAccount \}\) => \{\s+settleWalletLoginAttempt\(\);/u,
     );
     expect(provider).toMatch(
       /onError: \(errorCode\) => \{\s+settleWalletLoginAttempt\(\);/u,
