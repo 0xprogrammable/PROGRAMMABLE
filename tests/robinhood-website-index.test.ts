@@ -228,6 +228,33 @@ describe("Robinhood website index synchronization", () => {
     }
   });
 
+  it("preserves verified launches when a successful overlap response omits their logs", async () => {
+    const original = launch(1, 250);
+    const memory = memoryStore(snapshot([original]));
+    const source = indexSource([], 399n);
+
+    const result = await syncRobinhoodIndex(source, memory.store, OPTIONS);
+
+    expect(source.launches.mock.calls[0].slice(0, 2)).toEqual([236n, 335n]);
+    expect(result).toMatchObject({ status: "ready", indexedThrough: "399", launches: 1 });
+    expect(memory.saved()?.items).toEqual([original]);
+  });
+
+  it.each([
+    { blockHash: point(250, 1).hash },
+    { logIndex: 7 },
+  ])("rejects a changed launch location without a canonical reorg: %j", async (changed) => {
+    const original = snapshot([launch(1, 250)]);
+    const memory = memoryStore(original);
+    const source = indexSource([launch(1, 250, changed)], 399n);
+
+    const result = await syncRobinhoodIndex(source, memory.store, OPTIONS);
+
+    expect(result).toMatchObject({ status: "partial", ranges: 0, indexedThrough: "299", launches: 1 });
+    expect(memory.writes).toEqual([]);
+    expect(memory.saved()).toEqual(original);
+  });
+
   it("keeps default RPC ranges within the provider's 10,000-block inclusive limit", async () => {
     const source = indexSource([], 20_100n);
     const memory = memoryStore();

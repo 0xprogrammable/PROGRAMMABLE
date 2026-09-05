@@ -76,8 +76,17 @@ export async function syncRobinhoodIndex(source: IndexSource, store: IndexStore,
       const end = await source.block(to);
       const rows = await source.launches(from, to, [...snapshot.items, ...(snapshot.pending?.items ?? [])]);
       if ((await source.block(to)).hash.toLowerCase() !== end.hash.toLowerCase()) throw new Error("Range changed");
-      const items = snapshot.items.filter((row) => BigInt(row.blockNumber) < from || BigInt(row.blockNumber) > to);
-      items.push(...rows);
+      // Previously verified rows are removed only by the explicit reorg rewind.
+      // An incomplete-but-successful overlap response cannot erase their origin.
+      const byLaunchId = new Map(snapshot.items.map((row) => [row.launchId.toLowerCase(), row]));
+      for (const row of rows) {
+        const existing = byLaunchId.get(row.launchId.toLowerCase());
+        if (existing && (existing.blockHash !== row.blockHash || existing.logIndex !== row.logIndex)) {
+          throw new Error("Launch location changed without a reorg");
+        }
+        byLaunchId.set(row.launchId.toLowerCase(), row);
+      }
+      const items = [...byLaunchId.values()];
       const cursor = snapshot.cursor && BigInt(snapshot.cursor.number) > to ? snapshot.cursor : end;
       snapshot = parseSnapshot({ ...snapshot, cursor, pending: null,
         finalizedBlock: source.finalized.number,
