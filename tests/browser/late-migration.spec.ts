@@ -142,6 +142,45 @@ test("one explicit click signs exact permit once and submits authenticated bound
   expect(submitted.headers["idempotency-key"]).toMatch(/^late-migration-intake-/u);
 });
 
+test("a stale cached chain switches the actual provider to Ethereum before signing", async ({ page }) => {
+  await ready(page); await selectMax(page);
+  await configure(page, { providerChainId: "0x1237" });
+  await page.getByRole("button", { name: "Sign and send", exact: true }).click();
+  await expect(page.getByText("Deposit submitted. Waiting for confirmation.", { exact: true })).toBeVisible();
+  const data = await snapshot(page);
+  expect(data.networkSwitches).toEqual([1]);
+  expect(data.walletMethods.filter(method => method === "eth_signTypedData_v4")).toHaveLength(1);
+  expect(submits(data)).toHaveLength(1);
+});
+
+test("numeric unsupported signing errors show actionable recovery without submitting", async ({ page }) => {
+  await ready(page); await selectMax(page); await configure(page, { permitErrorCode: 4200 });
+  await page.getByRole("button", { name: "Sign and send", exact: true }).click();
+  await expect(page.getByRole("alert")).toHaveText("This wallet connection cannot sign the Ethereum permit. Update your wallet app, then reconnect and try again. Nothing was moved.");
+  expect(submits(await snapshot(page))).toHaveLength(0);
+});
+
+test("missing browser Web Locks explains compatibility and never opens a signature", async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(navigator, "locks", { configurable: true, value: undefined }));
+  await ready(page); await selectMax(page);
+  await page.getByRole("button", { name: "Sign and send", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("This browser cannot safely open the wallet request.");
+  const data = await snapshot(page);
+  expect(data.walletMethods).not.toContain("eth_signTypedData_v4");
+  expect(submits(data)).toHaveLength(0);
+});
+
+test("an interrupted wallet request remains locked and a second click explains the pending request", async ({ page }) => {
+  await ready(page); await selectMax(page); await configure(page, { permitErrorCode: 4900 });
+  await page.getByRole("button", { name: "Sign and send", exact: true }).click();
+  await expect(page.getByRole("alert")).toHaveText("Reconnect this wallet, then try again. Nothing was moved.");
+  await page.getByRole("button", { name: "Sign and send", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("A wallet request is already open.");
+  const data = await snapshot(page);
+  expect(data.walletMethods.filter(method => method === "eth_signTypedData_v4")).toHaveLength(1);
+  expect(submits(data)).toHaveLength(0);
+});
+
 test("signature rejection never submits and permits a new explicit attempt", async ({ page }) => {
   await ready(page); await selectMax(page); await configure(page, { rejectSignature: true });
   await page.getByRole("button", { name: "Sign and send", exact: true }).click();
