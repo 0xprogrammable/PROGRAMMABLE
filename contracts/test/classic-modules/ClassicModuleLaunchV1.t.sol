@@ -21,7 +21,7 @@ import { HookMiner } from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
 import { PositionInfo } from "@uniswap/v4-periphery/src/libraries/PositionInfoLibrary.sol";
 import { Vm } from "forge-std/Vm.sol";
 
-import { ClassicPositionPlannerV1 } from "../../src/ClassicPositionPlannerV1.sol";
+import { ClassicModulePositionPlannerV1 } from "../../src/classic-modules/ClassicModulePositionPlannerV1.sol";
 import { LockedPositionFeeForwarderFactoryV1 } from "../../src/LockedPositionFeeForwarderFactoryV1.sol";
 import { ClassicModuleHookV1 } from "../../src/classic-modules/ClassicModuleHookV1.sol";
 import { ClassicModuleRegistryV1 } from "../../src/classic-modules/ClassicModuleRegistryV1.sol";
@@ -50,7 +50,7 @@ contract ClassicModuleLaunchV1Test is Deployers {
     UERC20Factory private tokenFactory;
     ClassicModuleRegistryV1 private registry;
     ClassicModuleHookV1 private hook;
-    ClassicPositionPlannerV1 private planner;
+    ClassicModulePositionPlannerV1 private planner;
     ClassicModuleLaunchPolicyV1 private policy;
     LockedPositionFeeForwarderFactoryV1 private forwarderFactory;
     ClassicModuleLaunchV1 private launcher;
@@ -86,7 +86,7 @@ contract ClassicModuleLaunchV1Test is Deployers {
         hook = new ClassicModuleHookV1{ salt: salt }(manager, registry, treasury, rewardAdmin, noModuleRecipient);
         assertEq(address(hook), predicted);
         ledger = IClassicModuleLedgerForLaunchTest(address(hook.ledger()));
-        planner = new ClassicPositionPlannerV1();
+        planner = new ClassicModulePositionPlannerV1();
         policy = new ClassicModuleLaunchPolicyV1();
         forwarderFactory = new LockedPositionFeeForwarderFactoryV1(positionManager);
         launcher = new ClassicModuleLaunchV1(
@@ -231,8 +231,26 @@ contract ClassicModuleLaunchV1Test is Deployers {
         _assertAtomicRevert(parameters, MIN_BUY, bytes4(0));
     }
 
-    function test_finiteCurveDoesNotSilentlyPartiallyFillLaunchBuy() public {
-        _assertAtomicRevert(_parameters(), 10 ether, bytes4(0));
+    function test_eightNativeLaunchAndLaterBuySellPassBeyondOldCurveEndpoint() public {
+        ClassicModuleLaunchV1.LaunchRecord memory result = _launch(_parameters(), 8 ether);
+        assertEq(result.initialBuyNative, 8 ether);
+        uint256 initialTokens = IERC20(result.token).balanceOf(creator);
+        assertGt(initialTokens, 0);
+        assertLt(initialTokens, launcher.TOKEN_SUPPLY());
+        _swap(result.token, true, -int256(1 ether), 1 ether);
+        assertGt(IERC20(result.token).balanceOf(creator), initialTokens);
+        uint256 nativeBeforeSell = creator.balance;
+        _swap(result.token, false, -int256(initialTokens / 4), 0);
+        assertGt(creator.balance, nativeBeforeSell);
+        _assertLockedPosition(result);
+    }
+
+    function test_unrepresentableNativeSwapAmountRollsBackAtomically() public {
+        // The engine retains V4's signed-int128 per-swap delta boundary. This is an amount-representation
+        // boundary, not a claim that a small aggregate native amount exhausts the new price range.
+        uint256 amount = uint256(uint128(type(int128).max)) + 1;
+        vm.deal(creator, amount);
+        _assertAtomicRevert(_parameters(), amount, bytes4(0));
     }
 
     function test_duplicateFamilyCannotMultiplyAuthorShares() public {
@@ -389,7 +407,7 @@ contract ClassicModuleLaunchV1Test is Deployers {
         assertEq(forwarder.feeRecipient(), creator);
         (PoolKey memory pool, PositionInfo info) = positionManager.getPoolAndPositionInfo(result.positionTokenId);
         assertEq(PoolId.unwrap(pool.toId()), result.poolId);
-        assertEq(info.tickLower(), 174_800);
+        assertEq(info.tickLower(), planner.LIQUIDITY_TICK_LOWER());
         assertEq(info.tickUpper(), 204_200);
         uint128 liquidity = positionManager.getPositionLiquidity(result.positionTokenId);
         assertGt(liquidity, 0);

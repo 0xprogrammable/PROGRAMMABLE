@@ -22,7 +22,7 @@ import { SwapParams } from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import { IPositionManager } from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
 import { PositionInfo } from "@uniswap/v4-periphery/src/libraries/PositionInfoLibrary.sol";
 
-import { ClassicPositionPlannerV1 } from "../ClassicPositionPlannerV1.sol";
+import { ClassicModulePositionPlannerV1 } from "./ClassicModulePositionPlannerV1.sol";
 import { LockedPositionFeeForwarderFactoryV1 } from "../LockedPositionFeeForwarderFactoryV1.sol";
 import { ClassicModuleHookV1 } from "./ClassicModuleHookV1.sol";
 import { ClassicModuleLaunchPolicyV1 } from "./ClassicModuleLaunchPolicyV1.sol";
@@ -31,8 +31,8 @@ import { ClassicModuleTypes as T } from "./ClassicModuleTypes.sol";
 /// @title ClassicModuleLaunchV1
 /// @notice Permissionless, atomic Classic launch with a fixed supply, pinned recipe and permanently locked LP.
 /// @dev This is a new launch source. It neither emits nor impersonates the older router's launch stamp. The
-///      immutable V1 engine is the finite-range native/token AMM curve in ClassicPositionPlannerV1; it has no sale
-///      phase, migration, custody option, transfer tax or later mutable launch configuration. The caller receives
+///      immutable V1 engine is the finite-range native/token AMM curve in ClassicModulePositionPlannerV1; it has no
+/// sale phase, migration, custody option, transfer tax or later mutable launch configuration. The caller receives
 ///      the initial tokens directly. Native minimum purchase and network gas are separate quantities.
 contract ClassicModuleLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
     using CurrencySettler for Currency;
@@ -49,7 +49,7 @@ contract ClassicModuleLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
     IPositionManager public immutable positionManager;
     UERC20Factory public immutable tokenFactory;
     ClassicModuleHookV1 public immutable feeHook;
-    ClassicPositionPlannerV1 public immutable positionPlanner;
+    ClassicModulePositionPlannerV1 public immutable positionPlanner;
     ClassicModuleLaunchPolicyV1 public immutable launchPolicy;
     LockedPositionFeeForwarderFactoryV1 public immutable positionForwarderFactory;
     uint256 public immutable minInitialBuyNative;
@@ -165,7 +165,7 @@ contract ClassicModuleLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         IPositionManager positionManager_,
         UERC20Factory tokenFactory_,
         ClassicModuleHookV1 feeHook_,
-        ClassicPositionPlannerV1 positionPlanner_,
+        ClassicModulePositionPlannerV1 positionPlanner_,
         ClassicModuleLaunchPolicyV1 launchPolicy_,
         LockedPositionFeeForwarderFactoryV1 positionForwarderFactory_,
         uint256 minInitialBuyNative_
@@ -177,7 +177,7 @@ contract ClassicModuleLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
         _requireContract(address(positionPlanner_));
         _requireContract(address(launchPolicy_));
         _requireContract(address(positionForwarderFactory_));
-        _requirePinned(address(positionPlanner_), keccak256(type(ClassicPositionPlannerV1).runtimeCode));
+        _requirePinned(address(positionPlanner_), keccak256(type(ClassicModulePositionPlannerV1).runtimeCode));
         _requirePinned(address(launchPolicy_), keccak256(type(ClassicModuleLaunchPolicyV1).runtimeCode));
         _requirePinned(address(tokenFactory_), keccak256(type(UERC20Factory).runtimeCode));
         if (minInitialBuyNative_ == 0) revert InvalidMinimumInitialBuy();
