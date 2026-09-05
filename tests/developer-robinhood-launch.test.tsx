@@ -254,11 +254,9 @@ describe("Robinhood Custom launch website flow", () => {
 
   it("routes the Custom card into the chain-bound launch section", () => {
     expect(launchEntrySource).toContain(
-      'href="/developers/api-keys?start=custom&chainId=4663"',
+      'href={`/developers/api-keys?start=custom&chainId=${chainId}`}',
     );
-    expect(launchEntrySource).toContain(
-      'data-status="pending">Preflight required</small>',
-    );
+    expect(launchEntrySource).toContain('data-launch-model-launchable="false"');
     expect(launchEntrySource).not.toContain("Live API");
     expect(apiKeysSource).toContain(
       'url.searchParams.get("start") === "custom"',

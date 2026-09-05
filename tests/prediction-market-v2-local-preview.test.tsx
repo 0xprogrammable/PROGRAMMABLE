@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { LaunchExperience } from "../components/launch-entry";
+import { ViewChainProvider } from "../components/view-chain";
 import {
   PredictionMarketV2LocalPreview,
   createPredictionV2LocalPreviewDiscovery,
@@ -31,7 +32,9 @@ function preview(
 describe("Prediction V2 development-only local preview", () => {
   it("keeps the internal fixture out of the public launch runtime", () => {
     expect(process.env.NODE_ENV).not.toBe("development");
-    const html = renderToStaticMarkup(<LaunchExperience />);
+    const html = renderToStaticMarkup(
+      <ViewChainProvider><LaunchExperience /></ViewChainProvider>,
+    );
 
     expect(html).not.toContain('data-launch-model-option="prediction"');
     expect(html).not.toContain("programmable-prediction-v2-local-preview-v1");

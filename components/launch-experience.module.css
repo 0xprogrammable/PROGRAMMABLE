@@ -1252,7 +1252,7 @@
 }
 
 .pickerHeading.pickerHeading h1 {
-  font-size: clamp(42px, 5.6vw, 72px);
+  font-size: clamp(36px, 4.6vw, 60px);
   font-weight: 540;
   letter-spacing: -0.035em;
   line-height: 1;
@@ -1262,7 +1262,7 @@
 }
 
 .modelGrid.modelGrid {
-  margin-top: 48px;
+  margin-top: 32px;
 }
 
 .modelLoadError {
@@ -1616,7 +1616,7 @@
 
 @media (max-width: 760px) {
   .pickerHeading.pickerHeading h1 {
-    font-size: clamp(42px, 12vw, 54px);
+    font-size: clamp(36px, 10vw, 48px);
     max-width: 11ch;
   }
 
@@ -1992,21 +1992,79 @@
 .pickerHeading {
   margin: 0;
   max-width: none;
-  text-align: left;
+  text-align: center;
 }
 
 .pickerHeading h1 {
-  font-size: clamp(58px, 6.5vw, 96px);
-  font-weight: 520;
-  letter-spacing: -0.062em;
-  line-height: 0.92;
+  font-size: clamp(36px, 4.6vw, 60px);
+  font-weight: 540;
+  letter-spacing: -0.035em;
+  line-height: 1;
   margin: 0;
+}
+
+.chainChoice {
+  border: 1px solid var(--webde-line);
+  border-radius: var(--webde-radius-control);
+  background: var(--webde-surface);
+  display: inline-flex;
+  gap: 4px;
+  margin: 24px 0 0;
+  max-width: 100%;
+  min-inline-size: 0;
+  padding: 4px;
+}
+
+.chainOption {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: calc(var(--webde-radius-control) - 4px);
+  color: var(--webde-muted);
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  font-size: 14px;
+  font-weight: 550;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 0;
+  padding-inline: 24px;
+  position: relative;
+}
+
+.chainOption:has(input:checked) {
+  background: var(--webde-surface-raised);
+  border-color: var(--webde-line);
+  color: var(--webde-ink);
+}
+
+.chainOption:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .chainOption:hover {
+    color: var(--webde-ink);
+  }
+}
+
+.chainChoice:disabled .chainOption {
+  cursor: default;
+  opacity: 0.6;
 }
 
 .modelGrid {
   gap: 16px;
-  margin-top: 58px;
+  margin-top: 32px;
   max-width: none;
+}
+
+.singleModelGrid {
+  grid-template-columns: minmax(0, 1fr);
+  margin-inline: auto;
+  max-width: 624px;
+  width: 100%;
 }
 
 .modelCard.modelCard {
@@ -2125,7 +2183,7 @@
   }
 
   .pickerHeading h1 {
-    font-size: clamp(44px, 13vw, 60px);
+    font-size: clamp(36px, 10vw, 48px);
     white-space: normal;
   }
 
