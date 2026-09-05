@@ -60,8 +60,9 @@ use. Without a verified published release, treat the package as an unpublished p
 local preparation is not a public release or permission to submit.
 
 **Activated:** Only when both discovery entries have `publicAuthorization: true`, `publicWrites: true` and
-`releaseReady: true`, verify the exact advertised immutable GitHub Release tag in
-`programmablehq/PROGRAMMABLE`. Require the release manifest and tarball checksum to match the advertised version,
+`releaseReady: true`, verify the published immutable GitHub Release `programmable-launch-v4.0.0` when discovery
+selects `4.0.0`, or `programmable-launch-v4.1.0` when it selects `4.1.0`, in
+`programmablehq/PROGRAMMABLE`. Stop if discovery selects any other version. Require the release manifest and tarball checksum to match the advertised version,
 exact source commit and downloaded tarball bytes. Install only that verified tarball and
 require `programmable-launch --version` to match the advertised version. If any check fails, stop; a published artifact alone is
 not public activation. This conditional procedure does not assert today's release state.
