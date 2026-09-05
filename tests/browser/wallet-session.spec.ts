@@ -78,7 +78,7 @@ for (const path of ["/profile", "/developers/api-keys"]) {
     await open(page, path);
     await scenario(page, "linked-disconnected");
     await expect(page.getByLabel("Selected account", { exact: true })).toHaveText("none");
-    await page.getByRole("button", { name: "Set up wallet", exact: true }).click();
+    await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
     await expect(page.getByRole("dialog", { name: "SDK wallet dialog", exact: true })).toBeVisible();
     await expect(page.getByRole("dialog")).toHaveCount(1);
     await expectMethods(page, ["connectWallet"]);

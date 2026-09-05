@@ -1928,7 +1928,7 @@ function PrivyWalletBridge({
   const sendTransaction = useCallback(
     async (transaction: PreparedTransaction) => {
       if (!connectedWallet || !wallet) {
-        throw new Error("Connect an Ethereum wallet before continuing");
+        throw new Error("Connect your wallet before continuing");
       }
       const prepared = parsePreparedTransactionForAccount(
         transaction,
@@ -2031,7 +2031,7 @@ function PrivyWalletBridge({
   const sendPredictionV2Transaction = useCallback(
     async (prepared: ParsedPredictionV2PreparedTransactionV2) => {
       if (!connectedWallet || !wallet) {
-        throw new Error("Connect an Ethereum wallet before continuing");
+        throw new Error("Connect your wallet before continuing");
       }
       const sessionSubject = user?.id ?? null;
       if (sessionSubject === null) {
@@ -2319,7 +2319,7 @@ function PrivyWalletBridge({
     signingMessageBase64Url: string,
   ) => {
     if (!connectedWallet || !wallet) {
-      throw new Error("Connect an Ethereum wallet before continuing");
+      throw new Error("Connect your wallet before continuing");
     }
     const messageBytes = decodeBase64Url(signingMessageBase64Url);
     let message: string;
@@ -2378,7 +2378,7 @@ function PrivyWalletBridge({
     value: `0x${string}`;
   }>) => {
     if (!connectedWallet || !wallet) {
-      throw new Error("Connect an Ethereum wallet before continuing");
+      throw new Error("Connect your wallet before continuing");
     }
     if (
       input.chainId !== String(appChain.id)
@@ -2473,7 +2473,7 @@ function PrivyWalletBridge({
     input: CustomLaunchWalletActionV1,
   ) => {
     if (!wallet) {
-      throw new Error("Connect an Ethereum wallet before continuing");
+      throw new Error("Connect your wallet before continuing");
     }
     const checked = assertCustomLaunchWalletActionV1(input, wallet.account);
     return sendBrowserWalletAction(checked);
@@ -2483,7 +2483,7 @@ function PrivyWalletBridge({
     input: CustomLaunchWalletActionInputV4,
   ) => {
     if (!connectedWallet || !wallet) {
-      throw new Error("Connect an Ethereum wallet before continuing");
+      throw new Error("Connect your wallet before continuing");
     }
     const sessionSubject = user?.id ?? null;
     if (sessionSubject === null) {
@@ -2570,7 +2570,7 @@ function PrivyWalletBridge({
     input: CustomLaunchFundingAuthorizationV3,
   ) => {
     if (!connectedWallet || !wallet) {
-      throw new Error("Connect an Ethereum wallet before continuing");
+      throw new Error("Connect your wallet before continuing");
     }
     const sessionSubject = user?.id ?? null;
     if (sessionSubject === null) {
@@ -2636,7 +2636,7 @@ function PrivyWalletBridge({
   const readTradeBalances = useCallback(
     async (token: `0x${string}`) => {
       if (!connectedWallet || !wallet) {
-        throw new Error("Connect an Ethereum wallet before continuing");
+        throw new Error("Connect your wallet before continuing");
       }
       if (!isEthereumAddress(token)) {
         throw new Error("The token address is invalid");
@@ -2686,7 +2686,7 @@ function PrivyWalletBridge({
 
   const readNativeBalance = useCallback(async () => {
     if (!connectedWallet || !wallet) {
-      throw new Error("Connect an Ethereum wallet before continuing");
+      throw new Error("Connect your wallet before continuing");
     }
 
     const provider = await connectedWallet.getEthereumProvider();
@@ -2718,7 +2718,7 @@ function PrivyWalletBridge({
 
   const readConnectedAccountCode = useCallback(async () => {
     if (!connectedWallet || !wallet) {
-      throw new Error("Connect an Ethereum wallet before continuing");
+      throw new Error("Connect your wallet before continuing");
     }
 
     const provider = await connectedWallet.getEthereumProvider();
@@ -3390,7 +3390,7 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
         : wallet
           ? username || shortenAddress(wallet.account)
           : authenticated
-            ? "Set up wallet"
+            ? "Connect wallet"
             : hasSession
               ? "Reconnect"
               : compact
