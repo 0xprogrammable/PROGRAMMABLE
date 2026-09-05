@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { developerApiKeysInitialSection } from
-  "../app/developers/api-keys/page";
+  "../lib/developer-api-key-route";
 import {
   DeveloperRobinhoodLaunch,
   MAX_ROBINHOOD_LAUNCH_BYTES,
