@@ -1,3 +1,49 @@
+export const PROGRAMMABLE_ROBINHOOD_FUNDING_INTAKE_V1 = Object.freeze({
+  schemaVersion: "programmable.robinhood-funding-intake.v1" as const,
+  chainId: 4663 as const,
+  scope: "agent-preparation-not-server-authorization" as const,
+  requiredBefore: Object.freeze(["funding-dependent-implementation", "build", "pack", "submit"] as const),
+  reuseExplicitPriorAnswers: true as const,
+  entryChoices: Object.freeze(["buyer-funded", "creator-funded", "hybrid-or-custom"] as const),
+  choicesAreRequestEnumValues: false as const,
+  pricingModelIsFundingSource: false as const,
+  collect: Object.freeze([
+    "funding-source", "pricing-and-reserve-model", "initial-token-inventory",
+    "initial-liquidity-assets-and-amounts", "funding-wallet", "optional-initial-buy",
+    "capital-budget", "gas-budget", "gas-payer", "intended-launch-state",
+  ] as const),
+  costReview: Object.freeze({
+    earlyEstimate: "before-funding-dependent-implementation" as const,
+    finalEstimate: "exact-bound-wallet-transaction-on-chain-4663" as const,
+    separateCapitalAndGas: true as const,
+    avoidDoubleCountingInitialBuy: true as const,
+    unknownCostIsZero: false as const,
+    insufficientBudget: "resolve-with-user-before-launch" as const,
+    intentionalBuildBeforeFunding: "explicit-user-acknowledgement" as const,
+    refreshBalanceBeforeWalletAction: true as const,
+  }),
+  platformFee: Object.freeze({
+    policySource: "customLaunchApi.versions.v4.platformFeePolicy" as const,
+    readCurrentPolicyAndEnforcement: true as const,
+    separateCreatorAndLpFees: true as const,
+    configurationIsCollectionProof: false as const,
+    treasuryIsUserSelectable: false as const,
+  }),
+  instructions: Object.freeze([
+    "Robinhood only (chain 4663): before funding-dependent implementation, ask whether buyers will build the capital, the creator will provide starting liquidity, or the project uses a hybrid or custom source. Reuse an explicit earlier answer. These are conversation choices, not API enum values or a project allowlist. A bonding curve describes pricing; it does not by itself prove funding or repayment reserves.",
+    "Collect the initial token inventory, real and virtual reserves, any liquidity assets and amounts, funding wallet, optional initial buy, available capital and gas budgets, gas payer, and intended launch state. Clarify who funds each step and when trading can actually begin. Zero initial ETH principal is not a free deployment. An initialized empty pool is not a funded or tradable curve; virtual reserves are not spendable ETH. Do not invent a sponsor or promise buyer demand.",
+    "Before building, show the preliminary capital requirement separately from estimated deployment and transaction gas, with assumptions and unknowns. Check available balances on Robinhood Chain when the funding wallet is known. Do not count assets on another chain as available Robinhood funding. If the budget is insufficient or uncertain, resolve the funding plan with the user; continue building before funding only when the user explicitly accepts that launch is still unfunded. Never silently change the chain, launch model or budget.",
+    "Read the current Robinhood platformFeePolicy and enforcement status from discovery. Show its rate, recipient and supported fee currency separately from creator, LP and other fees. 20 bps equals 0.2 percent: two million dollars of once-counted trade volume implies four thousand dollars of fee value if that fee is actually enforced. A configured recipient or rate is not collection proof. Do not claim universal ETH revenue, a working claim path or automatic bridging while those capabilities remain unproven. The creator cannot replace the platform treasury.",
+    "Before submission, summarize the funding source, pricing and reserve model, exact initial assets and amounts, optional initial buy, intended launch state, platform recipient and all fees alongside the project metadata. Map the plan to the selected V4 schema's actual funding and liquidityModel fields. Do not add invented fields to a frozen request. Verify that the packed graph and total wallet transaction value match the agreed plan; an initial buy already included in that value is not an extra cost. Resolve mismatches by changing and revalidating the request with the user.",
+    "Before the Robinhood wallet action, review the bound transaction value separately from a fresh gas estimate and the current native balance. Mark unavailable estimates as unknown, never zero; resolve an unaffordable or unknown funding requirement before sending. The website's bound summary and transaction review do not prove economic safety or future liquidity. Signing and sending remain the controller's separate wallet actions.",
+  ] as const),
+});
+
+export const PROGRAMMABLE_ROBINHOOD_FUNDING_INTAKE_TEXT_V1 = [
+  "Robinhood: choose the funding plan before building",
+  ...PROGRAMMABLE_ROBINHOOD_FUNDING_INTAKE_V1.instructions,
+].join("\n");
+
 export const PROGRAMMABLE_AGENT_INTAKE_V1 = Object.freeze({
   schemaVersion: "programmable.custom-launch-agent-intake.v1" as const,
   scope: "agent-preparation-not-server-authorization" as const,
@@ -16,6 +62,7 @@ export const PROGRAMMABLE_AGENT_INTAKE_V1 = Object.freeze({
       Object.freeze({ chainId: 4663, caip2: "eip155:4663", name: "Robinhood Chain Mainnet", apiVersion: "4" }),
     ] as const),
   }),
+  chainSpecific: Object.freeze({ robinhood: PROGRAMMABLE_ROBINHOOD_FUNDING_INTAKE_V1 }),
   metadata: Object.freeze({
     requiredBefore: Object.freeze(["build", "pack", "submit"] as const),
     required: Object.freeze([
@@ -94,6 +141,8 @@ export const PROGRAMMABLE_AGENT_SETUP_TEXT_V1 = Object.freeze([
   "The same API-key entry point serves both chains. A key needs custom-launch:create and custom-launch:read plus server authorization for the selected chain; its presence does not prove a chain grant. A wallet key's launchWallet must equal its wallet binding. Keep credentials on https://api.programmable.market and follow only the selected chain's instructions below.",
   "",
   "Robinhood Chain Mainnet only (V4, chain 4663)",
+  PROGRAMMABLE_ROBINHOOD_FUNDING_INTAKE_TEXT_V1,
+  "",
   "Read customLaunchApi.versions.v4 and the matching chains entry in live discovery. Require publicAuthorization, publicWrites and releaseReady to be true in both. Require an advertised released, installable CLI for profile 4.0.0, an immutable published release and matching tarball checksum before installing it. If any field, release asset or verification is missing or false, stop before authenticated preflight or submission and report the missing public release gate. A deployed runtime, a source candidate or a local checkout cannot replace these gates.",
   `Public V4 capabilities: ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.robinhoodCapabilities}`,
   `Public V4 readiness: ${PROGRAMMABLE_AGENT_SETUP_LINKS_V1.robinhoodReadiness}`,
