@@ -10,6 +10,7 @@ import {
 } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { ChevronDown } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   DiscordBrandIcon,
@@ -133,6 +134,7 @@ function HeaderWalletButton({
     wallet,
     hasSession,
     connecting,
+    openingWallet,
     disconnecting,
     openWallet,
     preloadWallet,
@@ -157,7 +159,7 @@ function HeaderWalletButton({
   const label = disconnecting
     ? "Disconnecting"
     : connecting
-      ? "Opening wallet"
+      ? openingWallet ? "Opening wallet" : "Loading wallet"
       : wallet
         ? shortenAddress(wallet.account)
         : hasSession
@@ -197,11 +199,17 @@ function HeaderWalletButton({
           }
         }}
       >
-        {label}
+        <span>{label}</span>
+        {wallet && !connecting && !disconnecting ? <ChevronDown size={14} aria-hidden="true" /> : null}
       </button>
       {menuOpen && wallet ? (
         <div className={styles.walletMenu} id={menuId} role="group" aria-label="Wallet actions">
           <Link href="/profile" prefetch={false} onClick={onClose}>Profile</Link>
+          <button type="button" disabled={disconnecting} onClick={() => {
+            onClose();
+            triggerRef.current?.focus();
+            openWallet();
+          }}>Manage wallets</button>
           <button type="button" onClick={async () => {
             try {
               await navigator.clipboard.writeText(wallet.account);
@@ -209,7 +217,7 @@ function HeaderWalletButton({
             } catch {
               setFeedback("Could not copy address. Try again.");
             }
-          }}>Copy Address</button>
+          }}>Copy address</button>
           <button type="button" aria-disabled={disconnecting || undefined} aria-busy={disconnecting || undefined} onClick={async () => {
             if (busyRef.current) return;
             busyRef.current = true;

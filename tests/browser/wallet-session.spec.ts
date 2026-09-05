@@ -163,7 +163,7 @@ test("explicit account selection is restricted to owned wallets and does not sur
   await scenario(page, "both-owned");
   await expect(page.getByLabel("Selected account", { exact: true })).toHaveText(accountA);
   await page.getByRole("button", { name: "Open account", exact: true }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "0xbbbb…bbbb Robinhood Chain", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "0xbbbb…bbbb", exact: true }).click();
   await expect(page.getByLabel("Selected account", { exact: true })).toHaveText(accountB);
   await page.getByRole("button", { name: "Change SDK user, same linked addresses", exact: true }).click();
   await expect(page.getByLabel("Selected account", { exact: true })).toHaveText(accountA);
@@ -249,7 +249,7 @@ for (const path of ["/profile", "/developers/api-keys"]) {
 
     await trigger.click();
     await header.getByRole("button", { name: "Manage wallets", exact: true }).click();
-    await dialog.getByRole("button", { name: "0xbbbb…bbbb Robinhood Chain", exact: true }).click();
+    await dialog.getByRole("button", { name: "0xbbbb…bbbb", exact: true }).click();
     await expect(page.getByLabel("Selected account", { exact: true })).toHaveText(accountB);
     await expect(dialog).toHaveCount(0);
     await expect(header.getByRole("button", { name: "Wallet 0xbbbb…bbbb", exact: true })).toBeFocused();
@@ -353,7 +353,7 @@ for (const transition of ["user", "account", "capability"] as const) {
         await page.getByRole("button", { name: "Change SDK user, same linked addresses", exact: true }).dispatchEvent("click");
         await expect(page.getByLabel("SDK user", { exact: true })).toHaveText("fixture-user-beta");
       } else if (transition === "account") {
-        await page.getByRole("dialog").getByRole("button", { name: "0xbbbb…bbbb Robinhood Chain", exact: true }).click();
+        await page.getByRole("dialog").getByRole("button", { name: "0xbbbb…bbbb", exact: true }).click();
         await expect(page.getByLabel("Selected account", { exact: true })).toHaveText(accountB);
         // Observe any late error in the new account's visible dialog, without
         // reopening after completion (which would clear the error itself).
