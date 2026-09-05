@@ -6,6 +6,8 @@ The subsequent [configuration and contribution gap review](classic-configurable-
 
 The [website integration requirement](classic-configurable-packages.md#required-website-integration-and-documentation) additionally makes complete reads, management/actions, role/control policies, host requirements, documentation and a local UI preview part of every available contribution. Launch-bound immutability protects the selected rules and their control policy; it does not forbid executing expressly permitted controls under those rules. Previously fixed parameters do not become editable through this clarification.
 
+The [cross-cutting perspective requirements](classic-configurable-packages.md#cross-cutting-launch-assurances-usability-and-operation) bind truthful launch assurances and market scope, continued compatibility after control changes, effective code immutability, permanent-failure behavior, shared authority effects, whole-path costs and funded operating duration. They also define a common trader/creator flow and measurable contributor usefulness. These requirements extend the candidate specification; they are not a certification of arbitrary combinations or of the current prototype.
+
 ## Product contract
 
 A Classic launch has one canonical token and primary bonding-curve pool. Its launch-time recipe may bind multiple modules and supporting contracts. Adding a reusable module using supported execution primitives must not require changing the token, launcher, hook, common identity reader, indexer identity schema, or a handwritten frontend form. Catalogue size is not a runtime instruction to execute every entry.
