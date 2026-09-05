@@ -339,7 +339,7 @@ jobs:
           const name = "programmable-launch-v4-clean-room-evidence.json";
           assert.deepEqual(await readdir(directory), [name], "EVIDENCE_ARTIFACT_CONTENTS_INVALID");
           const evidence = await verifyEvidenceFile(path.join(directory, name));
-          assert.deepEqual(evidence.producer, {
+          assert.deepEqual({ ...evidence.producer }, {
             schemaVersion: "programmable.launch-v4-clean-room-producer.v1",
             repository: process.env.GITHUB_REPOSITORY,
             repositoryId: process.env.GITHUB_REPOSITORY_ID,

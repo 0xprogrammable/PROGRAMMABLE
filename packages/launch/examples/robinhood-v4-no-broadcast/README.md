@@ -67,7 +67,7 @@ npm run build
 
 The builder deliberately refuses to run if `PROGRAMMABLE_API_KEY` is present. It makes one credential-free `GET` to
 `https://api.programmable.market/v4/chains/4663/capabilities`, compiles locally, and writes only public build evidence
-plus `programmable-launch.config.json`. It has no wallet provider, signing method, RPC call, broadcast method,
+plus `programmable-launch.config.json`. Its RPC access only reads the finalized checkpoint. It has no wallet provider, signing method, broadcast method,
 submission method, or API-origin override.
 
 ## Pack and validate locally

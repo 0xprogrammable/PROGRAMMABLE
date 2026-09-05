@@ -15,6 +15,9 @@ const FILES = [path.basename(SUCCESS_ATTESTATION_PATH), path.basename(SUCCESS_EV
 const canonicalBytes = value => Buffer.from(`${canonicalizeJson(value)}\n`);
 const parse = bytes => parseStrictJson(bytes.toString("utf8"), { maximumBytes: 16 * 1024 * 1024 });
 const requireValue = (condition, message) => { if (!condition) throw new Error(message); };
+export function assertActivationJsonEqual(actual, expected, message) {
+  assert.equal(canonicalizeJson(actual), canonicalizeJson(expected), message);
+}
 function command(file, args, root) {
   const env = {};
   for (const name of ["PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "GH_TOKEN", "GITHUB_TOKEN", "GH_CONFIG_DIR", "SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS"])
@@ -96,7 +99,7 @@ export function createActivationRecord(bindingBytes, coordinateBytes, evidenceBy
 }
 function verifyBoundEvidence(root, record, data, evidenceBytes, bundleBytes, verifyArchiveMetadata = false) {
   const clean = record.proof.cleanRoom;
-  assert.deepEqual(record, createActivationRecord(data.bindingBytes, data.coordinateBytes, evidenceBytes, bundleBytes, clean.artifact));
+  assertActivationJsonEqual(record, createActivationRecord(data.bindingBytes, data.coordinateBytes, evidenceBytes, bundleBytes, clean.artifact), "V4 activation record differs");
   const evidence = clean.evidence;
   const producer = evidence.producer;
   const run = gh(`repos/${REPOSITORY}/actions/runs/${producer.runId}`, root);
@@ -121,7 +124,7 @@ function verifyBoundEvidence(root, record, data, evidenceBytes, bundleBytes, ver
     assert.ok(git(["show", `${producer.sourceSha}:${relative}`]).equals(regular(path.join(root, relative))), `V4 activation trusted verifier changed: ${relative}`);
   const release = gh(`repos/${REPOSITORY}/releases/tags/${data.coordinate.tag}`, root);
   requireValue(release.immutable === true && release.draft === false && release.prerelease === false, "V4 activation CLI release is not public immutable");
-  assert.deepEqual(release.assets.map(({name, digest}) => ({name, sha256: digest})).sort((a,b) => a.name.localeCompare(b.name)), data.coordinate.assets);
+  assertActivationJsonEqual(release.assets.map(({name, digest}) => ({name, sha256: digest})).sort((a,b) => a.name.localeCompare(b.name)), data.coordinate.assets, "V4 activation release assets differ");
   const tag = gh(`repos/${REPOSITORY}/git/ref/tags/${data.coordinate.tag}`, root);
   assert.equal(tag.object?.type, "commit"); assert.equal(tag.object?.sha, data.coordinate.source.commitSha);
   const temp = mkdtempSync(path.join(os.tmpdir(), "programmable-v4-activation-"));
