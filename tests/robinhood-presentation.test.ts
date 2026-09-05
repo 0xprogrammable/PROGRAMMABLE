@@ -206,6 +206,7 @@ describe("Robinhood presentation HTTP boundary", () => {
   const endpoint = "https://website.invalid/api/explore/robinhood/presentation";
   it.each([
     "chain=1", "page=0", "page=1000000", "page=1&page=2", "q=a&q=b", `q=${"x".repeat(129)}`,
+    "age=invalid", "sort=market-cap", "age=7d&age=30d", `token=${TOKEN.tokenAddress}&age=7d`,
     "token=bad", `token=${TOKEN.tokenAddress}&page=1`, `token=${TOKEN.tokenAddress}&token=${TOKEN.tokenAddress}`,
   ])("rejects invalid query %s before storage or providers", async (query) => {
     const fetcher = sourceFetch();
@@ -230,9 +231,16 @@ describe("Robinhood presentation HTTP boundary", () => {
     vi.stubGlobal("fetch", sourceFetch());
     storage.list.mockResolvedValue({ items: [TOKEN] });
     const response = await GET(new Request(`${endpoint}?page=2&q=RHV4`));
-    expect(storage.list).toHaveBeenCalledWith(2, "RHV4");
+    expect(storage.list).toHaveBeenCalledWith(2, "RHV4", { age: "any", sort: "newest" });
     expect(storage.token).not.toHaveBeenCalled();
     expect(response.headers.get("cache-control")).toContain("s-maxage=60");
     expect((await response.json()).items[0].tokenAddress).toBe(TOKEN.tokenAddress);
+  });
+  it("enriches the same filtered page as the launch list", async () => {
+    vi.stubGlobal("fetch", sourceFetch());
+    storage.list.mockResolvedValue({ items: [TOKEN] });
+    const response = await GET(new Request(`${endpoint}?page=2&q=RHV4&age=30d&sort=oldest`));
+    expect(response.status).toBe(200);
+    expect(storage.list).toHaveBeenCalledWith(2, "RHV4", { age: "30d", sort: "oldest" });
   });
 });

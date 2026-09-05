@@ -1,5 +1,6 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
+import { DEFAULT_EXPLORE_FILTERS, type RobinhoodExploreFilters } from "@/lib/robinhood-explore-filters";
 import { launchList } from "./model";
 import { indexStore } from "./store";
 
@@ -7,9 +8,9 @@ import { indexStore } from "./store";
 const readSnapshot = unstable_cache(async () => (await indexStore().read())?.snapshot ?? null,
   ["robinhood-website-index-v1"], { revalidate: 15 });
 
-export async function readRobinhoodLaunches(page = 1, query = "") {
-  try { return launchList(await readSnapshot(), page, query); }
-  catch { return launchList(null, page, query); }
+export async function readRobinhoodLaunches(page = 1, query = "", filters: RobinhoodExploreFilters = DEFAULT_EXPLORE_FILTERS) {
+  try { return launchList(await readSnapshot(), page, query, Date.now(), filters); }
+  catch { return launchList(null, page, query, Date.now(), filters); }
 }
 
 export async function readRobinhoodToken(address: string) {

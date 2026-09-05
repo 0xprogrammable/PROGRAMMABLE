@@ -610,6 +610,35 @@ describe("Robinhood website launch list", () => {
     }));
 
     expect(launchList(saved, 1, "", NOW).items).toEqual([rows[1], rows[2], rows[0]]);
+    expect(launchList(saved, 1, "", NOW, { age: "any", sort: "oldest" }).items).toEqual([rows[0], rows[2], rows[1]]);
+  });
+
+  it("filters the entire catalog before paging oldest-first and combines age with search", () => {
+    const rows = Array.from({ length: 60 }, (_, index) => launch(index + 1, 100 + index, {
+      launchedAt: new Date(NOW - (index < 5 ? 2 * 86_400_000 : (60 - index) * 60_000)).toISOString(),
+    }));
+    const saved = snapshot(rows);
+    const filters = { age: "24h", sort: "oldest" } as const;
+    const first = launchList(saved, 1, "", NOW, filters);
+    const second = launchList(saved, 2, "", NOW, filters);
+    expect(first.items).toEqual(rows.slice(5, 55));
+    expect(first.page).toMatchObject({ totalItems: 55, totalPages: 2, hasMore: true });
+    expect(second.items).toEqual(rows.slice(55));
+    expect(launchList(saved, 99, "", NOW, filters)).toEqual(second);
+    expect(launchList(saved, 1, rows[59].tokenAddress, NOW, filters).items).toEqual([rows[59]]);
+    expect(launchList(saved, 1, rows[0].tokenAddress, NOW, filters).items).toEqual([]);
+    expect(saved.items).toEqual(rows);
+  });
+
+  it.each([ ["24h", 86_400_000], ["7d", 604_800_000], ["30d", 2_592_000_000] ] as const)("respects the %s boundary and excludes unknown or future launch times", (age, ageMs) => {
+    const rows = [
+      launch(1, 100, { launchedAt: new Date(NOW - ageMs).toISOString() }),
+      launch(2, 101, { launchedAt: new Date(NOW - ageMs - 1).toISOString() }),
+      launch(3, 102, { launchedAt: null }),
+      launch(4, 103, { launchedAt: new Date(NOW + 1).toISOString() }),
+    ];
+    expect(launchList(snapshot(rows), 1, "", NOW, { age, sort: "newest" }).items).toEqual([rows[0]]);
+    expect(launchList(snapshot(rows), 1, "", NOW).page.totalItems).toBe(4);
   });
 
   it("distinguishes unavailable, syncing, ready and stale while retaining indexed rows", () => {

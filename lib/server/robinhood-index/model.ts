@@ -1,4 +1,5 @@
 import type { RobinhoodLaunch, RobinhoodLaunchList } from "@/lib/robinhood-launches";
+import { DEFAULT_EXPLORE_FILTERS, type RobinhoodExploreFilters } from "@/lib/robinhood-explore-filters";
 
 export type Checkpoint = { number: string; hash: string };
 export type RobinhoodSnapshot = {
@@ -77,12 +78,19 @@ function asPending(value: unknown) {
   return value as { block: Checkpoint; items: RobinhoodLaunch[] };
 }
 
-export function launchList(snapshot: RobinhoodSnapshot | null, page = 1, query = "", now = Date.now()): RobinhoodLaunchList {
+export function launchList(snapshot: RobinhoodSnapshot | null, page = 1, query = "", now = Date.now(), filters: RobinhoodExploreFilters = DEFAULT_EXPLORE_FILTERS): RobinhoodLaunchList {
   const q = query.trim().toLowerCase();
-  const items = (snapshot?.items ?? []).filter((row) => !q ||
-    [row.name, row.symbol, row.tokenAddress, row.hookAddress].some((value) => value?.toLowerCase().includes(q)))
-    .toSorted((a, b) => BigInt(a.blockNumber) === BigInt(b.blockNumber)
-      ? b.logIndex - a.logIndex : BigInt(a.blockNumber) > BigInt(b.blockNumber) ? -1 : 1);
+  const ageMs = { any: null, "24h": 86_400_000, "7d": 604_800_000, "30d": 2_592_000_000 }[filters.age];
+  const items = (snapshot?.items ?? []).filter((row) => {
+    if (q && ![row.name, row.symbol, row.tokenAddress, row.hookAddress].some((value) => value?.toLowerCase().includes(q))) return false;
+    if (ageMs === null) return true;
+    const launched = row.launchedAt ? Date.parse(row.launchedAt) : NaN;
+    return launched >= now - ageMs && launched <= now;
+  }).toSorted((a, b) => {
+    const newest = BigInt(a.blockNumber) === BigInt(b.blockNumber)
+      ? b.logIndex - a.logIndex : BigInt(a.blockNumber) > BigInt(b.blockNumber) ? -1 : 1;
+    return filters.sort === "oldest" ? -newest : newest;
+  });
   const totalPages = Math.ceil(items.length / 50);
   const number = Math.min(Math.max(1, page), Math.max(1, totalPages));
   const status = !snapshot ? "unavailable"

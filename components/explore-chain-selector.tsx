@@ -113,8 +113,13 @@ export function ExploreChainSelector() {
 
   function selectChain(option: ExploreChainOption) {
     if (!option.available || option.viewChainId === undefined) return;
+    const main = rootRef.current?.closest("main");
     setViewChainId(option.viewChainId);
-    closeListbox();
+    closeListbox(false);
+    window.requestAnimationFrame(() => {
+      const trigger = triggerRef.current ?? main?.querySelector<HTMLButtonElement>(`button[aria-label="Explore chain: ${option.label}"]`);
+      trigger?.focus();
+    });
   }
 
   function handleOptionKeyDown(

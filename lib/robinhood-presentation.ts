@@ -17,6 +17,31 @@ export type RobinhoodCoinPresentation = Readonly<{
   market: RobinhoodCoinMarket | null;
 }>;
 
+export function mergeRobinhoodPresentations(
+  previous: readonly RobinhoodCoinPresentation[],
+  incoming: readonly RobinhoodCoinPresentation[] | null,
+  now = Date.now(),
+) {
+  const saved = new Map(previous.map((item) => [item.tokenAddress.toLowerCase(), item.market]));
+  let delayed = incoming === null;
+  function recent(market: RobinhoodCoinMarket | null | undefined) {
+    const age = market ? now - Date.parse(market.observedAt) : NaN;
+    return age >= 0 && age <= 180_000 ? market : null;
+  }
+  const items = (incoming ?? previous.map((item) => ({ ...item, market: null }))).map((item) => {
+    const previousMarket = saved.get(item.tokenAddress.toLowerCase());
+    const samePool = !item.market || previousMarket?.poolId.toLowerCase() === item.market.poolId.toLowerCase();
+    const savedMarket = samePool ? recent(previousMarket) : null;
+    const nextMarket = recent(item.market);
+    // Keep a complete, recent observation; never give saved values a new timestamp.
+    const market = savedMarket && (!nextMarket || Date.parse(savedMarket.observedAt) > Date.parse(nextMarket.observedAt))
+      ? savedMarket : nextMarket ?? null;
+    if (market !== item.market || (previousMarket && !nextMarket)) delayed = true;
+    return market === item.market ? item : { ...item, market };
+  });
+  return { items, delayed };
+}
+
 const compactDollars = new Intl.NumberFormat("en-US", {
   style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 2,
 });

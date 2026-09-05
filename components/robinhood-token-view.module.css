@@ -108,6 +108,7 @@
   margin: 24px 0;
 }
 .metrics > div { min-width: 0; }
+.metrics dd strong { font: inherit; }
 .metrics dt { color: var(--webde-muted); font-size: 12px; line-height: 16px; }
 .metrics dd {
   font-size: 20px;

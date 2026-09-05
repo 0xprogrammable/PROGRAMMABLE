@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { ArrowLeft, ArrowUpRight, BookOpen, Check, Copy, Globe, Link2, Send } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { AnimatedMarketCap } from "@/components/animated-market-cap";
 import { DiscordBrandIcon, GitHubBrandIcon, XBrandIcon } from "@/components/brand-icons";
 import { RobinhoodCoinArtwork } from "@/components/robinhood-coin-artwork";
 import { useRobinhoodPresentation } from "@/components/use-robinhood-presentation";
@@ -71,10 +72,13 @@ export function RobinhoodTokenView({ address, token, status }: {
         <p className="sr-only" role="status">{copyState === "copied" ? "Token address copied" : ""}</p>
         {copyState === "failed" ? <p className={styles.notice} role="status">Could not copy. <a href={`${EXPLORER}/token/${address}`} target="_blank" rel="noreferrer">View the address on Explorer.</a></p> : null}
         {status === "stale" ? <p className={styles.notice} role="status">Showing saved launch details. Updates are temporarily unavailable.</p> : null}
+        {presentation.delayed && status !== "stale" ? <p className={styles.notice} role="status">Market data is temporarily delayed.</p> : null}
 
             <dl className={styles.metrics}>
               <Metric label="Price" value={coinDollars(market?.priceUsd, true)} />
-              <Metric label="Market cap" value={coinDollars(market?.marketCapUsd)} />
+              <Metric label="Market cap" value={market?.marketCapUsd != null && Number.isFinite(market.marketCapUsd) && market.marketCapUsd >= 0
+                ? <AnimatedMarketCap metric={{ kind: "usd", value: market.marketCapUsd }} replayKey={`4663:${address.toLowerCase()}:${market.poolId.toLowerCase()}:market-cap`} />
+                : "—"} />
               <Metric label="Liquidity" value={coinDollars(market?.liquidityUsd)} />
               <Metric label="24h volume" value={coinDollars(market?.volume24hUsd)} />
               <div>
@@ -114,7 +118,7 @@ function RobinhoodChart({ poolId, name, available, loading }: { poolId: string; 
   </div>;
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({ label, value }: { label: string; value: ReactNode }) {
   return <div><dt>{label}</dt><dd>{value}</dd></div>;
 }
 
