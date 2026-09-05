@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 
-import { ExploreIndexResetView } from "@/components/explore-index-reset-view";
+import { RobinhoodLaunchesView } from "@/components/robinhood-launches-view";
 
 export const metadata: Metadata = {
   title: "Explore launches · Programmable",
-  description: "Programmable launch indexing is being rebuilt.",
+  description: "Find tokens launched through Programmable on Robinhood Chain.",
   alternates: {
     canonical: "/explore",
   },
@@ -15,5 +15,5 @@ export const metadata: Metadata = {
 };
 
 export default function ExplorePage() {
-  return <ExploreIndexResetView />;
+  return <RobinhoodLaunchesView />;
 }

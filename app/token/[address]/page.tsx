@@ -3,19 +3,14 @@ import { notFound } from "next/navigation";
 import { isAddress } from "viem";
 
 import { TokenIndexResetView } from "@/components/token-index-reset-view";
+import { RobinhoodTokenView } from "@/components/robinhood-token-view";
+import { readRobinhoodToken } from "@/lib/server/robinhood-index/read";
 import { genericTokenDetailMetadata } from "@/lib/token-detail-metadata";
-import { tryParseViewChainId, type ViewChainId } from "@/lib/view-chain";
+import { tokenDetailPageChainId } from "@/lib/token-page-chain";
 
 type TokenPageSearchParams = Promise<
   Record<string, string | string[] | undefined>
 >;
-
-export function tokenDetailPageChainId(
-  value: string | string[] | undefined,
-): ViewChainId | null {
-  if (value === undefined) return 1;
-  return typeof value === "string" ? tryParseViewChainId(value) : null;
-}
 
 export async function generateMetadata({
   params,
@@ -29,6 +24,14 @@ export async function generateMetadata({
     searchParams,
   ]);
   const chainId = tokenDetailPageChainId(resolvedSearchParams.chain);
+  if (chainId === 4663 && isAddress(address)) {
+    const { token } = await readRobinhoodToken(address);
+    if (token) return {
+      title: `${token.name || address} · Programmable`,
+      description: "Programmable Custom launch on Robinhood Chain. Token, hook and launch stamp details.",
+      alternates: { canonical: `/token/${token.tokenAddress}?chain=4663` },
+    };
+  }
   return genericTokenDetailMetadata(address, true, chainId ?? 1);
 }
 
@@ -48,6 +51,10 @@ export default async function TokenPage({
     tokenDetailPageChainId(resolvedSearchParams.chain) === null
   ) {
     notFound();
+  }
+  if (tokenDetailPageChainId(resolvedSearchParams.chain) === 4663) {
+    const { token, status } = await readRobinhoodToken(address);
+    return <RobinhoodTokenView address={address} token={token} status={status} />;
   }
   return <TokenIndexResetView />;
 }

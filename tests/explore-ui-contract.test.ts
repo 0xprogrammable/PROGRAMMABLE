@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 const root = process.cwd();
 
 describe("Explore UI contract", () => {
-  it("hard-resets public Explore without index loading capability", () => {
+  it("loads Robinhood while preserving the Ethereum reset", () => {
     const page = readFileSync(join(root, "app/explore/page.tsx"), "utf8");
     const resetView = readFileSync(
       join(root, "components/explore-index-reset-view.tsx"),
@@ -16,7 +16,7 @@ describe("Explore UI contract", () => {
       "utf8",
     );
 
-    expect(page).toContain("<ExploreIndexResetView />");
+    expect(page).toContain("<RobinhoodLaunchesView />");
     expect(page).toContain("index: false");
     expect(page).not.toContain("ExploreView");
     expect(page).not.toContain("@/app/api/explore/route");

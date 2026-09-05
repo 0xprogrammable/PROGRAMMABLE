@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { tokenDetailPageChainId } from "../app/token/[address]/page";
+import { tokenDetailPageChainId } from "../lib/token-page-chain";
 
 const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 
@@ -15,12 +15,15 @@ describe("token detail index reset", () => {
     expect(tokenDetailPageChainId(["1", "4663"])).toBeNull();
   });
 
-  it("renders a noindex reset page without token, chart or analytics reads", () => {
+  it("reads saved Robinhood details while keeping Ethereum and market data reset", () => {
     const page = read("app/token/[address]/page.tsx");
     const resetView = read("components/token-index-reset-view.tsx");
 
     expect(page).toContain("genericTokenDetailMetadata(address, true");
     expect(page).toContain("<TokenIndexResetView />");
+    expect(page).toContain("=== 4663");
+    expect(page).toContain("readRobinhoodToken(address)");
+    expect(page).toContain("<RobinhoodTokenView");
     expect(page).toContain("notFound()");
     expect(page).not.toContain("@/app/api/explore/token/route");
     expect(page).not.toContain("TokenDetailView");
