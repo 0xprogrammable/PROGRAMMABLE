@@ -64,7 +64,7 @@ const GUIDANCE_LINE_PATTERNS = [
 
 function readGitChange(file, { baseSha, headSha }) {
   const git = (args) => execFileSync("git", args, { maxBuffer: 4 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] });
-  const text = (buffer) => new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+  const text = (buffer) => new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(buffer);
   const status = text(git(["diff", "--no-renames", "--name-status", "-z", baseSha, headSha, "--", file]));
   if (status !== `M\0${file}\0`) throw new Error("Guidance paths must be modified existing files.");
   return [baseSha, headSha].map((sha) => {

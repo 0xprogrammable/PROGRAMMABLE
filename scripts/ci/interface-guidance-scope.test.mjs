@@ -36,7 +36,7 @@ test("only complete existing guide literals and the two fixed accompanying Markd
 
 test("changing or deleting any non-URL byte forces full Interface coverage", () => {
   for (const file of INTERFACE_GUIDANCE_LITERAL_PATHS) {
-    for (const content of [after[file] + "\n", after[file].slice(1), after[file].replace("  ", " "),
+    for (const content of [after[file] + "\n", "\uFEFF" + after[file], after[file].slice(1), after[file].replace("  ", " "),
       after[file].replace(".md", ".md?query=1"), after[file].replace(".md", ".md#anchor"),
       after[file].replace("/developers/", "/other/"), after[file].replace("custom-launch-v41", "../escape"),
       after[file].replace("custom-launch-v41", "custom-launch-${injected}"),
@@ -115,6 +115,12 @@ test("the trusted-base CLI proves actual Git blobs, refuses deletion/rename/mode
     };
     assert.match(classifyCli(updated), /^interface_guidance_only=true$/mu);
     assert.match(classifyCli(updated, [file], ""), /^interface_guidance_only=false$/mu);
+    writeFileSync(path.join(repository, file), Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(after[file])]));
+    git("add", "--", file);
+    git("commit", "-m", "Added BOM fixture");
+    const withBom = git("rev-parse", "HEAD");
+    assert.match(classifyCli(withBom), /^interface_guidance_only=false$/mu);
+    assert.match(classifyCli(original, [file], withBom), /^interface_guidance_only=false$/mu);
     git("update-index", "--chmod=+x", "--", file);
     git("commit", "-m", "Mode-change fixture");
     assert.match(classifyCli(git("rev-parse", "HEAD")), /^interface_guidance_only=false$/mu);
