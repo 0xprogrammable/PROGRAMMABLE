@@ -78,10 +78,10 @@
 }
 
 .walletMenu {
-  background: rgb(14 15 18 / 0.98);
-  border: 1px solid rgb(255 255 255 / 0.1);
-  border-radius: 16px;
-  box-shadow: 0 20px 48px rgb(0 0 0 / 0.45);
+  background: var(--webde-surface);
+  border: 1px solid var(--webde-line);
+  border-radius: var(--webde-radius-card);
+  box-shadow: 0 16px 32px rgb(0 0 0 / 0.32);
   color: var(--navigation-glass-ink);
   position: absolute;
   z-index: 91;
@@ -211,12 +211,10 @@
 }
 
 .mobileSheetSurface {
-  -webkit-backdrop-filter: blur(28px) saturate(1.08);
-  backdrop-filter: blur(28px) saturate(1.08);
-  background: rgb(14 15 18 / 0.96);
-  border: 1px solid rgb(255 255 255 / 0.1);
-  border-radius: 20px;
-  box-shadow: 0 24px 64px rgb(0 0 0 / 0.55);
+  background: var(--webde-surface);
+  border: 1px solid var(--webde-line);
+  border-radius: var(--webde-radius-card);
+  box-shadow: 0 16px 32px rgb(0 0 0 / 0.32);
   padding: 10px;
 }
 

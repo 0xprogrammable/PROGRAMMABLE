@@ -204,6 +204,7 @@ export function LaunchModelPicker({
       </header>
 
       <div
+        key={chainId}
         className={`launch-model-grid ${launchExperience.modelGrid} ${isEthereum ? "" : launchExperience.singleModelGrid}`}
       >
         {isEthereum ? (
