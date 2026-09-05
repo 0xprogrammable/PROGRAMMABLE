@@ -127,7 +127,7 @@ export function createPackConfigFromCapabilities({
         compilationUnitId: "robinhood-v4-clean-room",
         artifact: "out/initializer.json",
         applicantSalt: `0x${"03".repeat(32)}`,
-        constructorArguments: [],
+        constructorArguments: [poolManager, { target: "token" }, { target: "hook" }],
         initializer: null,
         deploymentValueWei: "0",
         initializerValueWei: "0",
@@ -152,7 +152,7 @@ export function createPackConfigFromCapabilities({
     liquidityModel: {
       schemaVersion: "programmable.custom-launch-liquidity-model.v1",
       model: "none-empty-pool",
-      declaredLaunchState: "pool-not-initialized",
+      declaredLaunchState: "pool-initialized-empty",
       targetIds: [],
     },
     agentAttestation: {

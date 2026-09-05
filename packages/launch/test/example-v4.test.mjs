@@ -99,6 +99,10 @@ test("Robinhood V4 example materializes a schema-valid funding-none config from 
   assert.deepEqual(hook.runtimeImmutables, [{ immutableId: "7", abiType: "address",
     literal: capabilities.chainDeployment.contracts.poolManager.address }]);
   assert.equal(hook.constructorArguments[0], hook.runtimeImmutables[0].literal);
+  assert.deepEqual(config.targets.find(target => target.targetId === "initializer").constructorArguments,
+    [capabilities.chainDeployment.contracts.poolManager.address, { target: "token" }, { target: "hook" }]);
+  assert.equal(config.liquidityModel.declaredLaunchState, "pool-initialized-empty");
+  assert.deepEqual(config.liquidityModel.targetIds, []);
   assert.equal(config.profile.profileRevision, 1);
   assert.equal(config.chainDeployment,
     capabilities.chainDeployment,

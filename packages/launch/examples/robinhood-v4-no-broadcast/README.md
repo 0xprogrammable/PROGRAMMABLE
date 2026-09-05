@@ -11,7 +11,9 @@ permit window. Finalized blocks can trail the current API clock by many minutes.
 one hour, and the build stops unless at least five minutes remain for submission. The backend independently
 checks finality and the exact transaction; the public RPC read does not authorize a launch.
 
-The request declares funding mode `none`, value `0`, an uninitialized empty pool, and no liquidity action. The hook
+The request declares funding mode `none`, value `0`, an initialized empty pool, and no liquidity action. The
+initializer's constructor initializes the PoolManager pool after the token and hook are deployed; the Router
+requires an initialized pool before issuing its stamp. It adds no liquidity or funds. The hook
 authenticates `beforeSwap` calls against the capabilities-bound immutable PoolManager. The build binds the compiler's
 exact immutable reference to the same address passed to the constructor. This fixture does not claim a fee,
 claiming, liquidity, deployment, or launched-token outcome. A successful local build, pack, or validation is not API
