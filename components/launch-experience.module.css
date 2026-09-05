@@ -2141,16 +2141,23 @@
 
 @media (min-width: 761px) {
   .modelCard.modelCard {
-    display: block;
+    display: flex;
+    flex-direction: column;
   }
 
   .modelArt {
+    flex-shrink: 0;
     height: auto;
     min-height: 0;
   }
 
   .modelBody.modelBody {
     min-height: 126px;
+  }
+
+  .modelBody .modelAction {
+    margin-top: auto;
+    padding-top: 10px;
   }
 }
 
