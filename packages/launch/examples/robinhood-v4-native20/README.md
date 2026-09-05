@@ -6,7 +6,7 @@ It is a bounded reference implementation for the new native20 fee profile. It is
 
 ## Exact launch shape
 
-- Fixed token: **Robinhood Native20 Example (`RHN20`)**, 1,000,000,000 tokens with 18 decimals. The constructor issues the entire supply to the initializer. There is no owner, mint-after-deployment, burn, transfer-tax or upgrade method.
+- Fixed supply: 1,000,000,000 tokens with 18 decimals, using the user-confirmed name and ticker. The constructor sets those strings once and issues the entire supply to the initializer. There is no metadata setter, owner, mint-after-deployment, burn, transfer-tax or upgrade method.
 - Pool: native ETH as currency0 and the token as currency1, LP fee 0, tick spacing 60.
 - Initial position: ticks **160020–200040**, starting exactly at the upper price. The initial square-root price is **1747735933952748037356115466503453** in Q96 units.
 - The initializer supplies token inventory only. It owns the exact initial position permanently and exposes no withdrawal, fee collection, approval, operator, recovery or arbitrary execution method. Token rounding dust left there is also permanently inaccessible.
@@ -34,7 +34,7 @@ ETH-specified partial fills revert atomically. Custom return deltas, NoOp settle
 The graph is deliberately ordered as follows:
 
 1. Deploy `RobinhoodNative20Initializer(manager, graphFactory)` with no target references.
-2. Deploy `RobinhoodNative20Token(initializer)` and issue the fixed inventory to that address.
+2. Deploy `RobinhoodNative20Token(initializer, name, symbol)` and issue the fixed inventory to that address.
 3. Deploy the exact fee hook with the token and initializer references; the hook constructs its deterministic fee vault as its first CREATE child.
 4. After every target exists, the graph factory calls `initializer.initialize(token, hook, launchWallet, minimumTokensOut)` with the exact initial-buy ETH allocation in the initialization phase.
 
@@ -57,7 +57,7 @@ The config declares:
 
 The server requires a first buy worth at least USD 1 using its verified native ETH/USD reference at permit authorization. It rounds the required wei upward; the agent cannot choose the exchange rate. This is a reference valuation at authorization, not a guarantee of the dollar value when the transaction executes. The first swap is evidence of executed trading, not a promise of third-party indexing.
 
-Before building a real launch, the agent must obtain the selected chain, funding model, gas budget, project image, description, name, ticker and social links. The fixed token name/symbol above must match this reference project's metadata. A changed token or initializer requires new source-bound admission; do not substitute an unreviewed token while claiming this exact example's evidence.
+Before building a real launch, the agent must obtain the selected chain, funding model, gas budget, project image, description, name, ticker and social links. The builder must pass the exact confirmed `projectMetadata.token.name` and `projectMetadata.token.symbol` into the token constructor. Names are nonempty and at most 64 UTF-8 bytes; tickers are nonempty and at most 16 UTF-8 bytes. Existing canonical-text rules still apply, including no surrounding whitespace or unsafe controls and no whitespace in the ticker. Admission binds the constructor arguments to that reviewed metadata. Choosing different valid strings does not require replacing the token source or its reviewed runtime. A changed token or initializer implementation requires new source-bound admission.
 
 ### Run the public builder
 
@@ -74,7 +74,7 @@ Create `native20-input.json` after reviewing these fields with the user:
   "minimumTokensOut": "<user-reviewed positive raw token minimum>",
   "projectMetadata": {
     "schemaVersion": "programmable.project-metadata-input.v1",
-    "token": { "name": "Robinhood Native20 Example", "symbol": "RHN20" },
+    "token": { "name": "<user-confirmed token name>", "symbol": "<user ticker>" },
     "presentation": {
       "description": "<user-reviewed coin description>",
       "image": { "sourcePath": "assets/project.png", "uri": "<public HTTPS image URL>" },

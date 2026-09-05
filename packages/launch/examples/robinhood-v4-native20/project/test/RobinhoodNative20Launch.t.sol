@@ -49,7 +49,7 @@ contract RobinhoodNative20LaunchTest is Test, IUnlockCallback {
 
     function _deployExample(uint16 creatorBuyFeeBps, uint16 creatorSellFeeBps) internal {
         initializer = new RobinhoodNative20Initializer(manager, FACTORY);
-        token = new RobinhoodNative20Token(address(initializer));
+        token = new RobinhoodNative20Token(address(initializer), "Orbit Collective", "ORBIT");
         RobinhoodNativeFeeHookV1.PoolConfig memory config = RobinhoodNativeFeeHookV1.PoolConfig({
             token: address(token),
             lpFee: 0,
@@ -70,6 +70,8 @@ contract RobinhoodNative20LaunchTest is Test, IUnlockCallback {
     }
 
     function test_forwardOnlyConstructorOrderFundsFixedTokenInventory() public view {
+        assertEq(token.name(), "Orbit Collective");
+        assertEq(token.symbol(), "ORBIT");
         assertEq(token.totalSupply(), TOTAL_SUPPLY);
         assertEq(token.balanceOf(address(initializer)), TOTAL_SUPPLY);
         assertEq(address(initializer).balance, 0);
@@ -77,6 +79,44 @@ contract RobinhoodNative20LaunchTest is Test, IUnlockCallback {
         assertEq(hook.initializer(), address(initializer));
         assertEq(hook.creatorBuyFeeBps(), 0);
         assertEq(hook.creatorSellFeeBps(), 0);
+    }
+
+    function test_distinctUserMetadataSharesExactRuntimeWithoutChangingSupply() public {
+        RobinhoodNative20Token second = new RobinhoodNative20Token(address(this), unicode"München Collective", "MUC");
+        assertEq(second.name(), unicode"München Collective");
+        assertEq(second.symbol(), "MUC");
+        assertEq(second.totalSupply(), TOTAL_SUPPLY);
+        assertEq(second.balanceOf(address(this)), TOTAL_SUPPLY);
+        assertEq(address(second).codehash, address(token).codehash);
+        assertEq(address(second).codehash, keccak256(type(RobinhoodNative20Token).runtimeCode));
+    }
+
+    function test_tokenMetadataByteBoundsRejectEmptyAndOversizedStrings() public {
+        vm.expectRevert(RobinhoodNative20Token.InvalidMetadata.selector);
+        new RobinhoodNative20Token(address(this), "", "TOKEN");
+        vm.expectRevert(RobinhoodNative20Token.InvalidMetadata.selector);
+        new RobinhoodNative20Token(address(this), "Token", "");
+        vm.expectRevert(RobinhoodNative20Token.InvalidMetadata.selector);
+        new RobinhoodNative20Token(address(this), _repeatedAscii(65), "TOKEN");
+        vm.expectRevert(RobinhoodNative20Token.InvalidMetadata.selector);
+        new RobinhoodNative20Token(address(this), "Token", _repeatedAscii(17));
+        RobinhoodNative20Token boundary =
+            new RobinhoodNative20Token(address(this), _repeatedAscii(64), _repeatedAscii(16));
+        assertEq(bytes(boundary.name()).length, 64);
+        assertEq(bytes(boundary.symbol()).length, 16);
+    }
+
+    function test_metadataCannotBeChangedAfterAtomicLaunchAndTrading() public {
+        _launch();
+        BalanceDelta buy = _swap(true, -int256(0.01 ether));
+        _swap(false, -int256(buy.amount1()) / 2);
+        (bool changedName,) = address(token).call(abi.encodeWithSignature("setName(string)", "Changed"));
+        (bool changedSymbol,) = address(token).call(abi.encodeWithSignature("setSymbol(string)", "CHANGE"));
+        assertFalse(changedName);
+        assertFalse(changedSymbol);
+        assertEq(token.name(), "Orbit Collective");
+        assertEq(token.symbol(), "ORBIT");
+        assertEq(token.totalSupply(), TOTAL_SUPPLY);
     }
 
     function test_launchSeedsLockedPositionAndExecutesFundedFirstBuyAtomically() public {
@@ -313,6 +353,14 @@ contract RobinhoodNative20LaunchTest is Test, IUnlockCallback {
         assertEq(TREASURY.balance - treasuryBefore, platformTotal);
         assertEq(address(this).balance - creatorBefore, creatorTotal);
         assertEq(manager.balanceOf(address(vault), 0), 0);
+    }
+
+    function _repeatedAscii(uint256 length) internal pure returns (string memory) {
+        bytes memory value = new bytes(length);
+        for (uint256 i; i < length; ++i) {
+            value[i] = "A";
+        }
+        return string(value);
     }
 
     function _ceil(uint256 numerator, uint256 denominator) internal pure returns (uint256) {
