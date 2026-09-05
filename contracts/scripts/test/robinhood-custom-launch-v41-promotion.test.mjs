@@ -45,7 +45,8 @@ function fixture(t) {
   const files = [...release.V4_RELEASE_REQUIRED_SOURCE_PATHS];
   for (const entry of stage.artifacts.cliReleaseBinding.value.machineContracts) {
     const next = entry.path.replace("custom-launch-v4.json", "custom-launch-v4.1.json")
-      .replace("custom-launch/v4/", "custom-launch/v4.1/");
+      .replace("custom-launch/v4/", "custom-launch/v4.1/")
+      .replace("/custom-launch-create-request.json", "/create-request.json");
     mkdirSync(path.dirname(path.join(root, next)), { recursive: true });
     cpSync(path.join(repositoryRoot, entry.path), path.join(root, next));
     files.push(next);

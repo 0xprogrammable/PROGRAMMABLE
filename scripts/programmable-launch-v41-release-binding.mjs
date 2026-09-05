@@ -64,8 +64,8 @@ const RELEASE = {
       "https://programmable.market/schemas/custom-launch/v4.1/pack-config.json"
     ],
     "createRequest": [
-      "public/schemas/custom-launch/v4.1/custom-launch-create-request.json",
-      "https://programmable.market/schemas/custom-launch/v4.1/custom-launch-create-request.json"
+      "public/schemas/custom-launch/v4.1/create-request.json",
+      "https://programmable.market/schemas/custom-launch/v4.1/create-request.json"
     ],
     "resource": [
       "public/schemas/custom-launch/v4.1/custom-launch.json",

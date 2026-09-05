@@ -13,7 +13,7 @@ function fixture(t) {
   const root = mkdtempSync(path.join(os.tmpdir(), "programmable-v41-candidate-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const paths = ["public/openapi/custom-launch-v4.1.json", ...[
-    "pack-config", "custom-launch-create-request", "custom-launch", "source-verification-status",
+    "pack-config", "create-request", "custom-launch", "source-verification-status",
     "capabilities", "preflight", "onchain-evidence", "exact-wallet-transaction",
   ].map(name => `public/schemas/custom-launch/v4.1/${name}.json`)];
   for (const relative of paths) {
