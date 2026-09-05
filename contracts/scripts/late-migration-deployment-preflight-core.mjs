@@ -71,6 +71,7 @@ const READ_ONLY_METHODS = new Set([
   "eth_getTransactionByHash",
   "eth_getTransactionCount",
   "eth_getTransactionReceipt",
+  "debug_traceTransaction",
 ]);
 const VALIDATED_RECEIPTS = new WeakMap();
 export function fail(message) {
@@ -884,6 +885,12 @@ export function createReadonlyJsonRpcProvider({
     async request(method, params) {
       if (!READ_ONLY_METHODS.has(method))
         fail(`RPC method ${method} is forbidden`);
+      if (method === "debug_traceTransaction") {
+        if (!Array.isArray(params) || params.length !== 2)
+          fail("activation trace parameters invalid");
+        hash(params[0], "activation trace transaction hash");
+        equal(params[1], { tracer: "callTracer", timeout: "10s", tracerConfig: { withLog: true } }, "bounded activation trace options");
+      }
       const requestId = ++counter;
       let response;
       try {

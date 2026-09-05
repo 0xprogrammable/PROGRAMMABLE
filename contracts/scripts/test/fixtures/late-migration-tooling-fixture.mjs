@@ -21,10 +21,11 @@ import {
 const root = new URL("../../../../", import.meta.url);
 const json = async (name) =>
   JSON.parse(await readFile(new URL(name, root), "utf8"));
-const [preflight, activation, eligibility, creation, runtime] =
+const [preflight, releaseActivation, inertBindings, eligibility, creation, runtime] =
   await Promise.all([
     json("config/late-migration-deployment-preflight.v1.json"),
     json("config/late-migration-intake-activation.v1.json"),
+    json("tests/fixtures/late-migration-intake-inert.v1.json"),
     json("config/late-migration-eligibility.v1.json"),
     json(
       "contracts/scripts/test/fixtures/late-migration-creation-code.v1.json",
@@ -34,7 +35,9 @@ const [preflight, activation, eligibility, creation, runtime] =
 export function inputs() {
   return structuredClone({
     preflight,
-    activation,
+    // Keep the frozen round from the release; deployment scenarios begin
+    // before source deployment even after the runtime manifest is activated.
+    activation: { ...releaseActivation, ...inertBindings },
     eligibility,
     artifacts: {
       source: {
@@ -69,6 +72,7 @@ export function fixture({
     const n = activationTx ? 950n : 900n;
     return {
       hash: activationTx ? activationHash : deploymentHash,
+      type: "0x2",
       chainId: "0x1",
       from: EXPECTED.owner,
       to: activationTx ? sourceAddress : null,
@@ -87,6 +91,7 @@ export function fixture({
     const tx = transaction(activationTx);
     return {
       transactionHash: tx.hash,
+      type: "0x2",
       from: tx.from,
       to: tx.to,
       contractAddress: activationTx ? null : sourceAddress,

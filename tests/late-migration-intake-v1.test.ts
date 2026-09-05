@@ -38,6 +38,8 @@ vi.mock("@/lib/server/late-migration-eligibility-v1", () => ({
 
 import activationManifest from
   "../config/late-migration-intake-activation.v1.json";
+import inertActivationBindings from
+  "./fixtures/late-migration-intake-inert.v1.json";
 import { buildMainTokenMigrationPermitTypedData } from
   "../lib/main-token-migration";
 import {
@@ -70,6 +72,10 @@ import {
 import type { ProjectionTargetPostgresPoolV1,
   ProjectionTargetPostgresQueryResultV1 } from
   "../lib/server/projection-target/postgres-store";
+
+// Preserve the committed frozen round while making the preactivation state
+// explicit and independent of the runtime release activation.
+const inertActivationManifest = { ...activationManifest, ...inertActivationBindings };
 
 const sourceContract = getAddress(
   "0x1111111111111111111111111111111111111111");
@@ -109,6 +115,35 @@ function configuration(): LateMigrationIntakeConfigurationV1 {
     relayerPolicySha256: expectedLateMigrationIntakePolicySha256V1(
       withoutHash),
   });
+}
+
+function enabledManifest(config = configuration()) {
+  return { ...inertActivationManifest, enabled: true,
+    sourceContractAddress: config.sourceContractAddress,
+    sourceContractRuntimeCodehash: config.sourceContractRuntimeCodehash,
+    sourceDeploymentBlockNumber: config.sourceDeploymentBlockNumber.toString(),
+    sourceDeploymentBlockHash: config.sourceDeploymentBlockHash,
+    activatedAtBlock: config.activatedAtBlock.toString(),
+    relayerAddress: config.relayerAddress,
+    relayerFundingBlockNumber: config.relayerFundingBlockNumber.toString(),
+    relayerFundingBlockHash: config.relayerFundingBlockHash,
+    relayerFundingBalanceWei: config.relayerFundingBalanceWei.toString(),
+    relayerPolicySha256: config.relayerPolicySha256,
+    maximumDepositGasLimit: config.maximumDepositGasLimit.toString(),
+    maximumFeePerGasWei: config.maximumFeePerGasWei.toString(),
+    totalRelayerBudgetWei: config.totalRelayerBudgetWei.toString(),
+    permitValiditySeconds: config.permitValiditySeconds,
+    relayerWalletOwnerId: config.relayerWalletOwnerId,
+    relayerPolicyOwnerId: config.relayerPolicyOwnerId };
+}
+
+function enabledEnvironment(config = configuration()) {
+  return { PROGRAMMABLE_LATE_MIGRATION_INTAKE_ENABLED: "true",
+    PROGRAMMABLE_LATE_MIGRATION_PRIVY_WALLET_ID: config.relayerWalletId,
+    PROGRAMMABLE_LATE_MIGRATION_PRIVY_POLICY_ID: config.relayerPolicyId,
+    PROGRAMMABLE_LATE_MIGRATION_PRIVY_TRANSACTION_SIGNER_ID:
+      config.relayerTransactionSignerId,
+    PROGRAMMABLE_LATE_MIGRATION_PRIVY_OWNER_PUBLIC_KEY: ownerPublicKey };
 }
 
 function authenticated(wallets = [account.address]) {
@@ -213,8 +248,8 @@ async function prepareAndSubmit(
 describe("late migration intake v1", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("ships disabled and contains no target relay or retryable fields", () => {
-    expect(activationManifest).toMatchObject({
+  it("keeps an inert fixture and contains no target relay or retryable fields", () => {
+    expect(inertActivationManifest).toMatchObject({
       schema: "programmable-late-migration-intake-activation/v1",
       enabled: false,
       sourceContractAddress: null,
@@ -226,36 +261,49 @@ describe("late migration intake v1", () => {
     ]));
   });
 
-  it("does not load production configuration from only one activation switch", () => {
+  it("validates the committed manifest in its inert or activated release state", () => {
+    if (activationManifest.enabled === false) {
+      expect(activationManifest).toEqual(inertActivationManifest);
+      return;
+    }
+    // Test-only external IDs and a generated public key satisfy environment
+    // syntax; this is strict manifest validation, not live authority evidence.
+    expect(readLateMigrationIntakeConfigurationV1({
+      environment: enabledEnvironment(), manifest: activationManifest,
+    })).not.toBeNull();
+  });
+
+  it("stays disabled without the environment switch even for a fully enabled manifest", () => {
     expect(readLateMigrationIntakeConfigurationV1({ environment: {},
       manifest: activationManifest })).toBeNull();
-    expect(() => readLateMigrationIntakeConfigurationV1({ environment: {
-      PROGRAMMABLE_LATE_MIGRATION_INTAKE_ENABLED: "true",
-    }, manifest: activationManifest })).toThrow("Late migration intake");
+    expect(readLateMigrationIntakeConfigurationV1({ environment: {},
+      manifest: enabledManifest() })).toBeNull();
+  });
+
+  it("rejects the inert manifest even with complete enabled environment bindings", () => {
+    expect(() => readLateMigrationIntakeConfigurationV1({
+      environment: enabledEnvironment(), manifest: inertActivationManifest,
+    })).toThrow("Late migration intake");
+  });
+
+  it("rejects activation missing any required deployment or sponsor binding", () => {
+    const manifest = enabledManifest();
+    const environment = enabledEnvironment();
+    for (const [field, value] of Object.entries(inertActivationManifest)) {
+      if (value !== null) continue;
+      expect(() => readLateMigrationIntakeConfigurationV1({ environment,
+        manifest: { ...manifest, [field]: null } }), field).toThrow();
+    }
+    expect(() => readLateMigrationIntakeConfigurationV1({
+      environment: { PROGRAMMABLE_LATE_MIGRATION_INTAKE_ENABLED: "true" },
+      manifest,
+    })).toThrow("Late migration intake");
   });
 
   it("binds activation to isolated owners and exactly capped sponsor funding", () => {
     const config = configuration();
-    const manifest = { ...activationManifest, enabled: true,
-      sourceContractAddress: sourceContract,
-      sourceContractRuntimeCodehash: config.sourceContractRuntimeCodehash,
-      sourceDeploymentBlockNumber: "100", sourceDeploymentBlockHash:
-        config.sourceDeploymentBlockHash, activatedAtBlock: "110",
-      relayerAddress: relayer, relayerFundingBlockNumber: "120",
-      relayerFundingBlockHash: config.relayerFundingBlockHash,
-      relayerFundingBalanceWei: config.relayerFundingBalanceWei.toString(),
-      relayerPolicySha256: config.relayerPolicySha256,
-      maximumDepositGasLimit: config.maximumDepositGasLimit.toString(),
-      maximumFeePerGasWei: config.maximumFeePerGasWei.toString(),
-      totalRelayerBudgetWei: config.totalRelayerBudgetWei.toString(),
-      permitValiditySeconds: 600, relayerWalletOwnerId: config.relayerWalletOwnerId,
-      relayerPolicyOwnerId: config.relayerPolicyOwnerId };
-    const environment = { PROGRAMMABLE_LATE_MIGRATION_INTAKE_ENABLED: "true",
-      PROGRAMMABLE_LATE_MIGRATION_PRIVY_WALLET_ID: config.relayerWalletId,
-      PROGRAMMABLE_LATE_MIGRATION_PRIVY_POLICY_ID: config.relayerPolicyId,
-      PROGRAMMABLE_LATE_MIGRATION_PRIVY_TRANSACTION_SIGNER_ID:
-        config.relayerTransactionSignerId,
-      PROGRAMMABLE_LATE_MIGRATION_PRIVY_OWNER_PUBLIC_KEY: ownerPublicKey };
+    const manifest = enabledManifest(config);
+    const environment = enabledEnvironment(config);
     expect(readLateMigrationIntakeConfigurationV1({ environment, manifest }))
       .toEqual(config);
     for (const changed of [{ ...manifest, relayerWalletOwnerId:
