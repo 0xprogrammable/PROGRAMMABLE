@@ -32,6 +32,7 @@ import { FallingCreatorFeeV1 } from "../../src/classic-modules/modules/FallingCr
 import { QuoteTradeLimitV1 } from "../../src/classic-modules/modules/QuoteTradeLimitV1.sol";
 import { ClassicCreatorFeeSplitterV1 } from "../../src/classic-modules/ClassicCreatorFeeSplitterV1.sol";
 import { ClassicModuleFeeLedgerV1 } from "../../src/classic-modules/ClassicModuleFeeLedgerV1.sol";
+import { IProgrammableClassicLaunchV1 } from "../../src/interfaces/IProgrammableClassicLaunchV1.sol";
 
 interface IClassicModuleLedgerForLaunchTest {
     function claimable(address beneficiary) external view returns (uint256);
@@ -139,6 +140,67 @@ contract ClassicModuleLaunchV1Test is Deployers {
         assertEq(ledger.claimable(treasury), MIN_BUY / 1000);
         assertEq(ledger.claimable(noModuleRecipient), MIN_BUY / 1000);
         assertEq(ledger.claimable(creator), 0);
+    }
+
+    function test_sameIdentityReaderBindsPlainAndModuleLaunchesAfterCatalogueAndCtoChanges() public {
+        IProgrammableClassicLaunchV1 reader = IProgrammableClassicLaunchV1(address(launcher));
+        assertEq(reader.launchIdentityVersion(), 1);
+        ClassicModuleLaunchV1.LaunchParameters memory parameters = _parameters();
+        ClassicModuleLaunchV1.LaunchRecord memory plain = _launch(parameters, MIN_BUY);
+        parameters.creatorSalt = keccak256("second-identity-launch");
+        parameters.buyCreatorFeeBps = 100;
+        parameters.sellCreatorFeeBps = 100;
+        parameters.modules = _modules();
+        ClassicModuleLaunchV1.LaunchRecord memory modular = _launch(parameters, MIN_BUY);
+
+        _assertIdentity(reader, plain);
+        _assertIdentity(reader, modular);
+        assertTrue(plain.token != modular.token);
+        assertTrue(plain.recipeHash != modular.recipeHash);
+        bytes32 identityBefore = keccak256(abi.encode(reader.getLaunchIdentity(modular.token)));
+
+        registry.setVersionEnabled(feeVersion, false);
+        address[] memory newWallets = new address[](1);
+        newWallets[0] = makeAddr("next-cto-team");
+        ClassicModuleFeeLedgerV1 feeLedger = hook.ledger();
+        vm.prank(treasury);
+        feeLedger.replaceCreatorWallets(modular.poolId, newWallets, 0, block.timestamp + 1);
+        _swap(modular.token, true, -int256(MIN_BUY), MIN_BUY);
+        assertEq(keccak256(abi.encode(reader.getLaunchIdentity(modular.token))), identityBefore);
+        _assertIdentity(reader, modular);
+    }
+
+    function test_identityReaderReturnsAllZerosForUnknownOrRolledBackLaunch() public {
+        IProgrammableClassicLaunchV1 reader = IProgrammableClassicLaunchV1(address(launcher));
+        IProgrammableClassicLaunchV1.LaunchIdentity memory empty;
+        assertEq(abi.encode(reader.getLaunchIdentity(makeAddr("not-launched"))), abi.encode(empty));
+        ClassicModuleLaunchV1.LaunchParameters memory parameters = _parameters();
+        parameters.minimumInitialTokenOut = type(uint256).max;
+        (address predicted,) =
+            launcher.predictTokenAddress(parameters.name, parameters.symbol, creator, parameters.creatorSalt);
+        _assertAtomicRevert(parameters, MIN_BUY, ClassicModuleLaunchV1.InitialBuyOutputTooLow.selector);
+        assertEq(predicted.code.length, 0);
+        assertEq(abi.encode(reader.getLaunchIdentity(predicted)), abi.encode(empty));
+    }
+
+    function _assertIdentity(IProgrammableClassicLaunchV1 reader, ClassicModuleLaunchV1.LaunchRecord memory expected)
+        private
+        view
+    {
+        IProgrammableClassicLaunchV1.LaunchIdentity memory identity = reader.getLaunchIdentity(expected.token);
+        assertEq(
+            abi.encode(identity),
+            abi.encode(
+                expected.launchId,
+                expected.launchWallet,
+                expected.token,
+                address(manager),
+                expected.poolId,
+                expected.hook,
+                expected.recipeHash
+            )
+        );
+        assertEq(keccak256(abi.encode(launcher.getLaunch(expected.token))), keccak256(abi.encode(expected)));
     }
 
     function test_initialBuyBuySellAndPullClaimsUseRealPoolManager() public {

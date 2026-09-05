@@ -30,6 +30,10 @@ All uint256 quantities cross the collector boundary as canonical decimal strings
 
 ## Contract event and getter
 
+The additive common reader [`IProgrammableClassicLaunchV1`](../../contracts/src/interfaces/IProgrammableClassicLaunchV1.sol) exposes `launchIdentityVersion() == 1` and `getLaunchIdentity(token)`. Its fixed return order is `(launchId, launchWallet, token, poolManager, poolId, hook, recipeHash)`. It is independent of the selected module kinds and omits native-buy and LP-NFT details. An unknown or atomically rolled-back token returns seven zero fields. Catalogue availability, subsequent trades and payout rotations do not rewrite this identity.
+
+This version identifies the identity ABI, not an engine revision or official approval. The reader is an additional integration interface; it is not currently another field in the strict V1 collector envelope below. A collector using it must authenticate the source and block, then compare its values against the stored launch/event and immutable PoolManager. The existing `getLaunch` and event encoding below remain unchanged. The reader does not activate the source or prove third-party listing. Any release must bind the newly compiled launcher runtime rather than an earlier hash.
+
 The adapter exports the following ABI:
 
 ```solidity

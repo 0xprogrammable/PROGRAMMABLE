@@ -1,5 +1,7 @@
 # Programmable Classic Modules – Plan und feste Produktregeln
 
+**Präzisierung zur offenen Architektur:** Die unten dokumentierte Zwei-Effekt-Engine ist der implementierte erste Stand. Der allgemeine zustandsbehaftete Modulablauf wird in [Open Classic module architecture](classic-open-module-contract-v2.md) als nächste Umsetzung spezifiziert. Die bereits ergänzte gemeinsame Launch-Identität ist davon getrennt; sie erweitert die Modulausführung selbst noch nicht.
+
 Stand: 5. September 2026. Ausgangspunkt: `programmablehq/PROGRAMMABLE`, Branch `production`, Commit `ddee606b22af7d0ea92089ce387bdead60b20613`. Dieser Plan beschreibt die neue Generation; bestehende Launches werden nicht umgestellt.
 
 ## 1. Das Produkt

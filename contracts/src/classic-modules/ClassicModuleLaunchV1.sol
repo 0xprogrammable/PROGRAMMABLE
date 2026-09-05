@@ -27,6 +27,7 @@ import { LockedPositionFeeForwarderFactoryV1 } from "../LockedPositionFeeForward
 import { ClassicModuleHookV1 } from "./ClassicModuleHookV1.sol";
 import { ClassicModuleLaunchPolicyV1 } from "./ClassicModuleLaunchPolicyV1.sol";
 import { ClassicModuleTypes as T } from "./ClassicModuleTypes.sol";
+import { IProgrammableClassicLaunchV1 } from "../interfaces/IProgrammableClassicLaunchV1.sol";
 
 /// @title ClassicModuleLaunchV1
 /// @notice Permissionless, atomic Classic launch with a fixed supply, pinned recipe and permanently locked LP.
@@ -34,7 +35,7 @@ import { ClassicModuleTypes as T } from "./ClassicModuleTypes.sol";
 ///      immutable V1 engine is the finite-range native/token AMM curve in ClassicModulePositionPlannerV1; it has no
 /// sale phase, migration, custody option, transfer tax or later mutable launch configuration. The caller receives
 ///      the initial tokens directly. Native minimum purchase and network gas are separate quantities.
-contract ClassicModuleLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
+contract ClassicModuleLaunchV1 is IUnlockCallback, IProgrammableClassicLaunchV1, ReentrancyGuardTransient {
     using CurrencySettler for Currency;
     using SafeCast for *;
 
@@ -252,6 +253,25 @@ contract ClassicModuleLaunchV1 is IUnlockCallback, ReentrancyGuardTransient {
 
     function getLaunch(address token) external view returns (LaunchRecord memory) {
         return _launches[token];
+    }
+
+    function launchIdentityVersion() external pure override returns (uint256) {
+        return 1;
+    }
+
+    /// @dev The common reader deliberately does not depend on the recipe's supported module kinds.
+    function getLaunchIdentity(address token) external view override returns (LaunchIdentity memory identity) {
+        LaunchRecord storage record = _launches[token];
+        if (record.token == address(0)) return identity;
+        return LaunchIdentity(
+            record.launchId,
+            record.launchWallet,
+            record.token,
+            address(poolManager),
+            record.poolId,
+            record.hook,
+            record.recipeHash
+        );
     }
 
     function predictTokenAddress(
