@@ -9,11 +9,15 @@ import {
 import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import {
-  V4_RELEASE_BINDING_PATH,
-  V4_RELEASE_BINDING_SCHEMA,
-  requireV4ReleaseReady,
-} from "./programmable-launch-v4-release-binding.mjs";
+import * as v4Binding from "./programmable-launch-v4-release-binding.mjs";
+import * as v41Binding from "./programmable-launch-v41-release-binding.mjs";
+
+export function releaseBindingTools(version) {
+  if (version === "4.0.0") return v4Binding;
+  if (version === "4.1.0") return v41Binding;
+  if (version.split(".")[0] === "4") throw new Error("Unsupported V4 release version");
+  return null;
+}
 
 export const RELEASE_ASSET_SCHEMA =
   "programmable.launch-cli-release-assets.v1";
@@ -90,12 +94,13 @@ export function buildReleaseManifest(input) {
   if (assets.some((asset, index) => asset.name !== expectedNames[index])) {
     throw new Error("Release manifest asset names are not exact.");
   }
-  const requiresV4Binding = input.version.split(".")[0] === "4";
+  const bindingTools = releaseBindingTools(input.version);
+  const requiresV4Binding = bindingTools !== null;
   let machineContractBinding;
   if (requiresV4Binding) {
     const value = input.machineContractBinding;
-    if (value?.schemaVersion !== V4_RELEASE_BINDING_SCHEMA
-      || value?.path !== V4_RELEASE_BINDING_PATH
+    if (value?.schemaVersion !== bindingTools.V4_RELEASE_BINDING_SCHEMA
+      || value?.path !== bindingTools.V4_RELEASE_BINDING_PATH
       || typeof value?.sha256 !== "string"
       || !/^sha256:[0-9a-f]{64}$/u.test(value.sha256)) {
       throw new Error("V4 release manifest requires the exact machine-contract binding.");
@@ -288,12 +293,13 @@ function repositoryContext(options) {
   if (!/^refs\/heads\/[A-Za-z0-9._/-]+$/u.test(options.sourceRef ?? "")) {
     throw new Error("Source ref is invalid.");
   }
-  const machineContractBinding = packageJson.version.split(".")[0] === "4"
+  const bindingTools = releaseBindingTools(packageJson.version);
+  const machineContractBinding = bindingTools !== null
     ? (() => {
-        const result = requireV4ReleaseReady({ repositoryRoot: root });
+        const result = bindingTools.requireV4ReleaseReady({ repositoryRoot: root });
         return Object.freeze({
-          schemaVersion: V4_RELEASE_BINDING_SCHEMA,
-          path: V4_RELEASE_BINDING_PATH,
+          schemaVersion: bindingTools.V4_RELEASE_BINDING_SCHEMA,
+          path: bindingTools.V4_RELEASE_BINDING_PATH,
           sha256: result.bindingSha256,
         });
       })()
