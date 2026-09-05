@@ -35,6 +35,7 @@
   display: flex;
   gap: 8px;
   justify-content: center;
+  margin-bottom: 32px;
 }
 
 .search,
@@ -114,38 +115,11 @@
   padding: 8px 16px;
 }
 
-.summary {
-  align-items: baseline;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 24px;
-  justify-content: space-between;
-  margin-top: 32px;
-}
-
-.summary p {
-  align-items: baseline;
-  display: flex;
-  gap: 12px;
-  margin: 0;
-}
-
-.summary strong {
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.summary p > span,
-.updated,
 .status {
   color: var(--webde-muted);
   font-size: 14px;
   line-height: 1.5;
-}
-
-.status {
-  margin: 8px 0 16px;
-  min-height: 24px;
+  margin: 0 0 16px;
 }
 
 .list,

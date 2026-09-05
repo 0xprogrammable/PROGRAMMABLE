@@ -46,12 +46,6 @@ const ADDRESS = /^0x[0-9a-f]{40}$/i;
 const HASH = /^0x[0-9a-f]{64}$/i;
 const REFRESH_MS = 30_000;
 const REQUEST_TIMEOUT_MS = 12_000;
-const DATE_FORMAT = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-});
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -93,10 +87,6 @@ function readResponse(value: unknown): LaunchResponse {
     throw new Error("Invalid launch pagination");
   }
   return value as LaunchResponse;
-}
-
-function launchTime(value: string | null) {
-  return value ? DATE_FORMAT.format(new Date(value)) : "Time unavailable";
 }
 
 export function RobinhoodLaunchesView({
@@ -282,11 +272,7 @@ function RobinhoodLaunchList({ embedded, enabled }: { embedded: boolean; enabled
           </button>
         </div>
 
-        <div className={styles.summary}>
-          <p><strong>Robinhood</strong>{data && (data.status === "ready" || hasRows) ? <span>{count} {count === 1 ? "token" : "tokens"}</span> : null}</p>
-          {data?.updatedAt ? <span className={styles.updated}>Updated <time dateTime={data.updatedAt}>{launchTime(data.updatedAt)}</time></span> : null}
-        </div>
-        <p className={styles.status} id={statusId} role="status">
+        <p className={failed || data?.status === "stale" || data?.status === "unavailable" ? styles.status : "sr-only"} id={statusId} role="status">
           {statusText || (data ? <span className="sr-only">{count} {count === 1 ? "launch found" : "launches found"}</span> : null)}
         </p>
 
