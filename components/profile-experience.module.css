@@ -2087,6 +2087,10 @@
   padding-top: 17px;
 }
 
+.hero.publicHero { align-items: center; min-height: 0; }
+.publicHero .avatar { margin: 0; }
+.publicHero .heroCopy { padding-top: 0; }
+
 .nameRow {
   gap: 14px;
 }

@@ -4743,7 +4743,7 @@ function PublicCreatorProfile({
 
   return (
     <div className={`${styles.page} page-width`}>
-      <section className={styles.hero} aria-labelledby="public-profile-title">
+      <section className={`${styles.hero} ${styles.publicHero}`} aria-labelledby="public-profile-title">
         <div className={styles.avatar} aria-hidden="true">
           <span>{account.slice(2, 4).toUpperCase()}</span>
         </div>
