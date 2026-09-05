@@ -20,6 +20,8 @@ import {
 import { useWallet } from "@/components/wallet-provider";
 import type { ViewChainId } from "@/lib/view-chain";
 import { ProfileChainSelector } from "@/components/profile-chain-selector";
+import { ProfileLoadingSkeleton } from "@/components/profile-skeleton";
+export { ProfileLoadingSkeleton } from "@/components/profile-skeleton";
 import { RobinhoodProfileLaunches } from "@/components/robinhood-profile-launches";
 import {
   ProfileProjects,
@@ -3436,9 +3438,7 @@ export function ProfileView({ onchainData, viewChainId = 4663, onChangeChain }: 
     return (
       <ProfileSessionLoadingState
         showDashboard={
-          clientHydrated &&
-          requestedProfileAccount === null &&
-          (hasSession || Boolean(account))
+          Boolean(requestedProfileAccount) || hasSession || Boolean(account)
         }
       />
     );
@@ -4597,70 +4597,12 @@ function ProfileLoadingState() {
   return <ProfileLoadingSkeleton label="Loading profile" />;
 }
 
-export function ProfileLoadingSkeleton({
-  label,
-  showHero = false,
-}: {
-  label: string;
-  showHero?: boolean;
-}) {
-  return (
-    <section
-      className={`${styles.profileSkeleton} ${
-        showHero ? styles.profileSkeletonPage : styles.profileSkeletonInline
-      }`}
-      aria-busy="true"
-      aria-label={label}
-    >
-      <span className={styles.visuallyHidden} role="status">
-        {label}
-      </span>
-      {showHero ? (
-        <div className={styles.profileSkeletonHero} aria-hidden="true">
-          <span className={styles.profileSkeletonBanner} />
-          <span className={styles.profileSkeletonAvatar} />
-          <span className={styles.profileSkeletonCopy}>
-            <span />
-            <span />
-          </span>
-        </div>
-      ) : null}
-      {showHero ? <ProfileProjectsLoadingState /> : null}
-      <div
-        className={`${styles.profileSkeletonWorkspace} ${
-          showHero ? styles.profileSkeletonWorkspacePage : ""
-        }`}
-        aria-hidden="true"
-      >
-        <div className={styles.profileSkeletonSummary}>
-          <span className={styles.profileSkeletonHeading} />
-          <span className={styles.profileSkeletonMetric} />
-          <span className={styles.profileSkeletonLine} />
-          <span className={styles.profileSkeletonBar} />
-        </div>
-        <div className={styles.profileSkeletonClaims}>
-          <span className={styles.profileSkeletonSectionHeader}>
-            <span className={styles.profileSkeletonHeading} />
-          </span>
-          <span className={styles.profileSkeletonRows}>
-            {Array.from({ length: profileClaimPageSize }, (_, item) => (
-              <span className={styles.profileSkeletonRow} key={item}>
-                <span />
-                <span />
-                <span />
-              </span>
-            ))}
-          </span>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 export function ProfileRouterLaunches({
   entries,
+  refreshing = false,
 }: {
   entries: readonly ProfilePortfolioEntry[];
+  refreshing?: boolean;
 }) {
   if (!entries.length) return null;
 
@@ -4668,9 +4610,11 @@ export function ProfileRouterLaunches({
     <section
       className={styles.launchesPanel}
       aria-labelledby="profile-launches-title"
+      aria-busy={refreshing || undefined}
     >
       <header className={styles.launchesHeader}>
         <h2 id="profile-launches-title">Launches</h2>
+        <span className={styles.visuallyHidden} role="status">{refreshing ? "Refreshing launches" : ""}</span>
       </header>
 
       <div className={styles.launchList}>
@@ -4716,6 +4660,12 @@ export function ProfileRouterLaunches({
   );
 }
 
+export function beginPublicProfileRefresh(data: ProfileOnchainData, account: string): ProfileOnchainData {
+  return data.status === "ready" && data.chainId === 1 && isProfileDataForAccount(data, account)
+    ? data
+    : loadingProfileData(account);
+}
+
 export function PublicCreatorProfile({
   account,
   connectedAccount,
@@ -4733,35 +4683,47 @@ export function PublicCreatorProfile({
   const [data, setData] = useState<ProfileOnchainData>(() =>
     loadingProfileData(account)
   );
+  const [refreshingAccount, setRefreshingAccount] = useState<string | null>(null);
 
   useEffect(() => {
     if (viewChainId !== 1) return;
+    let disposed = false;
+    let timedOut = false;
     const controller = new AbortController();
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 10_000);
     queueMicrotask(() => {
-      if (!controller.signal.aborted) setData(loadingProfileData(account));
+      if (disposed) return;
+      setRefreshingAccount(account.toLowerCase());
+      setData((current) => beginPublicProfileRefresh(current, account));
     });
     void fetchCreatorProfile(account, controller.signal).then(
       (profile) => {
         if (!controller.signal.aborted) setData(profile);
       },
       (caught) => {
-        if (controller.signal.aborted) return;
-        const errorKind = caught instanceof ProfileResponseError
-          ? caught.kind
-          : "temporary";
-        setData(errorProfileData(
-          account,
-          caught instanceof Error
-            ? caught.message
-            : "Public profile data is temporarily unavailable",
-          errorKind,
+        if (disposed) return;
+        setData((current) => resolveCreatorProfileReadFailure(
+          beginPublicProfileRefresh(current, account), account,
+          timedOut ? new ProfileResponseError("Launches took too long to load", "temporary") : caught,
         ));
       },
-    );
-    return () => controller.abort();
+    ).finally(() => {
+      window.clearTimeout(timeout);
+      if (!disposed) setRefreshingAccount(null);
+    });
+    return () => {
+      disposed = true;
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
   }, [account, refreshKey, viewChainId]);
 
-  const scopedData = isProfileDataForAccount(data, account) ? data : loadingProfileData(account);
+  const scopedData = data.status === "ready" ? beginPublicProfileRefresh(data, account)
+    : isProfileDataForAccount(data, account) ? data : loadingProfileData(account);
+  const refreshing = refreshingAccount === account.toLowerCase();
   const entries = scopedData.status === "ready"
     ? profileRouterLaunchEntries(
         buildProfilePortfolio(scopedData.tokens, [], []),
@@ -4811,7 +4773,13 @@ export function PublicCreatorProfile({
           </button>
         </section>
       ) : entries.length ? (
-        <ProfileRouterLaunches entries={entries} />
+        <>
+          <ProfileRouterLaunches entries={entries} refreshing={refreshing} />
+          {scopedData.sourceQuality === "stale" && !refreshing ? <p className={styles.publicRefreshNote} role="status">
+            Couldn’t refresh launches.
+            <button className={styles.retryButton} type="button" onClick={() => setRefreshKey((current) => current + 1)}>Try again</button>
+          </p> : null}
+        </>
       ) : (
         <section
           className={`${styles.launchesPanel} ${styles.publicProfileState}`}
