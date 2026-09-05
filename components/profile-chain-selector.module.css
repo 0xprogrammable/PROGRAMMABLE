@@ -1,0 +1,38 @@
+.selector {
+  background: var(--webde-surface);
+  border: 1px solid var(--webde-line);
+  border-radius: var(--webde-radius-control);
+  display: flex;
+  gap: 4px;
+  margin: 24px 0;
+  min-inline-size: 0;
+  padding: 4px;
+  width: fit-content;
+}
+
+.option {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--webde-radius-control);
+  color: var(--webde-muted);
+  cursor: pointer;
+  display: flex;
+  height: 44px;
+  justify-content: center;
+  position: relative;
+  width: 44px;
+}
+
+.option:has(input:checked) { background: var(--webde-surface-raised); border-color: var(--webde-line); color: var(--webde-ink); }
+.option:has(input:focus-visible) { outline: 2px solid var(--webde-muted); outline-offset: 2px; }
+.mark { height: 20px; width: 20px; }
+.robinhood { background: currentColor; height: 21px; mask: url("/brand/networks/robinhood-feather-white.svg") center / contain no-repeat; width: 16px; }
+
+@media (hover: hover) and (pointer: fine) {
+  .option:hover { color: var(--webde-ink); }
+}
+@media (forced-colors: active) {
+  .option:has(input:checked) { border-color: Highlight; }
+  .option:has(input:focus-visible) { outline-color: Highlight; }
+  .robinhood { background: CanvasText; forced-color-adjust: none; }
+}

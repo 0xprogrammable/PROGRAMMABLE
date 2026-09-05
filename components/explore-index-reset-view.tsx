@@ -1,8 +1,9 @@
 "use client";
 
-import { ChevronDown, Search } from "lucide-react";
+import { Search } from "lucide-react";
 
 import { ExploreChainSelector } from "@/components/explore-chain-selector";
+import { ExploreFilters } from "@/components/explore-filters";
 import styles from "@/components/index-reset-view.module.css";
 
 export function ExploreIndexResetView({
@@ -34,22 +35,14 @@ export function ExploreIndexResetView({
               <input
                 id="explore-token-search"
                 type="search"
-                placeholder="Name, ticker or address"
+                placeholder="Name, symbol or address"
                 disabled
               />
             </div>
 
             <ExploreChainSelector />
 
-            <button
-              className={styles.disabledFilter}
-              type="button"
-              disabled
-              aria-label="Filters are unavailable while indexing is rebuilt"
-            >
-              <span>Filters</span>
-              <ChevronDown aria-hidden="true" size={15} />
-            </button>
+            <ExploreFilters disabled />
           </div>
         ) : null}
 

@@ -1,0 +1,25 @@
+.panel { border: 1px solid var(--webde-line); border-radius: var(--webde-radius-card); background: var(--webde-surface); margin-top: 20px; overflow: hidden; }
+.heading { padding: 20px 22px 12px; }
+.heading h2 { color: var(--webde-ink); font-size: 18px; font-weight: 550; margin: 0; }
+.list { list-style: none; margin: 0; padding: 0 12px 12px; }
+.row { align-items: center; border-radius: var(--webde-radius-control); display: flex; gap: 14px; min-height: 88px; padding: 12px 10px; }
+.artwork { border-radius: var(--webde-radius-control); flex: none; height: 56px; width: 56px; }
+.identity { display: grid; gap: 4px; min-width: 0; }
+.identity strong { color: var(--webde-ink); font-size: 16px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.identity small, .metrics small, .metrics time { color: var(--webde-muted); font-size: 12px; }
+.metrics { display: grid; flex: none; gap: 3px; margin-left: auto; text-align: right; }
+.metrics strong { color: var(--webde-ink); font-size: 15px; font-variant-numeric: tabular-nums; }
+.empty { color: var(--webde-muted); padding: 8px 22px 24px; }
+.empty p { margin: 0 0 12px; }
+.empty a, .empty button, .pagination button { align-items: center; background: var(--webde-surface-raised); border: 1px solid var(--webde-line); border-radius: var(--webde-radius-control); color: var(--webde-ink); cursor: pointer; display: inline-flex; justify-content: center; min-height: 44px; padding: 10px 14px; }
+.pagination { align-items: center; display: flex; gap: 14px; justify-content: flex-end; padding: 0 22px 20px; }
+.pagination span { color: var(--webde-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.pagination button:disabled { cursor: default; opacity: .4; }
+.row:focus-visible, .panel a:focus-visible, .panel button:focus-visible { outline: 2px solid var(--webde-muted); outline-offset: 2px; }
+.loading { padding: 16px 22px 24px; }
+.loading span { animation: pulse 1.5s ease-in-out infinite; background: var(--webde-surface-raised); border-radius: var(--webde-radius-control); display: block; height: 64px; }
+@keyframes pulse { 50% { opacity: .4; } }
+@media (hover: hover) and (pointer: fine) { .row:hover { background: var(--webde-surface-raised); } }
+@media (max-width: 480px) { .row { gap: 10px; } .identity strong { font-size: 14px; } .artwork { height: 44px; width: 44px; } .metrics strong { font-size: 13px; } }
+@media (prefers-reduced-motion: reduce) { .loading span { animation: none; } }
+@media (forced-colors: active) { .panel { border-color: CanvasText; } .row:focus-visible, .panel a:focus-visible, .panel button:focus-visible { outline-color: Highlight; } }

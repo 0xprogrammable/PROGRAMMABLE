@@ -302,3 +302,28 @@ condition = "AND"
 regexTarget = "match"
 paths = ['''contracts/test/late-migration/mocks/IntakeV3Mocks\.sol''']
 regexes = ['''^PinnedPermitTokenMockV3 is IERC20, IERC20Permit\s+$''']
+
+[[allowlists]]
+description = "Robinhood website and tests pin the public Programmable token address"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+paths = [
+  '''^lib/robinhood-explore-policy\.ts$''',
+  '''^lib/server/robinhood-presentation\.ts$''',
+  '''^tests/robinhood-website-index\.test\.ts$''',
+  '''^tests/robinhood-presentation\.test\.ts$''',
+  '''^tests/robinhood-profile\.test\.ts$''',
+]
+regexes = ['''(?i)^0xc60ba256b44334a0cd2c7242e98b88f031abb006$''']
+
+[[allowlists]]
+description = "Robinhood visibility tests pin the public Clean Room token address"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+paths = [
+  '''^tests/robinhood-website-index\.test\.ts$''',
+  '''^tests/robinhood-explore-read\.test\.ts$''',
+]
+regexes = ['''(?i)^0x15fca474b23cafe775120b1fafbcff0e7a827af2$''']
