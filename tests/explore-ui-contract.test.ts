@@ -6,7 +6,8 @@ const root = process.cwd();
 
 describe("Explore UI contract", () => {
   it("loads Robinhood while preserving the Ethereum reset", () => {
-    const page = readFileSync(join(root, "app/explore/page.tsx"), "utf8");
+    const page = readFileSync(join(root, "app/explore/[chain]/page.tsx"), "utf8");
+    const entry = readFileSync(join(root, "app/explore/page.tsx"), "utf8");
     const resetView = readFileSync(
       join(root, "components/explore-index-reset-view.tsx"),
       "utf8",
@@ -16,7 +17,9 @@ describe("Explore UI contract", () => {
       "utf8",
     );
 
-    expect(page).toContain("<RobinhoodLaunchesView />");
+    expect(entry).toContain("redirect(exploreChainPath(");
+    expect(page).toContain("<RobinhoodLaunchesView chainId={chainId} />");
+    expect(page).toContain("exploreChainIdFromSlug");
     expect(page).toContain("index: false");
     expect(page).not.toContain("ExploreView");
     expect(page).not.toContain("@/app/api/explore/route");
@@ -25,11 +28,11 @@ describe("Explore UI contract", () => {
     expect(resetView).toContain(
       "<Heading data-explore-heading>Explore</Heading>",
     );
-    expect(resetView).toContain("<ExploreChainSelector />");
-    expect(resetView.indexOf("<ExploreChainSelector />")).toBeGreaterThan(
+    expect(resetView).toContain("<ExploreChainSelector chainId={1} />");
+    expect(resetView.indexOf("<ExploreChainSelector chainId={1} />")).toBeGreaterThan(
       resetView.indexOf("className={styles.disabledSearch}"),
     );
-    expect(resetView.indexOf("<ExploreChainSelector />")).toBeLessThan(
+    expect(resetView.indexOf("<ExploreChainSelector chainId={1} />")).toBeLessThan(
       resetView.indexOf("<ExploreFilters disabled />"),
     );
     expect(resetView).toContain("disabled");
