@@ -144,7 +144,13 @@
 }
 
 .panel {
+  background: var(--api-panel);
+  border: 1px solid var(--api-line);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  padding: 24px;
 }
 
 .createPanel {
@@ -156,8 +162,11 @@
 
 .listPanel {
   --api-key-row-min-height: 112px;
+  background: transparent;
+  border: 0;
   container-name: api-key-list;
   container-type: inline-size;
+  padding: 0;
 }
 
 .panelHeading {
@@ -686,10 +695,15 @@
 
 .kicker,
 .oneTimeBadge {
-  color: var(--success);
+  color: var(--webde-dim);
   font-size: 12px;
   font-weight: 500;
   line-height: 16px;
+}
+
+.keyReveal .kicker,
+.oneTimeBadge {
+  color: var(--success);
 }
 
 .revealHeading h2 {
