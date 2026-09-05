@@ -40,6 +40,10 @@ const gitBookSummary = readFileSync(
   resolve(process.cwd(), "docs/public/SUMMARY.md"),
   "utf8",
 );
+const gitBookHostedFeed = readFileSync(
+  resolve(process.cwd(), "docs/public/developers/reference/robinhood-finalized-feed.md"),
+  "utf8",
+);
 const sitemapSource = readFileSync(
   resolve(process.cwd(), "app/sitemap.ts"),
   "utf8",
@@ -221,8 +225,20 @@ describe("Robinhood terminal and indexer documentation", () => {
       "ProgrammableLaunchStampRouterV1.abi.json",
       "Third-party indexing is not guaranteed",
     ]) {
+      expect(gitBookHostedFeed).toContain(sentinel);
+    }
+    expect(gitBookSummary).toContain("(developers/reference/robinhood-finalized-feed.md)");
+    for (const sentinel of [
+      "/api/v2/manifests/4663",
+      "Programmable Custom",
+      "CustomGraph = 1",
+      "stampProof",
+      "finalized",
+      "reference/robinhood-finalized-feed.md",
+    ]) {
       expect(gitBookSource).toContain(sentinel);
     }
+    expect(gitBookSource).toMatch(/does not depend on the hosted indexer/iu);
   });
 
   it("pins the chain and Router while resolving mutable state live", () => {
