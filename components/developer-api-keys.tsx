@@ -1220,9 +1220,9 @@ export function DeveloperApiKeysView({
         {statusMessage}
       </p>
 
-      <Link className={styles.backLink} href="/profile">
+      <Link className={styles.backLink} href="/launch">
         <ArrowLeft aria-hidden="true" size={16} strokeWidth={1.9} />
-        <span>Back to profile</span>
+        <span>Back</span>
       </Link>
 
       <header className={styles.hero}>

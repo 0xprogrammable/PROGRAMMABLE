@@ -30,7 +30,7 @@ describe("Explore UI contract", () => {
       resetView.indexOf("className={styles.disabledSearch}"),
     );
     expect(resetView.indexOf("<ExploreChainSelector />")).toBeLessThan(
-      resetView.indexOf("className={styles.disabledFilter}"),
+      resetView.indexOf("<ExploreFilters disabled />"),
     );
     expect(resetView).toContain("disabled");
     expect(resetView).toContain("Launch indexing is being rebuilt");

@@ -63,7 +63,7 @@ describe("profile entry", () => {
       /from\s+["']@\/components\/profile-view["']/u,
     );
     expect(profileEntrySource).toMatch(
-      /if \(shouldLoadProfileEntryView\([\s\S]*?return <ProfileView \/>;/u,
+      /if \(shouldLoadProfileEntryView\([\s\S]*?return <ProfileView viewChainId=\{viewChainId\} onChangeChain=\{setViewChainId\} \/>;/u,
     );
     expect(profileEntrySource).toContain(
       "loadProfileView().catch(() => undefined)",

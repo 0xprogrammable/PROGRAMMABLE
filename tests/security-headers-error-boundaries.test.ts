@@ -81,6 +81,14 @@ describe("website security headers", () => {
     expect(createContentSecurityPolicy(false)).not.toContain("'unsafe-eval'");
     expect(createContentSecurityPolicy(true)).toContain("'unsafe-eval'");
   });
+
+  it("limits the market embed to its exact frame host without adding script access", () => {
+    const policy = createContentSecurityPolicy(false).split("; ");
+    const frame = policy.find((directive) => directive.startsWith("frame-src "));
+    expect(frame).toContain("https://dexscreener.com");
+    expect(frame).not.toContain("https://*.dexscreener.com");
+    expect(policy.find((directive) => directive.startsWith("script-src "))).not.toContain("dexscreener");
+  });
 });
 
 describe("application error boundaries", () => {

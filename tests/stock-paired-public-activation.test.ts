@@ -4,8 +4,12 @@ import { NextRequest } from "next/server";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: () => undefined }),
+}));
 
 import LaunchPage from "../app/launch/page";
+import { ViewChainProvider } from "../components/view-chain";
 import { POST } from "../app/api/launch/preflight/route";
 import { createStockPairedDraft } from "../lib/launch";
 import { STOCK_PAIRED_ETH_QUOTE_ASSETS } from "../lib/stock-paired";
@@ -32,8 +36,10 @@ function publicPreflightRequest() {
 }
 
 describe("Stock-Paired launch closure", () => {
-  it("removes Stock-Paired from the public launch picker", () => {
-    const html = renderToStaticMarkup(createElement(LaunchPage));
+  it("removes Stock-Paired from the public launch picker", async () => {
+    const html = renderToStaticMarkup(
+      createElement(ViewChainProvider, null, await LaunchPage()),
+    );
 
     expect(html).toContain('data-launch-model-option="classic"');
     expect(html).not.toContain('data-launch-model-option="stock-paired"');
