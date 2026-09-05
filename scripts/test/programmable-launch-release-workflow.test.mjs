@@ -206,6 +206,17 @@ function failures(value) {
     "Verify owner-authenticated immutable-release preflight",
   ];
   const missing = required.filter((item) => !implementation.includes(item));
+  const freshStep = value.split("      - name: Freshly revalidate exact V4 Phase B immediately before mutation")[1]
+    ?.split("      - name:")[0] ?? "";
+  const freshLines = new Set(freshStep.split("\n").map(line => line.trim()));
+  for (const requiredInput of [
+    "PROGRAMMABLE_PRODUCTION_VERIFY_PROOF: ${{ runner.temp }}/production-verify-proof/production-verify-proof.json",
+    "PROGRAMMABLE_ROBINHOOD_BACKEND_AUTHORIZATION: ${{ github.workspace }}/release/robinhood-chain-4663/programmable-backend-authorization.json",
+    'test -f "$PROGRAMMABLE_PRODUCTION_VERIFY_PROOF"',
+    'test -f "$PROGRAMMABLE_ROBINHOOD_BACKEND_AUTHORIZATION"',
+  ]) {
+    if (!freshLines.has(requiredInput)) missing.push(`fresh apply must receive ${requiredInput}`);
+  }
   if (value.split("node scripts/verify-immutable-release-owner-preflight.mjs").length - 1 !== 2) {
     missing.push("immutable preflight must be verified exactly twice");
   }
@@ -291,7 +302,10 @@ test("CLI release workflow closes source, test, provenance, and immutability gat
 });
 
 test("release workflow contract mutations fail closed", () => {
+  const freshStart = source.indexOf("      - name: Freshly revalidate exact V4 Phase B immediately before mutation");
   const mutations = [
+    ...["PROGRAMMABLE_PRODUCTION_VERIFY_PROOF", "PROGRAMMABLE_ROBINHOOD_BACKEND_AUTHORIZATION"].map(name =>
+      source.slice(0, freshStart) + source.slice(freshStart).replace(new RegExp(`^          ${name}: .*\\n`, "m"), "")),
     source.replace("github.ref == 'refs/heads/production'", "true"),
     source.replace("github.ref_protected == true", "true"),
     source.replace("github.actor == 'hazarxyz'", "true"),
