@@ -1,5 +1,7 @@
 import "server-only";
-import { V4_API_DISCOVERY } from "../../custom-launch/v4-api-discovery";
+import { V4_API_DISCOVERY, V4_API_PROFILE_VERSION } from "../../custom-launch/v4-api-discovery";
+import { robinhoodV4PublicContractDiscovery, robinhoodV4PublicPolicyDescription } from
+  "../../custom-launch/v4-public-contract-discovery";
 import { PROGRAMMABLE_AGENT_INTAKE_V1 } from "../../custom-launch/agent-setup-v1";
 
 import { resolveCustomRegistryPublicManifestV1 } from
@@ -21,8 +23,8 @@ export function programmableWellKnownDocumentV1(
     schemaVersion: "2.0.0" as const,
     platformId: "programmable" as const,
     name: "Programmable Developer Platform",
-    description:
-      "Canonical discovery for Programmable Classic and Custom launches. Fresh V3.3 general-hook writes and lifecycle reads accept wallet keys, partner roots and bounded partner subkeys on Ethereum Mainnet. Robinhood Chain V4 availability is derived from the versioned release evidence below, independently from token publication and indexing. Its required 20 bps default policy is not a canonical onchain fee-enforcement or revenue claim. V2 and V1 remain readable but their creation routes are write-fenced.",
+    description: robinhoodV4PublicPolicyDescription(V4_API_PROFILE_VERSION,
+      "Canonical discovery for Programmable Classic and Custom launches. Fresh V3.3 general-hook writes and lifecycle reads accept wallet keys, partner roots and bounded partner subkeys on Ethereum Mainnet. Robinhood Chain V4 availability is derived from the versioned release evidence below, independently from token publication and indexing. Its required 20 bps default policy is not a canonical onchain fee-enforcement or revenue claim. V2 and V1 remain readable but their creation routes are write-fenced."),
     apiVersion: "2" as const,
     apiBaseUrl: "https://developers.programmable.family/api/v2",
     statusUrl: "https://developers.programmable.family/api/v2/status",
@@ -515,7 +517,7 @@ export function programmableWellKnownDocumentV1(
           launchPolicyRepository:
             "https://github.com/programmablehq/Launch-Policy",
           cli: Object.freeze({
-            sourceCandidateVersion: "4.0.0" as const,
+            sourceCandidateVersion: V4_API_PROFILE_VERSION === "4.1.0" ? "4.1.0" as const : "4.0.0" as const,
             sourceCandidate: !V4_API_DISCOVERY.cliReleased,
             released: V4_API_DISCOVERY.cliReleased,
             installable: V4_API_DISCOVERY.cliInstallable,
@@ -640,6 +642,7 @@ export function programmableWellKnownDocumentV1(
             github: "closed" as const,
           }),
           activationBlockers: V4_API_DISCOVERY.activationBlockers,
+          ...robinhoodV4PublicContractDiscovery(V4_API_PROFILE_VERSION),
         }),
       }),
       legacyIntake: Object.freeze({

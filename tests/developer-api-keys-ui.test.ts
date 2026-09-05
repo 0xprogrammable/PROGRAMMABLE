@@ -397,7 +397,7 @@ describe("developer API key interface", () => {
     const copyKey = apiKeysSource.slice(copyKeyStart, copySetupStart);
     const copySetup = apiKeysSource.slice(copySetupStart, dismissStart);
     expect(copyKey).toContain('secretState !== "delivered-once"');
-    expect(copySetup).toContain("copyToClipboard(PROGRAMMABLE_AGENT_SETUP_TEXT_V1)");
+    expect(copySetup).toContain("copyToClipboard(agentSetupText)");
     expect(copySetup).not.toContain("mutationResult");
     expect(copySetup).not.toContain("apiKeySecret");
   });
