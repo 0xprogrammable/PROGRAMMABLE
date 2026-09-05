@@ -18,7 +18,7 @@ export function robinhoodV4PublicContractDiscovery(profileVersion: string) {
     packConfigSchemaUrl: `${SITE_ORIGIN}/schemas/custom-launch/v4.1/pack-config.json`,
     sourceVerificationSchemaUrl: `${SITE_ORIGIN}/schemas/custom-launch/v4.1/source-verification-status.json`,
     createRequestSchemaUrl: `${SITE_ORIGIN}/schemas/custom-launch/v4.1/create-request.json`,
-    guideUrl: `${SITE_ORIGIN}/docs/developers.md`,
+    guideUrl: `${SITE_ORIGIN}/developers/custom-launch-api-v1.md`,
     admissionDescriptorUrl: "https://github.com/programmablehq/Launch-Policy/blob/main/policy/custom-launch-admission-v4.1.json",
     advertisedFundingModes: ["wallet-transaction-value"],
     initialBuyQuotePath: INITIAL_BUY_QUOTE_PATH,
