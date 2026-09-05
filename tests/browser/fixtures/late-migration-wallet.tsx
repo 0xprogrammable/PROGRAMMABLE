@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Address } from "viem";
+import { signMainTokenMigrationPermitWithWallet } from "../../../lib/main-token-migration-wallet";
 
 // This module is only substituted by late-migration-server.mjs. No product route
 // or production import enables fixtures, fake eligibility or fake signatures.
@@ -17,11 +18,13 @@ export type FixtureOptions = {
   holdPrepare: boolean; holdSignature: boolean; holdAccessToken: boolean;
   untrackedDeposit: boolean; submitFailure: boolean; submitStatus: DepositStatus; tamperSpender: boolean;
   currentBalanceRaw: string;
+  providerChainId: string; permitErrorCode: number | null;
 };
 export type FixtureSnapshot = {
   connects: number; signatures: Array<Record<string, string>>;
   requests: Array<{ method: string; path: string; headers: Record<string, string>; body: Record<string, unknown> | null }>;
   currentBalanceRaw: string;
+  walletMethods: string[]; networkSwitches: number[];
 };
 export type FixtureControl = {
   configure: (options: Partial<FixtureOptions>) => void;
@@ -36,8 +39,10 @@ const options: FixtureOptions = {
   statusFailures: query.get("statusFailure") === "true" ? 1 : 0, rejectSignature: false,
   holdPrepare: false, holdSignature: false, holdAccessToken: false, submitFailure: false,
   untrackedDeposit: false, submitStatus: "deposit_submitted", tamperSpender: false, currentBalanceRaw: "99999999999999999999999999",
+  providerChainId: query.get("providerChainId") || "0x1",
+  permitErrorCode: query.has("permitErrorCode") ? Number(query.get("permitErrorCode")) : null,
 };
-const observations: FixtureSnapshot = { connects: 0, signatures: [], requests: [], currentBalanceRaw: options.currentBalanceRaw };
+const observations: FixtureSnapshot = { connects: 0, signatures: [], requests: [], currentBalanceRaw: options.currentBalanceRaw, walletMethods: [], networkSwitches: [] };
 let releasePrepare: (() => void) | undefined;
 let releaseSignature: (() => void) | undefined;
 let releaseAccessToken: (() => void) | undefined;
@@ -89,9 +94,26 @@ const getIdentityToken = async () => "fixture-identity-token";
 const preloadWallet = () => {};
 const signMainTokenMigrationPermit = async (input: PermitInput) => {
   observations.signatures.push(Object.fromEntries(Object.entries(input).map(([key, value]) => [key, String(value)])));
-  if (options.holdSignature) await new Promise<void>(resolve => { releaseSignature = resolve; });
-  if (options.rejectSignature) throw new Error("User rejected the request");
-  return { signature: `0x${"ab".repeat(64)}1b` as const, r: `0x${"ab".repeat(32)}` as const, s: `0x${"ab".repeat(32)}` as const, v: 27 };
+  // Exercise the production signing helper and browser Web Locks. Only the
+  // wallet RPC transport is controlled here; it cannot contact a real wallet.
+  return signMainTokenMigrationPermitWithWallet({
+    account: FIXTURE_WALLET,
+    sessionSubject: "fixture-session",
+    assertCurrentSession: () => undefined,
+    permit: input,
+    wallet: {
+      switchChain: async (chainId) => { observations.networkSwitches.push(chainId); options.providerChainId = `0x${chainId.toString(16)}`; },
+      getEthereumProvider: async () => ({ request: async ({ method }) => {
+        observations.walletMethods.push(method);
+        if (method === "eth_chainId") return options.providerChainId;
+        if (method === "eth_accounts") return [FIXTURE_WALLET];
+        if (options.holdSignature) await new Promise<void>(resolve => { releaseSignature = resolve; });
+        if (options.rejectSignature) throw { code: 4001, message: "Fixture wallet rejection" };
+        if (options.permitErrorCode !== null) throw { code: options.permitErrorCode, message: "Fixture wallet error" };
+        return `0x${"ab".repeat(64)}1b`;
+      } }),
+    },
+  });
 };
 const Context = createContext<{
   wallet: { account: Address; chainId: string } | null; connecting: boolean;
