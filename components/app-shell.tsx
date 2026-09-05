@@ -5,6 +5,7 @@ import { MobileNavigation, SiteHeader } from "@/components/site-navigation";
 import { RouteTransition } from "@/components/route-transition";
 import { SiteFooter } from "@/components/site-footer";
 import {
+  DEFAULT_VIEW_CHAIN_ID,
   ViewChainProvider,
   type ViewChainId,
 } from "@/components/view-chain";
@@ -12,7 +13,7 @@ import { WalletProvider } from "@/components/wallet-provider";
 
 export function AppShell({
   children,
-  initialViewChainId = 1,
+  initialViewChainId = DEFAULT_VIEW_CHAIN_ID,
 }: Readonly<{
   children: ReactNode;
   initialViewChainId?: ViewChainId;

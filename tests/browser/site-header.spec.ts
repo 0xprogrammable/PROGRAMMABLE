@@ -25,9 +25,9 @@ test("wallet opens only its actions; copy, Escape, outside click and focus work"
   await trigger.click();
   const menu = page.getByRole("group",{name:"Wallet actions",exact:true});
   await expect(menu.getByRole("link")).toHaveText(["Profile"]);
-  await expect(menu.getByRole("button")).toHaveText(["Copy Address","Disconnect"]);
+  await expect(menu.getByRole("button")).toHaveText(["Manage wallets","Copy address","Disconnect"]);
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await menu.getByRole("button",{name:"Copy Address",exact:true}).click();
+  await menu.getByRole("button",{name:"Copy address",exact:true}).click();
   await expect(menu.getByRole("status")).toHaveText("Address copied");
   expect(await page.evaluate(()=>navigator.clipboard.readText())).toBe("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
   await page.keyboard.press("Escape");
@@ -98,6 +98,15 @@ test("anonymous Connect wallet closes navigation before opening login",async ({p
   await page.getByRole("button",{name:"Connect wallet",exact:true}).click();
   await expect(page.getByRole("dialog",{name:"Connect wallet fixture"})).toBeVisible();
   await expect(page.getByRole("button",{name:"Open menu",exact:true})).toHaveAttribute("aria-expanded","false");
+});
+
+test("passive session hydration is labelled loading without claiming an SDK prompt is open", async ({ page }) => {
+  await page.getByRole("button", { name: "Toggle wallet hydration", exact: true }).click();
+  await expect(page.getByRole("banner").getByRole("button", { name: "Loading wallet", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Opening wallet", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("button", { name: "Toggle wallet hydration", exact: true }).click();
+  await expect(page.getByRole("button", { name: walletName, exact: true })).toBeEnabled();
 });
 
 for(const width of [320,390,1440]) {

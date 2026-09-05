@@ -15,13 +15,16 @@ export async function createSiteHeaderServer() {
       const [viewChainId, setViewChainId] = useState(1);
       const [pending, setPending] = useState(false);
       const [disconnecting, setDisconnecting] = useState(false);
+      const [hydrating, setHydrating] = useState(false);
       const [reject, setReject] = useState(false);
       const [failDisconnect, setFailDisconnect] = useState(false);
       const [requests, setRequests] = useState([]);
       const [dialog, setDialog] = useState(false);
       const [disconnectOptions, setDisconnectOptions] = useState('');
       const value = {
-        wallet, authReady: !!wallet, hasSession: !!wallet, connecting:false,
+        wallet: hydrating ? null : wallet,
+        authReady:!hydrating, sessionReady:!hydrating, openingWallet:false,
+        hasSession:!!wallet, connecting:hydrating,
         disconnecting, switchingNetwork:pending, preloadWallet:()=>{},
         openWallet:()=>setDialog(true),
         switchNetwork:async (chain) => {
@@ -48,6 +51,7 @@ export async function createSiteHeaderServer() {
         <button aria-pressed={reject} onClick={()=>setReject(!reject)}>Reject network switch</button>
         <button aria-pressed={failDisconnect} onClick={()=>setFailDisconnect(!failDisconnect)}>Fail disconnect</button>
         <button onClick={()=>setWallet(null)}>Use anonymous session</button>
+        <button aria-pressed={hydrating} onClick={()=>setHydrating(!hydrating)}>Toggle wallet hydration</button>
         <p data-testid="requests">{requests.join(',')}</p>
         <p data-testid="view-chain">{viewChainId}</p>
         <p data-testid="wallet-chain">{wallet?.chainId ?? 'disconnected'}</p>
@@ -61,7 +65,7 @@ export async function createSiteHeaderServer() {
   `;
   const bundled = await build({
     stdin: {
-      contents: `import React from 'react'; import {createRoot} from 'react-dom/client'; import {ExploreChainSelector} from './components/explore-chain-selector'; import {SiteHeader} from './components/site-navigation'; import {Fixture} from 'fixture-state'; import './app/globals.css'; import './app/interface.css'; createRoot(document.getElementById('root')).render(<Fixture selector={<ExploreChainSelector/>}><SiteHeader/></Fixture>);`,
+      contents: `import React from 'react'; import {createRoot} from 'react-dom/client'; import {ExploreChainSelector} from './components/explore-chain-selector'; import {SiteHeader} from './components/site-navigation'; import {Fixture} from 'fixture-state'; import './app/globals.css'; import './app/interface.css'; import './app/programmable-experience.css'; import './app/webde-final-ui.css'; createRoot(document.getElementById('root')).render(<Fixture selector={<ExploreChainSelector/>}><SiteHeader/></Fixture>);`,
       loader: "tsx", resolveDir: root,
     },
     bundle: true, format: "esm", platform: "browser", write: false,
@@ -74,7 +78,7 @@ export async function createSiteHeaderServer() {
       plugin.onLoad({filter:/.*/,namespace:"fixture"}, args=>({
         loader:"tsx", resolveDir:root,
         contents: args.path === "state" ? state : args.path === "next/navigation"
-          ? `export const usePathname=()=>window.location.pathname; export const useRouter=()=>({prefetch:()=>{}, replace:(url)=>window.history.replaceState(null,'',url)});`
+          ? `export const usePathname=()=>window.location.pathname; const router={prefetch:()=>{},push:(url)=>window.history.pushState(null,'',url),replace:(url)=>window.history.replaceState(null,'',url)}; export const useRouter=()=>router;`
           : args.path === "next/link"
             ? `import React from 'react'; export default function Link({prefetch,...props}) { return <a {...props}/>; }`
             : `import React from 'react'; export default function Image({priority,fill,...props}) { return <img {...props}/>; }`,

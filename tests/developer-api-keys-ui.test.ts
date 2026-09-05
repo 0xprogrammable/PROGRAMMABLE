@@ -287,8 +287,9 @@ describe("developer API key interface", () => {
     expect(apiKeysSource).toContain('aria-pressed={activeSection === "history"}');
     expect(apiKeysSource).toContain('activeSection === "keys" ?');
     expect(apiKeysSource).not.toContain("Before anything reaches your wallet");
-    expect(apiKeysSource).toContain('href="/profile"');
-    expect(apiKeysSource).toContain("Back to profile");
+    expect(apiKeysSource).toContain('href="/launch"');
+    expect(apiKeysSource).toContain("<span>Back</span>");
+    expect(apiKeysSource).not.toContain("Back to profile");
     expect(apiKeysSource).toContain("const API_KEY_PAGE_SIZE = 3");
     expect(apiKeysSource).toContain("visibleApiKeys.map");
     expect(apiKeysSource).toContain('aria-label="API key pages"');
@@ -300,13 +301,16 @@ describe("developer API key interface", () => {
       /\.workspace\s*\{[^}]*align-items:\s*start;/su,
     );
     expect(apiKeysStyles).toMatch(
-      /\.workspace\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*0\.72fr\)\s+minmax\(0,\s*1\.28fr\);/su,
+      /\.workspace\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/su,
     );
     expect(apiKeysStyles).toMatch(
       /\.listToolbar\s*\{[^}]*display:\s*flex;[^}]*justify-content:\s*flex-end;/su,
     );
     expect(apiKeysStyles).toContain("--api-key-row-min-height");
-    expect(apiKeysStyles).toContain("grid-template-rows: repeat(");
+    expect(apiKeysStyles).not.toContain("grid-template-rows: repeat(");
+    expect(apiKeysSource.indexOf('aria-labelledby="api-keys-title"')).toBeLessThan(
+      apiKeysSource.indexOf('aria-labelledby="agent-setup-title"'),
+    );
     expect(apiKeysSource.indexOf('aria-label="API key pages"')).toBeLessThan(
       apiKeysSource.indexOf('className={styles.keyList}'),
     );
@@ -372,6 +376,8 @@ describe("developer API key interface", () => {
     expect(setupButton).toBeDefined();
     expect(setupButton).not.toContain("disabled");
     expect(html).toContain('aria-labelledby="agent-setup-title"');
+    expect(html).toMatch(/<details[^>]*aria-labelledby="agent-setup-title"[^>]*>/u);
+    expect(html).not.toMatch(/<details[^>]*\bopen[^>]*aria-labelledby="agent-setup-title"/u);
     expect(html).toContain("new or existing key");
     expect(html).not.toContain(">Copy key</button>");
     expect(html).not.toContain("api-key-mutation-result-title");
@@ -391,7 +397,7 @@ describe("developer API key interface", () => {
     const copyKey = apiKeysSource.slice(copyKeyStart, copySetupStart);
     const copySetup = apiKeysSource.slice(copySetupStart, dismissStart);
     expect(copyKey).toContain('secretState !== "delivered-once"');
-    expect(copySetup).toContain("copyToClipboard(PROGRAMMABLE_AGENT_SETUP_TEXT_V1)");
+    expect(copySetup).toContain("copyToClipboard(agentSetupText)");
     expect(copySetup).not.toContain("mutationResult");
     expect(copySetup).not.toContain("apiKeySecret");
   });

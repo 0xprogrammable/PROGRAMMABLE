@@ -5,7 +5,7 @@ import styles from "@/components/site-footer.module.css";
 
 const productLinks = [
   { href: "/explore", label: "Explore" },
-  { href: "/launch", label: "Create" },
+  { href: "/launch", label: "Launch" },
   { href: "/developers/api-keys", label: "API keys" },
   { href: "/profile", label: "Profile" },
   { href: "/docs", label: "Docs" },
@@ -116,9 +116,8 @@ export function SiteFooter() {
         <section className={styles.risk}>
           <h2 className={styles.label}>Risk notice</h2>
           <p>
-            Transactions may be irreversible. Tokens can be volatile, illiquid
-            or lose all value. Programmable does not provide financial advice or
-            guarantee a token&apos;s quality.
+            Transactions are irreversible. Tokens may lose all value or be
+            difficult to sell. No financial advice or guarantees.
           </p>
         </section>
       </div>

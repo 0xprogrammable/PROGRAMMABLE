@@ -23,15 +23,16 @@ Submit only when both entries report all three create gates true: `publicWrites`
 published in discovery before installation. Router provenance, finality, source verification and indexing remain
 independent; external indexing may lag or be unavailable.
 
-The public finalized V4 contract admits only canonical V3-finalized rows whose aggregate and every component carry
-the separate protected source/build/compiler/finalized-creation/bytecode `exact_match` authority. No such per-launch
-composite is yet proven and persisted for public promotion in this source snapshot, so no existing public item is
-claimed. A Sourcify match is a non-authoritative provider observation, and optional Robinhood Blockscout is not an
-activation or finality blocker. Separately, refreshed release hashes must close the current
-`V4_RELEASE_BINDING_NOT_READY` clean-room binding before release.
+For each Robinhood launch, read its current finality and source-verification records. Treat source verification as
+exact only when the aggregate and every required component carry the protected source/build/compiler/finalized-creation/
+bytecode `exact_match` authority. A Sourcify match alone is a provider observation, and optional Robinhood Blockscout
+does not establish or revise finality. Determine public API availability from the current live release gates and
+their verified immutable CLI, release-binding and clean-room evidence. Per-launch source verification does not
+establish public API activation, trading readiness or indexing.
 
-CLI `3.3.9` is the Ethereum V3 integration. CLI `4.0.0` is usable for Robinhood V4 after both public discovery
-entries and the immutable GitHub Release evidence pass. The V4 lifecycle is `received`, `validating`, `action_required`, `authorized`,
+CLI `3.3.9` is the Ethereum V3 integration. For Robinhood V4, install only the exact CLI version advertised after both public discovery
+entries and the immutable GitHub Release evidence pass. Historical `4.0.0` and successor `4.1.0` retain different contracts;
+when 4.1 is selected, follow its funding plan, an atomic initial buy of at least USD 1 and proof of the exact native fee kernel with 20 bps. The V4 lifecycle is `received`, `validating`, `action_required`, `authorized`,
 `awaiting_wallet_signature`, `wallet_action_required`, `submitted`, `sequencer_soft_confirmed`, `ethereum_posted`,
 `finalized` or `failed`; `action_required` is remediation, not a wallet action. Guard status reads with
 `programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until finalized`. The CLI never

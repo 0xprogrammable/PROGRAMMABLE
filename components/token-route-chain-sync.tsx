@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import {
   useViewChain,
@@ -14,14 +14,14 @@ export function TokenRouteChainSync({
   chainId: ViewChainId;
   children: ReactNode;
 }>) {
-  const { hydrated, setViewChainId, viewChainId } = useViewChain();
-  const synchronized = useRef(false);
+  const { hydrated, setViewChainId } = useViewChain();
 
   useEffect(() => {
-    if (!hydrated || synchronized.current) return;
-    synchronized.current = true;
-    if (viewChainId !== chainId) setViewChainId(chainId);
-  }, [chainId, hydrated, setViewChainId, viewChainId]);
+    if (!hydrated) return;
+    // Wait for the provider to finish restoring its saved preference first.
+    const timer = window.setTimeout(() => setViewChainId(chainId), 0);
+    return () => window.clearTimeout(timer);
+  }, [chainId, hydrated, setViewChainId]);
 
   return children;
 }

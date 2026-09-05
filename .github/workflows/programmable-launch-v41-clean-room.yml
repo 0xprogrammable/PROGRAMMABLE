@@ -1,0 +1,400 @@
+name: Programmable Launch V4.1 clean-room no-broadcast evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      initial_buy_wei:
+        description: Reviewed initial buy in native Robinhood wei; backend checks the current USD minimum (no transaction is broadcast)
+        type: string
+        required: true
+      minimum_tokens_out:
+        description: Reviewed minimum token output in raw token units for the atomic initial buy (positive integer)
+        type: string
+        required: true
+      max_gas_cost_wei:
+        description: Reviewed maximum gas budget in native Robinhood wei (positive integer; no transaction is broadcast)
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: programmable-launch-v41-clean-room
+  cancel-in-progress: false
+
+jobs:
+  clean-room:
+    name: Stop at exact Robinhood wallet action
+    if: >-
+      github.repository_id == 1314365508 &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/production' &&
+      github.ref_protected == true &&
+      github.actor == 'hazarxyz' &&
+      github.actor_id == '258789013' &&
+      github.triggering_actor == 'hazarxyz' &&
+      github.run_attempt == 1 &&
+      github.event.sender.login == 'hazarxyz' &&
+      github.event.sender.id == 258789013
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: production
+    outputs:
+      recovery-present: ${{ steps.recovery.outputs.present }}
+      evidence-artifact-id: ${{ steps.upload-evidence.outputs.artifact-id }}
+    permissions:
+      actions: read
+      attestations: read
+      contents: read
+
+    steps:
+      - name: Check out exact protected production source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+          lfs: false
+          submodules: false
+
+      - name: Bind detached checkout to protected production
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          askpass="$RUNNER_TEMP/programmable-v41-clean-room-git-askpass"
+          trap 'rm -f -- "$askpass"' EXIT
+          cat > "$askpass" <<'EOF'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' 'x-access-token' ;;
+            *Password*) printf '%s\n' "$GH_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          EOF
+          chmod 700 "$askpass"
+          GIT_ASKPASS="$askpass" GIT_TERMINAL_PROMPT=0 git fetch --no-tags --prune origin \
+            +refs/heads/production:refs/remotes/origin/production
+          rm -f -- "$askpass"
+          test "$(git rev-parse HEAD^{commit})" = "$GITHUB_SHA"
+          test "$(git rev-parse refs/remotes/origin/production^{commit})" = "$GITHUB_SHA"
+          test "$GITHUB_REF" = "refs/heads/production"
+          test "$GITHUB_REF_PROTECTED" = "true"
+          test "$GITHUB_WORKFLOW_SHA" = "$GITHUB_SHA"
+          test "$GITHUB_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/programmable-launch-v41-clean-room.yml@$GITHUB_REF"
+          test -z "$(git symbolic-ref -q HEAD || true)"
+          test "$(git remote get-url origin)" = "https://github.com/$GITHUB_REPOSITORY"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - name: Set up exact Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24.14.0
+
+      - name: Set up exact npm
+        run: |
+          set -euo pipefail
+          npm install --global npm@11.16.0 --ignore-scripts --no-audit --no-fund
+          test "$(node --version)" = "v24.14.0"
+          test "$(npm --version)" = "11.16.0"
+
+      - name: Install exact protected-source verifier dependencies without credentials
+        run: |
+          set -euo pipefail
+          test -z "${PROGRAMMABLE_API_KEY:-}"
+          npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Fetch public project image without production API credentials
+        env:
+          PROJECT_IMAGE_URI: ${{ vars.PROGRAMMABLE_V4_CLEAN_ROOM_PROJECT_IMAGE_URI }}
+        run: |
+          set -euo pipefail
+          test -n "$PROJECT_IMAGE_URI"
+          [[ "$PROJECT_IMAGE_URI" =~ ^https:// ]]
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+            --max-filesize 5242880 \
+            "$PROJECT_IMAGE_URI" \
+            --output "$RUNNER_TEMP/programmable-v41-clean-room-project-image"
+          test -s "$RUNNER_TEMP/programmable-v41-clean-room-project-image"
+
+      - name: Fresh-download, attest, install, pack, and validate locally
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROJECT_IMAGE_URI: ${{ vars.PROGRAMMABLE_V4_CLEAN_ROOM_PROJECT_IMAGE_URI }}
+          PROJECT_WEBSITE_URL: ${{ vars.PROGRAMMABLE_V4_CLEAN_ROOM_WEBSITE_URL }}
+          PROJECT_X_URL: ${{ vars.PROGRAMMABLE_V4_CLEAN_ROOM_X_URL }}
+          PUBLIC_LAUNCH_WALLET: ${{ vars.PROGRAMMABLE_V4_CLEAN_ROOM_LAUNCH_WALLET }}
+          INITIAL_BUY_WEI: ${{ inputs.initial_buy_wei }}
+          MINIMUM_TOKENS_OUT: ${{ inputs.minimum_tokens_out }}
+          MAX_GAS_COST_WEI: ${{ inputs.max_gas_cost_wei }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test -n "$PUBLIC_LAUNCH_WALLET"
+          [[ "$MINIMUM_TOKENS_OUT" =~ ^[1-9][0-9]{0,77}$ ]]
+          [[ "$INITIAL_BUY_WEI" =~ ^[1-9][0-9]{0,77}$ ]]
+          [[ "$MAX_GAS_COST_WEI" =~ ^[1-9][0-9]{0,77}$ ]]
+          test -n "$PROJECT_IMAGE_URI"
+          test -n "$PROJECT_WEBSITE_URL"
+          test -n "$PROJECT_X_URL"
+          test -z "${PROGRAMMABLE_API_KEY:-}"
+          node scripts/programmable-launch-v41-clean-room.mjs prepare \
+            --workspace "$RUNNER_TEMP/programmable-launch-v41-clean-room" \
+            --image "$RUNNER_TEMP/programmable-v41-clean-room-project-image" \
+            --launch-wallet "$PUBLIC_LAUNCH_WALLET" \
+            --image-uri "$PROJECT_IMAGE_URI" \
+            --website-url "$PROJECT_WEBSITE_URL" \
+            --x-url "$PROJECT_X_URL" \
+            --initial-buy-wei "$INITIAL_BUY_WEI" \
+            --minimum-tokens-out "$MINIMUM_TOKENS_OUT" \
+            --max-gas-cost-wei "$MAX_GAS_COST_WEI"
+
+      - name: Reconfirm protected production tip immediately before credential use
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          askpass="$RUNNER_TEMP/programmable-v41-clean-room-final-git-askpass"
+          trap 'rm -f -- "$askpass"' EXIT
+          cat > "$askpass" <<'EOF'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' 'x-access-token' ;;
+            *Password*) printf '%s\n' "$GH_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          EOF
+          chmod 700 "$askpass"
+          GIT_ASKPASS="$askpass" GIT_TERMINAL_PROMPT=0 git fetch --no-tags --prune origin \
+            +refs/heads/production:refs/remotes/origin/production
+          rm -f -- "$askpass"
+          test "$(git rev-parse HEAD^{commit})" = "$GITHUB_SHA"
+          test "$(git rev-parse refs/remotes/origin/production^{commit})" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - name: Remote validate, submit, replay, and stop before wallet signing
+        env:
+          PROGRAMMABLE_API_KEY: ${{ secrets.PROGRAMMABLE_V4_CLEAN_ROOM_PRODUCTION_API_KEY }}
+          PROGRAMMABLE_CLEAN_ROOM_ENVIRONMENT: production
+        run: |
+          set -euo pipefail
+          test -n "$PROGRAMMABLE_API_KEY"
+          node scripts/programmable-launch-v41-clean-room.mjs run \
+            --workspace "$RUNNER_TEMP/programmable-launch-v41-clean-room" \
+            --output "$RUNNER_TEMP/programmable-launch-v41-clean-room-evidence.json" \
+            --recovery-output "$RUNNER_TEMP/programmable-launch-v41-clean-room-recovery.json"
+
+
+      - name: Reverify any canonical redacted recovery receipt
+        id: recovery
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          recovery="$RUNNER_TEMP/programmable-launch-v41-clean-room-recovery.json"
+          if test -f "$recovery"; then
+            node scripts/programmable-launch-v41-clean-room.mjs verify-recovery \
+              --input "$recovery"
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Reverify canonical redacted no-broadcast evidence
+        run: >-
+          node scripts/programmable-launch-v41-clean-room.mjs verify-evidence
+          --input "$RUNNER_TEMP/programmable-launch-v41-clean-room-evidence.json"
+
+      - name: Upload only canonical redacted evidence
+        id: upload-evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: programmable-launch-v41-clean-room-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/programmable-launch-v41-clean-room-evidence.json
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 14
+          compression-level: 0
+          overwrite: false
+
+      - name: Upload canonical redacted recovery on success or later failure
+        if: ${{ always() && steps.recovery.outputs.present == 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: programmable-launch-v41-clean-room-recovery-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/programmable-launch-v41-clean-room-recovery.json
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 14
+          compression-level: 0
+          overwrite: false
+
+      - name: Remove private transient request state
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          rm -rf -- "$RUNNER_TEMP/programmable-launch-v41-clean-room"
+          rm -f -- "$RUNNER_TEMP/programmable-v41-clean-room-project-image"
+
+  provenance:
+    name: Attest canonical redacted recovery without production credentials
+    needs: clean-room
+    if: ${{ always() && needs.clean-room.outputs.recovery-present == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      attestations: write
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Download canonical redacted recovery
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: programmable-launch-v41-clean-room-recovery-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/programmable-launch-v41-clean-room-recovery
+
+      - name: Attest canonical redacted recovery provenance
+        id: attest-recovery
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-path: ${{ runner.temp }}/programmable-launch-v41-clean-room-recovery/programmable-launch-v41-clean-room-recovery.json
+          create-storage-record: true
+
+      - name: Preserve canonical recovery and attestation bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: programmable-launch-v41-clean-room-recovery-attestation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/programmable-launch-v41-clean-room-recovery/programmable-launch-v41-clean-room-recovery.json
+            ${{ steps.attest-recovery.outputs.bundle-path }}
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 90
+          compression-level: 0
+          overwrite: false
+
+  evidence-provenance:
+    name: Verify and attest successful no-broadcast evidence without production credentials
+    needs: clean-room
+    if: ${{ needs.clean-room.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      attestations: write
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Check out exact successful producer source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+
+      - name: Require exact successful producer artifact
+        env:
+          EVIDENCE_ARTIFACT_ID: ${{ needs.clean-room.outputs.evidence-artifact-id }}
+        run: |
+          set -euo pipefail
+          [[ "$EVIDENCE_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          test "$(git rev-parse HEAD^{commit})" = "$GITHUB_SHA"
+          test "$GITHUB_WORKFLOW_SHA" = "$GITHUB_SHA"
+          test "$GITHUB_REF" = "refs/heads/production"
+          test "$GITHUB_REF_PROTECTED" = "true"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - name: Set up exact verifier Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24.14.0
+
+      - name: Install locked verifier dependencies without lifecycle scripts
+        run: |
+          set -euo pipefail
+          npm install --global npm@11.16.0 --ignore-scripts --no-audit --no-fund
+          test "$(node --version)" = "v24.14.0"
+          test "$(npm --version)" = "11.16.0"
+          npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Download exact successful evidence from this producer run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.clean-room.outputs.evidence-artifact-id }}
+          path: ${{ runner.temp }}/programmable-launch-v41-clean-room-evidence
+          digest-mismatch: error
+
+      - name: Reverify canonical successful evidence and exact producer binding
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { readdir } from "node:fs/promises";
+          import path from "node:path";
+          import { verifyEvidenceFile } from "./scripts/programmable-launch-v41-clean-room.mjs";
+          const directory = path.join(process.env.RUNNER_TEMP, "programmable-launch-v41-clean-room-evidence");
+          const name = "programmable-launch-v41-clean-room-evidence.json";
+          assert.deepEqual(await readdir(directory), [name], "EVIDENCE_ARTIFACT_CONTENTS_INVALID");
+          const evidence = await verifyEvidenceFile(path.join(directory, name));
+          assert.deepEqual({ ...evidence.producer }, {
+            schemaVersion: "programmable.launch-v4-clean-room-producer.v2",
+            repository: process.env.GITHUB_REPOSITORY,
+            repositoryId: process.env.GITHUB_REPOSITORY_ID,
+            workflowPath: ".github/workflows/programmable-launch-v41-clean-room.yml",
+            workflowRef: process.env.GITHUB_WORKFLOW_REF,
+            sourceSha: process.env.GITHUB_SHA,
+            workflowSha: process.env.GITHUB_WORKFLOW_SHA,
+            runId: process.env.GITHUB_RUN_ID,
+            runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+            actor: process.env.GITHUB_ACTOR,
+            actorId: process.env.GITHUB_ACTOR_ID,
+            environment: "production",
+          }, "EVIDENCE_PRODUCER_BINDING_MISMATCH");
+          NODE
+
+      - name: Attest successful canonical no-broadcast evidence provenance
+        id: attest-evidence
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-path: ${{ runner.temp }}/programmable-launch-v41-clean-room-evidence/programmable-launch-v41-clean-room-evidence.json
+          create-storage-record: true
+
+      - name: Preserve exact attestation bundle under its canonical filename
+        env:
+          ATTESTATION_BUNDLE: ${{ steps.attest-evidence.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { constants } from "node:fs";
+          import { copyFile, lstat, readFile } from "node:fs/promises";
+          import path from "node:path";
+          const source = process.env.ATTESTATION_BUNDLE;
+          assert.ok(source, "EVIDENCE_ATTESTATION_BUNDLE_MISSING");
+          const stat = await lstat(source);
+          assert.ok(stat.isFile() && stat.size > 0, "EVIDENCE_ATTESTATION_BUNDLE_INVALID");
+          const destination = path.join(process.env.RUNNER_TEMP,
+            "programmable-launch-v41-clean-room-evidence",
+            "programmable-launch-v41-clean-room-evidence.attestation.json");
+          await copyFile(source, destination, constants.COPYFILE_EXCL);
+          assert.deepEqual(await readFile(destination), await readFile(source),
+            "EVIDENCE_ATTESTATION_BUNDLE_BYTES_CHANGED");
+          NODE
+
+      - name: Preserve successful canonical evidence and exact attestation bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: programmable-launch-v41-clean-room-evidence-attestation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/programmable-launch-v41-clean-room-evidence/programmable-launch-v41-clean-room-evidence.json
+            ${{ runner.temp }}/programmable-launch-v41-clean-room-evidence/programmable-launch-v41-clean-room-evidence.attestation.json
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 90
+          compression-level: 0
+          overwrite: false

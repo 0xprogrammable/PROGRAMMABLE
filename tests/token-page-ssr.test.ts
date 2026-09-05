@@ -22,7 +22,8 @@ describe("token detail index reset", () => {
     expect(page).toContain("genericTokenDetailMetadata(address, true");
     expect(page).toContain("<TokenIndexResetView />");
     expect(page).toContain("=== 4663");
-    expect(page).toContain("readRobinhoodToken(address)");
+    expect(page).toContain("resolveTokenPage(address, resolvedSearchParams.chain)");
+    expect(read("lib/server/token-page.ts")).toContain("readRobinhoodToken(address)");
     expect(page).toContain("<RobinhoodTokenView");
     expect(page).toContain("notFound()");
     expect(page).not.toContain("@/app/api/explore/token/route");

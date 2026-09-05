@@ -48,7 +48,7 @@ the exact Router transaction, then the connected controller reviews and signs it
 
 ## Robinhood Chain V4 release checks
 
-Package version `4.0.0` targets Robinhood Chain Mainnet (`chainId: 4663`, `eip155:4663`). Its version number, a
+Robinhood V4 releases target Robinhood Chain Mainnet (`chainId: 4663`, `eip155:4663`). A version number, a
 checkout or local `npm pack` output does not prove publication or public activation. Fetch
 [live discovery](https://programmable.market/.well-known/programmable.json) and read `customLaunchApi.versions.v4`
 and the matching `chains` entry before installing a V4 release or making an authenticated request.
@@ -60,16 +60,17 @@ use. Without a verified published release, treat the package as an unpublished p
 local preparation is not a public release or permission to submit.
 
 **Activated:** Only when both discovery entries have `publicAuthorization: true`, `publicWrites: true` and
-`releaseReady: true`, verify the advertised published immutable GitHub Release `programmable-launch-v4.0.0` in
-`programmablehq/PROGRAMMABLE`. Require the release manifest and tarball checksum to match the advertised version,
-exact source commit and downloaded `programmable-launch-4.0.0.tgz` bytes. Install only that verified tarball and
-require `programmable-launch --version` to print `4.0.0`. If any check fails, stop; a published artifact alone is
+`releaseReady: true`, verify the published immutable GitHub Release `programmable-launch-v4.0.0` when discovery
+selects `4.0.0`, or `programmable-launch-v4.1.0` when it selects `4.1.0`, in
+`programmablehq/PROGRAMMABLE`. Stop if discovery selects any other version. Require the release manifest and tarball checksum to match the advertised version,
+exact source commit and downloaded tarball bytes. Install only that verified tarball and
+require `programmable-launch --version` to match the advertised version. If any check fails, stop; a published artifact alone is
 not public activation. This conditional procedure does not assert today's release state.
 
 Before authenticated preflight or submission, also fetch the public
 [V4 capabilities](https://api.programmable.market/v4/chains/4663/capabilities) and
-[V4 readiness](https://api.programmable.market/v4/chains/4663/readiness). Require ready status, chain `4663`, profile
-`4.0.0` and the exact advertised profile, deployment and finality bindings. Follow the
+[V4 readiness](https://api.programmable.market/v4/chains/4663/readiness). Require ready status, chain `4663`
+and the exact advertised profile version, revision, digest, deployment and finality bindings. Follow the
 [raw V4 guide](https://programmable.market/developers/custom-launch-api-v1.md) and the V4 schemas below.
 
 V4 requires an explicit API version and chain. The CLI default remains Ethereum V3, preserving V1, V2 and V3
@@ -96,6 +97,24 @@ publication also remain separate states. The [V4 OpenAPI](https://programmable.m
 [pack-config schema](https://programmable.market/schemas/custom-launch/v4/pack-config.json) and
 [source-verification schema](https://programmable.market/schemas/custom-launch/v4/source-verification-status.json)
 are integration pointers, not deployment or public-availability evidence.
+
+Those links preserve the historical `4.0.0` contract. If live discovery selects `4.1.0`, use its
+[OpenAPI](https://programmable.market/openapi/custom-launch-v4.1.json),
+[pack config](https://programmable.market/schemas/custom-launch/v4.1/pack-config.json) and
+[source-verification schema](https://programmable.market/schemas/custom-launch/v4.1/source-verification-status.json)
+and the advertised 4.1 immutable release. Never add 4.1 fields to old request bytes.
+
+Selected 4.1 requires a funding plan before building, exact native allocations, and user-confirmed launch and gas
+budgets. A funded launch uses wallet transaction value and an atomic initial buy of at least USD 1 at permit
+authorization, with positive minimum token output to the launch wallet. Read public
+`GET /v4/chains/4663/initial-buy-quote`; the server independently requires a quote no older than 60 seconds and has no
+stale fallback. Count the buy once within transaction value, with gas additional. A build-only plan cannot obtain a
+permit. Do not increase the amount or budget without user approval; wallet-time dollar value and indexing are not guaranteed.
+
+4.1 admission requires the exact native fee kernel for the stamped PoolKey: 20 bps (0.2%) of the gross native ETH
+leg once per successful buy or sell, rounded up, separately from creator and LP fees. Fees accrue as PoolManager
+native claims for `0xD88539d3c4C460136a733A3Fd60cf6BF269079da`, with permissionless claims paid only to that recipient.
+Source admission is not proof of deployed state, trades or collected revenue; the CLI and API key do not claim fees.
 
 ## V3 general hook profile
 

@@ -105,8 +105,14 @@ function failures(value) {
     "node scripts/programmable-launch-v4-release-binding.mjs verify-release-ready",
     "npm run release:custom-launch:v4:clean-room:test",
     "PROGRAMMABLE_PRODUCTION_VERIFY_PROOF: ${{ runner.temp }}/production-verify-proof/production-verify-proof.json",
-    "PROGRAMMABLE_ROBINHOOD_BACKEND_AUTHORIZATION: ${{ github.workspace }}/release/robinhood-chain-4663/programmable-backend-authorization.json",
+    "PROGRAMMABLE_ROBINHOOD_BACKEND_AUTHORIZATION: ${{ github.workspace }}/release/robinhood-chain-4663/${{ inputs.version == '4.1.0' && 'v4.1/' || '' }}programmable-backend-authorization.json",
     "startsWith(inputs.version, '4.')",
+    'finalizer="contracts/scripts/finalize-robinhood-custom-launch-deployment.mjs"',
+    'finalizer="contracts/scripts/finalize-robinhood-custom-launch-v41-deployment.mjs"',
+    'promotion_evidence="$evidence/v4.1"',
+    'node scripts/programmable-launch-v41-release-binding.mjs verify-release-ready',
+    '*) echo "Unsupported V4 release version" >&2; exit 1 ;;',
+
     "node scripts/programmable-launch-release-assets.mjs build",
     "actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26",
     "Freshly revalidate exact V4 Phase B immediately before mutation",
@@ -120,14 +126,14 @@ function failures(value) {
     "test -n \"$ETHEREUM_MAINNET_RPC_URL_PRIMARY\"",
     "test -n \"$ETHEREUM_MAINNET_RPC_URL_SECONDARY\"",
     "test -n \"$FLY_API_TOKEN\"",
-    "node contracts/scripts/finalize-robinhood-custom-launch-deployment.mjs apply",
-    "--bundle \"$evidence/programmable-promotion-bundle.json\"",
+    "node \"$finalizer\" apply",
+    "--bundle \"$promotion_evidence/programmable-promotion-bundle.json\"",
     "--stage \"$evidence/programmable-stage-bundle.json\"",
     "--capture \"$evidence/programmable-postdeployment-capture.json\"",
-    "--backend-input \"$evidence/backend-promotion-input.public.json\"",
-    "--backend-attestation-bundle \"$evidence/backend-promotion-input.attestation.json\"",
-    "--backend-authorization \"$evidence/programmable-backend-authorization.json\"",
-    "--backend-authorization-attestation-bundle \"$evidence/programmable-backend-authorization.attestation.json\"",
+    "--backend-input \"$promotion_evidence/backend-promotion-input.public.json\"",
+    "--backend-attestation-bundle \"$promotion_evidence/backend-promotion-input.attestation.json\"",
+    "--backend-authorization \"$promotion_evidence/programmable-backend-authorization.json\"",
+    "--backend-authorization-attestation-bundle \"$promotion_evidence/programmable-backend-authorization.attestation.json\"",
     "--capture-attestation-bundle \"$evidence/programmable-postdeployment-capture.attestation.json\"",
     "--stage-attestation-bundle \"$evidence/programmable-stage-bundle.attestation.json\"",
     "--source-verify-proof \"$evidence/production-verify-proof.json\"",
@@ -211,7 +217,7 @@ function failures(value) {
   const freshLines = new Set(freshStep.split("\n").map(line => line.trim()));
   for (const requiredInput of [
     "PROGRAMMABLE_PRODUCTION_VERIFY_PROOF: ${{ runner.temp }}/production-verify-proof/production-verify-proof.json",
-    "PROGRAMMABLE_ROBINHOOD_BACKEND_AUTHORIZATION: ${{ github.workspace }}/release/robinhood-chain-4663/programmable-backend-authorization.json",
+    "PROGRAMMABLE_ROBINHOOD_BACKEND_AUTHORIZATION: ${{ github.workspace }}/release/robinhood-chain-4663/${{ inputs.version == '4.1.0' && 'v4.1/' || '' }}programmable-backend-authorization.json",
     'test -f "$PROGRAMMABLE_PRODUCTION_VERIFY_PROOF"',
     'test -f "$PROGRAMMABLE_ROBINHOOD_BACKEND_AUTHORIZATION"',
   ]) {
@@ -222,7 +228,7 @@ function failures(value) {
   const downloadLines = new Set(downloadStep.split("\n").map(line => line.trim()));
   for (const requiredInput of [
     "PROGRAMMABLE_PRODUCTION_VERIFY_PROOF: ${{ runner.temp }}/production-verify-proof/production-verify-proof.json",
-    "PROGRAMMABLE_ROBINHOOD_BACKEND_AUTHORIZATION: ${{ github.workspace }}/release/robinhood-chain-4663/programmable-backend-authorization.json",
+    "PROGRAMMABLE_ROBINHOOD_BACKEND_AUTHORIZATION: ${{ github.workspace }}/release/robinhood-chain-4663/${{ inputs.version == '4.1.0' && 'v4.1/' || '' }}programmable-backend-authorization.json",
   ]) {
     if (!downloadLines.has(requiredInput)) missing.push(`download verification must receive ${requiredInput}`);
   }
@@ -344,10 +350,13 @@ test("release workflow contract mutations fail closed", () => {
     source.replace("Protect Programmable Launch CLI release tags", "missing"),
     source.replace("node scripts/verify-programmable-launch-tag-ruleset.mjs \"$rulesets\"", "echo unchecked"),
     source.replace("npm test", "echo skipped"),
+    source.replace('finalizer="contracts/scripts/finalize-robinhood-custom-launch-v41-deployment.mjs"', 'finalizer="untrusted.mjs"'),
+    source.replace('node scripts/programmable-launch-v41-release-binding.mjs verify-release-ready', 'echo unbound-successor'),
+    source.replace('promotion_evidence="$evidence/v4.1"', 'promotion_evidence="$evidence"'),
     source.replace("node scripts/programmable-launch-v4-release-binding.mjs verify-release-ready", "echo unbound"),
     source.replace("npm run release:custom-launch:v4:clean-room:test", "echo skipped-clean-room-contract"),
     source.replaceAll(
-      "PROGRAMMABLE_ROBINHOOD_BACKEND_AUTHORIZATION: ${{ github.workspace }}/release/robinhood-chain-4663/programmable-backend-authorization.json",
+      "PROGRAMMABLE_ROBINHOOD_BACKEND_AUTHORIZATION: ${{ github.workspace }}/release/robinhood-chain-4663/${{ inputs.version == '4.1.0' && 'v4.1/' || '' }}programmable-backend-authorization.json",
       "",
     ),
     source.replace("node scripts/programmable-launch-release-assets.mjs build", "echo fabricated"),
@@ -357,7 +366,7 @@ test("release workflow contract mutations fail closed", () => {
       "FLY_API_TOKEN: missing",
     ),
     source.replace(
-      "node contracts/scripts/finalize-robinhood-custom-launch-deployment.mjs apply",
+      'node "$finalizer" apply',
       "echo skipped-fresh-apply",
     ),
     source.replace("test \"$(jq -er '.releaseReady' \"$result\")\" = \"true\"", "true"),

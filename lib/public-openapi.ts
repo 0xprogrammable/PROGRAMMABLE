@@ -1,4 +1,5 @@
-import { V4_API_DISCOVERY } from "@/lib/custom-launch/v4-api-discovery";
+import { V4_API_DISCOVERY, V4_API_PROFILE_VERSION } from "@/lib/custom-launch/v4-api-discovery";
+import { robinhoodV4PublicContractDiscovery, robinhoodV4PublicPolicyDescription } from "@/lib/custom-launch/v4-public-contract-discovery";
 import { V4_TOKEN_ADDRESS } from "@/components/docs-public-policy";
 
 const SITE_ORIGIN = "https://programmable.market";
@@ -48,7 +49,7 @@ export const programmablePublicOpenApi = {
     summary:
       "Explore indexing reset, Ethereum V3 creation and Robinhood V4 launch discovery.",
     description:
-      "The programmable.market Explore endpoints remain unauthenticated and read-only, but token indexing is intentionally reset while a replacement indexer is built. Valid Explore list, detail and analytics requests return a deterministic 503 reset response; chart requests return the provider-neutral market-chart-error.v2 reset response. At the separately hosted Custom Launch API, fresh writes use the public Ethereum V3.3 contract. Robinhood Chain V4 exposes a public self-serve launch path when live publicWrites, publicAuthorization and releaseReady discovery fields are all true. Clients must verify these gates before creating. The required default policy for new Robinhood V4 API Custom launches is 20 bps to the published recipient. It is policy configuration, not proof of canonical onchain fee enforcement, a charged fee or platform revenue, and missing onchain fee enforcement is not itself a write blocker. V2 and V1 history remain readable, while both legacy creation routes are write-fenced with non-retryable 409 CUSTOM_LAUNCH_V2_READ_ONLY and CUSTOM_LAUNCH_V1_READ_ONLY responses. CLI and model checks prepare a request; only the API server decides whether verified evidence permits a wallet handoff. Legacy Registry and GitHub submission intake is closed. An API key and the CLI never sign or broadcast a controller-wallet transaction.",
+      robinhoodV4PublicPolicyDescription(V4_API_PROFILE_VERSION, "The programmable.market Explore endpoints remain unauthenticated and read-only, but token indexing is intentionally reset while a replacement indexer is built. Valid Explore list, detail and analytics requests return a deterministic 503 reset response; chart requests return the provider-neutral market-chart-error.v2 reset response. At the separately hosted Custom Launch API, fresh writes use the public Ethereum V3.3 contract. Robinhood Chain V4 exposes a public self-serve launch path when live publicWrites, publicAuthorization and releaseReady discovery fields are all true. Clients must verify these gates before creating. The required default policy for new Robinhood V4 API Custom launches is 20 bps to the published recipient. It is policy configuration, not proof of canonical onchain fee enforcement, a charged fee or platform revenue, and missing onchain fee enforcement is not itself a write blocker. V2 and V1 history remain readable, while both legacy creation routes are write-fenced with non-retryable 409 CUSTOM_LAUNCH_V2_READ_ONLY and CUSTOM_LAUNCH_V1_READ_ONLY responses. CLI and model checks prepare a request; only the API server decides whether verified evidence permits a wallet handoff. Legacy Registry and GitHub submission intake is closed. An API key and the CLI never sign or broadcast a controller-wallet transaction."),
     contact: {
       name: "Programmable",
       url: `${SITE_ORIGIN}/docs/developers`,
@@ -1924,6 +1925,7 @@ export const programmablePublicOpenApi = {
       sourceVerificationStartsAfter: "finalized",
       sourceVerificationIndependentFromFinality: true,
       indexingTradingAndPublicationIndependent: true,
+      ...robinhoodV4PublicContractDiscovery(V4_API_PROFILE_VERSION),
     },
     legacyIntake: { registry: "closed", github: "closed" },
   },
@@ -1939,7 +1941,7 @@ export const programmablePublicOpenApi = {
     market:
       "Router verification requires pool initialization and fixed runtime and pool bindings, not active liquidity or tradability; the Custom graph owns liquidity behavior.",
     actions:
-      "Fresh Ethereum V3.3 creation and lifecycle reads preserve exact idempotent request bytes, bounded best-effort reconciliation of pending history rows and precise single-resource polling. Robinhood V4 Router and backend are deployed and ready and target public self-serve, and live discovery derives API availability from the verified release and wallet-handoff evidence; indexing and publication remain independent. The required 20 bps default configuration is not a canonical onchain fee-enforcement, charged-fee or revenue claim, and missing onchain fee enforcement is not itself a write blocker. V2 and V1 history remain readable and both legacy creation routes remain write-fenced. CLI, client and model output is preparation only; the API server independently enforces objective static hard blocks and exact Router simulation. Missing behavior execution leaves routability, liquidity and fee claims unverified, while an authenticated executed hard-invariant failure blocks wallet handoff. Exact-source provider verification starts after finality, runs independently and never revises launch finality. API keys never sign, broadcast, trade, claim fees, manage buybacks, or write profiles. The CLI also never signs or broadcasts.",
+      robinhoodV4PublicPolicyDescription(V4_API_PROFILE_VERSION, "Fresh Ethereum V3.3 creation and lifecycle reads preserve exact idempotent request bytes, bounded best-effort reconciliation of pending history rows and precise single-resource polling. Robinhood V4 Router and backend are deployed and ready and target public self-serve, and live discovery derives API availability from the verified release and wallet-handoff evidence; indexing and publication remain independent. The required 20 bps default configuration is not a canonical onchain fee-enforcement, charged-fee or revenue claim, and missing onchain fee enforcement is not itself a write blocker. V2 and V1 history remain readable and both legacy creation routes remain write-fenced. CLI, client and model output is preparation only; the API server independently enforces objective static hard blocks and exact Router simulation. Missing behavior execution leaves routability, liquidity and fee claims unverified, while an authenticated executed hard-invariant failure blocks wallet handoff. Exact-source provider verification starts after finality, runs independently and never revises launch finality. API keys never sign, broadcast, trade, claim fees, manage buybacks, or write profiles. The CLI also never signs or broadcasts."),
   },
   "x-programmable-wallet-authorization-gate": {
     decisionAuthority: "api-server",
@@ -1970,7 +1972,7 @@ export const programmablePublicOpenApi = {
         ? "v1-v2-write-fenced-v3.3-live-v4-public-api-wallet-handoff"
         : "v1-v2-write-fenced-v3.3-live-v4-pending-public-discovery-promotion",
       description:
-        "Fresh public writes use Ethereum V3.3. Robinhood V4 targets public self-serve after its non-fee release predicates are deployed; require live discovery fields before create. Its 20 bps recipient configuration is required policy but not guaranteed canonical onchain enforcement. V2 and V1 POST remain non-retryable write fences with CUSTOM_LAUNCH_V2_READ_ONLY and CUSTOM_LAUNCH_V1_READ_ONLY.",
+        robinhoodV4PublicPolicyDescription(V4_API_PROFILE_VERSION, "Fresh public writes use Ethereum V3.3. Robinhood V4 targets public self-serve after its non-fee release predicates are deployed; require live discovery fields before create. Its 20 bps recipient configuration is required policy but not guaranteed canonical onchain enforcement. V2 and V1 POST remain non-retryable write fences with CUSTOM_LAUNCH_V2_READ_ONLY and CUSTOM_LAUNCH_V1_READ_ONLY."),
     },
     "custom-launch:read": {
       state: "grantable",

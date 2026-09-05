@@ -1252,7 +1252,7 @@
 }
 
 .pickerHeading.pickerHeading h1 {
-  font-size: clamp(42px, 5.6vw, 72px);
+  font-size: clamp(36px, 4.6vw, 60px);
   font-weight: 540;
   letter-spacing: -0.035em;
   line-height: 1;
@@ -1262,7 +1262,7 @@
 }
 
 .modelGrid.modelGrid {
-  margin-top: 48px;
+  margin-top: 32px;
 }
 
 .modelLoadError {
@@ -1616,7 +1616,7 @@
 
 @media (max-width: 760px) {
   .pickerHeading.pickerHeading h1 {
-    font-size: clamp(42px, 12vw, 54px);
+    font-size: clamp(36px, 10vw, 48px);
     max-width: 11ch;
   }
 
@@ -1992,21 +1992,42 @@
 .pickerHeading {
   margin: 0;
   max-width: none;
-  text-align: left;
+  text-align: center;
 }
 
 .pickerHeading h1 {
-  font-size: clamp(58px, 6.5vw, 96px);
-  font-weight: 520;
-  letter-spacing: -0.062em;
-  line-height: 0.92;
+  font-size: clamp(36px, 4.6vw, 60px);
+  font-weight: 540;
+  letter-spacing: -0.035em;
+  line-height: 1;
   margin: 0;
+}
+
+.chainChoice.chainChoice {
+  margin: 0 auto;
 }
 
 .modelGrid {
   gap: 16px;
-  margin-top: 58px;
+  margin-top: 32px;
   max-width: none;
+}
+
+.singleModelGrid {
+  grid-template-columns: minmax(0, 1fr);
+  margin-inline: auto;
+  max-width: 624px;
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .modelGrid {
+    transition: opacity 200ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  @starting-style {
+    .modelGrid { opacity: 0.6; }
+  }
 }
 
 .modelCard.modelCard {
@@ -2041,6 +2062,21 @@
 
 .modelCard[data-launch-model-available="false"] .modelArt img {
   filter: saturate(0.38) brightness(0.62);
+}
+
+.artImage[data-ready] {
+  opacity: 0;
+  transition: opacity 180ms ease-out;
+}
+
+.artImage[data-ready="true"] {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .artImage[data-ready] {
+    transition: none;
+  }
 }
 
 .classicLogo {
@@ -2105,16 +2141,23 @@
 
 @media (min-width: 761px) {
   .modelCard.modelCard {
-    display: block;
+    display: flex;
+    flex-direction: column;
   }
 
   .modelArt {
+    flex-shrink: 0;
     height: auto;
     min-height: 0;
   }
 
   .modelBody.modelBody {
     min-height: 126px;
+  }
+
+  .modelBody .modelAction {
+    margin-top: auto;
+    padding-top: 10px;
   }
 }
 
@@ -2125,7 +2168,7 @@
   }
 
   .pickerHeading h1 {
-    font-size: clamp(44px, 13vw, 60px);
+    font-size: clamp(36px, 10vw, 48px);
     white-space: normal;
   }
 

@@ -1,4 +1,4 @@
-export const PACKAGE_VERSION = "4.0.0";
+export const PACKAGE_VERSION = "4.1.0";
 export const PACK_CONFIG_SCHEMA_V1 = "programmable.launch-pack-config.v1";
 export const PACK_CONFIG_SCHEMA_V2 = "programmable.launch-pack-config.v2";
 export const PACK_CONFIG_SCHEMA_V3 = "programmable.launch-pack-config.v3";
@@ -220,8 +220,8 @@ export const RELEASE_TAG_V3 = "programmable-launch-v3.3.9";
 export const RELEASE_TARBALL_V3 = "programmable-launch-3.3.9.tgz";
 export const RELEASE_URL_V3 =
   `https://github.com/programmablehq/PROGRAMMABLE/releases/download/${RELEASE_TAG_V3}/${RELEASE_TARBALL_V3}`;
-export const RELEASE_TAG = "programmable-launch-v4.0.0";
-export const RELEASE_TARBALL = "programmable-launch-4.0.0.tgz";
+export const RELEASE_TAG = "programmable-launch-v4.1.0";
+export const RELEASE_TARBALL = "programmable-launch-4.1.0.tgz";
 export const RELEASE_URL =
   `https://github.com/programmablehq/PROGRAMMABLE/releases/download/${RELEASE_TAG}/${RELEASE_TARBALL}`;
 export const PACK_CONFIG_V3_CONTRACT_URL =
@@ -231,7 +231,7 @@ export const PACK_CONFIG_V3_EXAMPLE_URL =
 export const PACK_CONFIG_V4_CONTRACT_URL =
   "https://programmable.market/schemas/custom-launch/v4/pack-config.json";
 export const PACK_CONFIG_V4_EXAMPLE_URL =
-  `https://github.com/programmablehq/PROGRAMMABLE/blob/${RELEASE_TAG}/packages/launch/examples/robinhood-v4-no-broadcast/README.md`;
+  `https://github.com/programmablehq/PROGRAMMABLE/blob/programmable-launch-v4.0.0/packages/launch/examples/robinhood-v4-no-broadcast/README.md`;
 
 export const MAINNET_CHAIN_ID = "1";
 export const ROBINHOOD_CHAIN_ID = "4663";

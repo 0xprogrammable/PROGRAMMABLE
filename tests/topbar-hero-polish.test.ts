@@ -82,11 +82,11 @@ describe("topbar and Explore hero polish", () => {
     expect(navigation).not.toContain("lucide-react");
     expect(navigation).toContain('if (activePath === "/docs")');
     expect(navigation).toContain("prefetch={false}");
-    expect(navigation).toContain("warmedNavigationRoutes.has(href)");
     expect(navigation).toContain("router.prefetch(href)");
+    expect(navigation).not.toContain("warmedNavigationRoutes");
     for (const label of [
       "Explore",
-      "Create",
+      "Launch",
       "Docs",
       "API keys",
       "Profile",

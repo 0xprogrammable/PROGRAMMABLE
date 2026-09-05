@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
 
 import { DeveloperApiKeys } from "@/components/developer-api-keys";
+import { developerApiKeysInitialSection } from "@/lib/developer-api-key-route";
+import { buildProgrammableAgentSetupTextV1 } from "@/lib/custom-launch/agent-setup-v1";
+import { V4_API_PROFILE_VERSION } from "@/lib/custom-launch/v4-api-discovery";
 
 export const metadata: Metadata = {
   title: "API keys · Programmable",
   description:
-    "Create scoped Programmable API keys for custom launch agents while your wallet keeps control of final transactions.",
+    "Manage Programmable API keys for launch agents on Ethereum and Robinhood.",
   alternates: {
     canonical: "/developers/api-keys",
   },
@@ -15,15 +18,6 @@ type DeveloperApiKeysSearchParams = Promise<
   Record<string, string | string[] | undefined>
 >;
 
-export function developerApiKeysInitialSection(
-  searchParams: Record<string, string | string[] | undefined>,
-) {
-  return searchParams.start === "custom"
-    && searchParams.chainId === "4663"
-    ? "launch" as const
-    : "keys" as const;
-}
-
 export default async function DeveloperApiKeysPage({
   searchParams,
 }: Readonly<{ searchParams: DeveloperApiKeysSearchParams }>) {
@@ -31,6 +25,7 @@ export default async function DeveloperApiKeysPage({
   return (
     <DeveloperApiKeys
       initialSection={developerApiKeysInitialSection(resolvedSearchParams)}
+      agentSetupText={buildProgrammableAgentSetupTextV1(V4_API_PROFILE_VERSION)}
     />
   );
 }

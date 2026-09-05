@@ -6,15 +6,19 @@ const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 describe("landing page contract", () => {
-  it("keeps the landing page at home and sends the header Explore link to its landing chapter", () => {
+  it("keeps the landing page at home and sends the header Explore link to the selected chain directory", () => {
     const homePage = read("app/page.tsx");
     const explorePage = read("app/explore/page.tsx");
+    const chainPage = read("app/explore/[chain]/page.tsx");
     const navigation = read("components/site-navigation.tsx");
 
     expect(homePage).toContain("import { LandingPage }");
     expect(homePage).toContain("return <LandingPage />");
-    expect(explorePage).toContain("import { RobinhoodLaunchesView }");
+    expect(explorePage).toContain("redirect(exploreChainPath(");
     expect(explorePage).toContain('canonical: "/explore"');
+    expect(chainPage).toContain("import { RobinhoodLaunchesView }");
+    expect(chainPage).toContain("<RobinhoodLaunchesView chainId={chainId} />");
+    expect(chainPage).toContain("canonical: exploreChainPath(chainId)");
     expect(navigation).toContain('{ href: "/explore", label: "Explore" }');
     expect(navigation).toContain('href="/"');
     expect(homePage).toContain('"Build and launch custom Uniswap v4 hooks.');

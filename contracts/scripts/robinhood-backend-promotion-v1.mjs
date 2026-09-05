@@ -24,54 +24,59 @@ import {
   readRobinhoodBoundedResponse,
 } from "./robinhood-custom-launch-capture-v2.mjs";
 
-export const ROBINHOOD_BACKEND_PROMOTION_INPUT_SCHEMA =
+// Explicit factories keep historical proof defaults closed while allowing a separately pinned successor.
+export function createRobinhoodBackendPromotionTools(release = null) {
+const configured = (name, fallback) => release !== null && Object.hasOwn(release, name)
+  ? release[name] : fallback;
+const ROBINHOOD_BACKEND_PROMOTION_INPUT_SCHEMA =
   "programmable.robinhood-custom-launch.backend-promotion-input.v1";
-export const ROBINHOOD_BACKEND_PROMOTION_PUBLIC_INPUT_SCHEMA =
+const ROBINHOOD_BACKEND_PROMOTION_PUBLIC_INPUT_SCHEMA =
   "programmable.robinhood-custom-launch.backend-promotion-public-input.v2";
-export const ROBINHOOD_BACKEND_AUTHORIZATION_SCHEMA =
+const ROBINHOOD_BACKEND_AUTHORIZATION_SCHEMA =
   "programmable.launch-cli-v4-backend-release-authorization.v1";
-export const ROBINHOOD_BACKEND_AUTHORIZATION_WORKFLOW =
-  ".github/workflows/finalize-robinhood-custom-launch-promotion.yml";
-export const ROBINHOOD_BACKEND_CAPTURE_AUTHORIZATION_SCHEMA =
+const ROBINHOOD_BACKEND_AUTHORIZATION_WORKFLOW =
+  configured("ROBINHOOD_BACKEND_AUTHORIZATION_WORKFLOW", ".github/workflows/finalize-robinhood-custom-launch-promotion.yml");
+const ROBINHOOD_BACKEND_CAPTURE_AUTHORIZATION_SCHEMA =
   "programmable.robinhood-custom-launch.backend-capture-authorization.v3";
-export const ROBINHOOD_BACKEND_CAPTURE_WORKFLOW =
-  ".github/workflows/capture-programmable-robinhood-promotion.yml";
-export const ROBINHOOD_BACKEND_CAPTURE_WORKFLOW_NAME =
-  "Capture Programmable Robinhood backend promotion";
-export const ROBINHOOD_BACKEND_CAPTURE_TRUST_CLASS =
+const ROBINHOOD_BACKEND_CAPTURE_WORKFLOW =
+  configured("ROBINHOOD_BACKEND_CAPTURE_WORKFLOW", ".github/workflows/capture-programmable-robinhood-promotion.yml");
+const ROBINHOOD_BACKEND_CAPTURE_WORKFLOW_NAME =
+  configured("ROBINHOOD_BACKEND_CAPTURE_WORKFLOW_NAME", "Capture Programmable Robinhood backend promotion");
+const ROBINHOOD_BACKEND_CAPTURE_TRUST_CLASS =
   "sigstore-keyless-github-actions-protected-main-v1";
-export const ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_IDENTITY =
-  "https://github.com/programmablehq/programmable-open-hook-v2-internal/"
-    + ".github/workflows/capture-programmable-robinhood-promotion.yml@refs/heads/main";
-export const ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_OIDC_ISSUER =
+const ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_IDENTITY =
+  configured("ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_IDENTITY",
+    "https://github.com/programmablehq/programmable-open-hook-v2-internal/"
+      + ".github/workflows/capture-programmable-robinhood-promotion.yml@refs/heads/main");
+const ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_OIDC_ISSUER =
   "https://token.actions.githubusercontent.com";
-export const ROBINHOOD_BACKEND_CAPTURE_SOURCE_REF = "refs/heads/main";
-export const ROBINHOOD_BACKEND_CAPTURE_TRIGGER = "workflow_dispatch";
-export const ROBINHOOD_BACKEND_COSIGN_VERSION = "v3.1.3";
-export const ROBINHOOD_BACKEND_COSIGN_LINUX_AMD64_SHA256 =
+const ROBINHOOD_BACKEND_CAPTURE_SOURCE_REF = "refs/heads/main";
+const ROBINHOOD_BACKEND_CAPTURE_TRIGGER = "workflow_dispatch";
+const ROBINHOOD_BACKEND_COSIGN_VERSION = "v3.1.3";
+const ROBINHOOD_BACKEND_COSIGN_LINUX_AMD64_SHA256 =
   "sha256:4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71";
-export const SIGSTORE_BUNDLE_V03_MEDIA_TYPE =
+const SIGSTORE_BUNDLE_V03_MEDIA_TYPE =
   "application/vnd.dev.sigstore.bundle.v0.3+json";
-export const ROBINHOOD_BACKEND_READINESS_SCHEMA =
+const ROBINHOOD_BACKEND_READINESS_SCHEMA =
   "programmable.custom-launch-api-release-identity.v4";
-export const ROBINHOOD_BACKEND_EVIDENCE_SCHEMA =
+const ROBINHOOD_BACKEND_EVIDENCE_SCHEMA =
   "programmable.launch-cli-v4-backend-release-evidence.v1";
-export const ROBINHOOD_BACKEND_HOSTNAME =
+const ROBINHOOD_BACKEND_HOSTNAME =
   "programmable-custom-launch-api.fly.dev";
-export const ROBINHOOD_FLY_MACHINES_HOSTNAME = "api.machines.dev";
-export const ROBINHOOD_FLY_GRAPHQL_HOSTNAME = "api.fly.io";
-export const ROBINHOOD_FLY_APP = "programmable-custom-launch-api";
-export const ROBINHOOD_BACKEND_PROMOTION_INPUT_PATH =
-  "release/robinhood-chain-4663/backend-promotion-input.json";
-export const ROBINHOOD_BACKEND_PROMOTION_PUBLIC_INPUT_PATH =
-  "release/robinhood-chain-4663/backend-promotion-input.public.json";
-export const ROBINHOOD_BACKEND_AUTHORIZATION_PATH =
-  "release/robinhood-chain-4663/programmable-backend-authorization.json";
-export const ROBINHOOD_BACKEND_AUTHORIZATION_ATTESTATION_PATH =
-  "release/robinhood-chain-4663/programmable-backend-authorization.attestation.json";
-export const ROBINHOOD_BACKEND_ATTESTATION_BUNDLE_PATH =
-  "release/robinhood-chain-4663/backend-promotion-input.attestation.json";
-export const ROBINHOOD_STAGE_BUNDLE_PATH =
+const ROBINHOOD_FLY_MACHINES_HOSTNAME = "api.machines.dev";
+const ROBINHOOD_FLY_GRAPHQL_HOSTNAME = "api.fly.io";
+const ROBINHOOD_FLY_APP = "programmable-custom-launch-api";
+const ROBINHOOD_BACKEND_PROMOTION_INPUT_PATH =
+  configured("ROBINHOOD_BACKEND_PROMOTION_INPUT_PATH", "release/robinhood-chain-4663/backend-promotion-input.json");
+const ROBINHOOD_BACKEND_PROMOTION_PUBLIC_INPUT_PATH =
+  configured("ROBINHOOD_BACKEND_PROMOTION_PUBLIC_INPUT_PATH", "release/robinhood-chain-4663/backend-promotion-input.public.json");
+const ROBINHOOD_BACKEND_AUTHORIZATION_PATH =
+  configured("ROBINHOOD_BACKEND_AUTHORIZATION_PATH", "release/robinhood-chain-4663/programmable-backend-authorization.json");
+const ROBINHOOD_BACKEND_AUTHORIZATION_ATTESTATION_PATH =
+  configured("ROBINHOOD_BACKEND_AUTHORIZATION_ATTESTATION_PATH", "release/robinhood-chain-4663/programmable-backend-authorization.attestation.json");
+const ROBINHOOD_BACKEND_ATTESTATION_BUNDLE_PATH =
+  configured("ROBINHOOD_BACKEND_ATTESTATION_BUNDLE_PATH", "release/robinhood-chain-4663/backend-promotion-input.attestation.json");
+const ROBINHOOD_STAGE_BUNDLE_PATH =
   "release/robinhood-chain-4663/programmable-stage-bundle.json";
 
 const SHA256 = /^sha256:[0-9a-f]{64}$/u;
@@ -118,6 +123,7 @@ const COMPOSITION_KEYS = Object.freeze([
   "sourceVerificationWorkerConfigured",
   "sourceVerificationWorkerStarted",
   "sourceVerificationWorkerLifecycle",
+  ...(release?.profile?.profileVersion === "4.1.0" ? ["nativeInitialBuyQuote"] : []),
 ]);
 
 function failFlyV1TokenWire() {
@@ -196,7 +202,7 @@ const FLY_CONTROL_PLANE_SCHEMA =
 const BACKEND_PROMOTION_SEMANTIC_INPUT_DOMAIN =
   "programmable.robinhood-custom-launch.backend-promotion-semantic-input.v1";
 const BACKEND_PRIVATE_RESPONSE_BYTES = 32 * 1024 * 1024;
-export const ROBINHOOD_BACKEND_PRIVATE_ARTIFACT_BYTES = 48 * 1024 * 1024;
+const ROBINHOOD_BACKEND_PRIVATE_ARTIFACT_BYTES = 48 * 1024 * 1024;
 const BACKEND_PUBLIC_INPUT_BYTES = 16 * 1024 * 1024;
 const BACKEND_FRESH_AGGREGATE_BYTES = 32 * 1024 * 1024;
 const BACKEND_RESPONSE_BYTES = Object.freeze({
@@ -208,16 +214,17 @@ const BACKEND_RESPONSE_BYTES = Object.freeze({
   metadata: 1 * 1024 * 1024,
 });
 const FLY_RELEASES_QUERY = "query ProgrammableRobinhoodRelease($appName: String!, $first: Int!) { app(name: $appName) { releasesUnprocessed(first: $first) { totalCount pageInfo { hasNextPage hasPreviousPage startCursor endCursor } nodes { id version status stable imageRef image { registry repository tag digest } createdAt } } } }";
-const BACKEND_MIGRATION_PATH = "migrations/0024_custom_launch_source_authority_v4.sql";
+const BACKEND_MIGRATION_PATH = configured("BACKEND_MIGRATION_PATH", "migrations/0024_custom_launch_source_authority_v4.sql");
 const BACKEND_MIGRATION_SHA256 =
-  "sha256:51efb50f6f59131042d4253ce485cf14c3d375ab639d8c7075eb22dc8a9d44a0";
-const BACKEND_API_CONTRACT_PATH = "release/custom-launch-api-contract.v4.json";
+  configured("BACKEND_MIGRATION_SHA256", "sha256:51efb50f6f59131042d4253ce485cf14c3d375ab639d8c7075eb22dc8a9d44a0");
+const BACKEND_API_CONTRACT_PATH = configured("BACKEND_API_CONTRACT_PATH", "release/custom-launch-api-contract.v4.json");
 const BACKEND_API_CONTRACT_SHA256 =
-  "sha256:1c22711fa0516507d1e207ee7cb565d9ec95f59e042d869c0052a98a57d73634";
+  configured("BACKEND_API_CONTRACT_SHA256", "sha256:1c22711fa0516507d1e207ee7cb565d9ec95f59e042d869c0052a98a57d73634");
 const ROBINHOOD_PROVIDER_PROFILE_SHA256 =
-  "sha256:88daed906c2a142c57d2483099a6d18be31dbff2a282108657ec6f5e73f53132";
+  configured("ROBINHOOD_PROVIDER_PROFILE_SHA256",
+    "sha256:88daed906c2a142c57d2483099a6d18be31dbff2a282108657ec6f5e73f53132");
 
-export function validateSigstoreMessageBundleV03({ bundleBytes, subjectBytes }) {
+function validateSigstoreMessageBundleV03({ bundleBytes, subjectBytes }) {
   if (!Buffer.isBuffer(bundleBytes) || bundleBytes.byteLength < 1
     || bundleBytes.byteLength > 16 * 1024 * 1024
     || !Buffer.isBuffer(subjectBytes) || subjectBytes.byteLength < 1
@@ -277,7 +284,7 @@ export function validateSigstoreMessageBundleV03({ bundleBytes, subjectBytes }) 
   return Object.freeze(structuredClone(bundle));
 }
 
-export function buildRobinhoodBackendCosignVerifyBlobArgs({
+function buildRobinhoodBackendCosignVerifyBlobArgs({
   subjectPath,
   bundlePath,
   sourceCommit,
@@ -483,6 +490,9 @@ function exactReadinessIdentity(value, stageBundle, backendSource) {
   ], "backend readiness release identity");
   const descriptorDigest = stageBundle.finalizedBindings.chainDeploymentDescriptorDigest;
   const releaseIdentity = stageBundle.artifacts.cliReleaseBinding.value.releaseIdentity;
+  if (release?.profile && canonicalizeJson(releaseIdentity.profile) !== canonicalizeJson(release.profile)) {
+    throw new TypeError("backend readiness requires the exact successor release profile");
+  }
   if (value.schemaVersion !== ROBINHOOD_BACKEND_READINESS_SCHEMA || value.status !== "ready"
     || value.service !== "custom-launch-api-v1" || value.sourceCommit !== backendSource.sourceCommit
     || value.sourceTree !== backendSource.sourceTree || value.chainId !== CHAIN_ID
@@ -748,20 +758,20 @@ function normalizeFlyBodies(fly, backendSource, observedAt) {
   });
 }
 
-export function computeRobinhoodBackendPromotionInputDigest(value) {
+function computeRobinhoodBackendPromotionInputDigest(value) {
   return framedSha256(
     ROBINHOOD_BACKEND_PROMOTION_INPUT_SCHEMA,
     { ...structuredClone(value), backendPromotionInputDigest: null },
   );
 }
 
-export function buildRobinhoodBackendPromotionInput(value) {
+function buildRobinhoodBackendPromotionInput(value) {
   const normalized = { ...structuredClone(value), backendPromotionInputDigest: null };
   normalized.backendPromotionInputDigest = computeRobinhoodBackendPromotionInputDigest(normalized);
   return Object.freeze(normalized);
 }
 
-export function validateRobinhoodBackendPromotionInput({
+function validateRobinhoodBackendPromotionInput({
   input,
   stageBundle,
   now = () => new Date(),
@@ -987,7 +997,7 @@ export function validateRobinhoodBackendPromotionInput({
   });
 }
 
-export function computeRobinhoodBackendPromotionPublicInputDigest(value) {
+function computeRobinhoodBackendPromotionPublicInputDigest(value) {
   return framedSha256(
     ROBINHOOD_BACKEND_PROMOTION_PUBLIC_INPUT_SCHEMA,
     { ...structuredClone(value), publicInputDigest: null },
@@ -1013,14 +1023,14 @@ function backendPromotionSemanticSubject({
   };
 }
 
-export function computeRobinhoodBackendPromotionSemanticDigest(value) {
+function computeRobinhoodBackendPromotionSemanticDigest(value) {
   return framedSha256(
     BACKEND_PROMOTION_SEMANTIC_INPUT_DOMAIN,
     backendPromotionSemanticSubject(value),
   );
 }
 
-export function buildRobinhoodBackendPromotionPublicInput(value) {
+function buildRobinhoodBackendPromotionPublicInput(value) {
   const normalized = { ...structuredClone(value), publicInputDigest: null };
   normalized.publicInputDigest =
     computeRobinhoodBackendPromotionPublicInputDigest(normalized);
@@ -1082,7 +1092,7 @@ function buildPublicInputFromPrivate({ privateInput, validated }) {
   });
 }
 
-export function buildRobinhoodBackendPromotionPublicInputFromPrivate({
+function buildRobinhoodBackendPromotionPublicInputFromPrivate({
   privateInput,
   privateInputBytes,
   stageBundle,
@@ -1111,7 +1121,7 @@ export function buildRobinhoodBackendPromotionPublicInputFromPrivate({
   });
 }
 
-export function buildRobinhoodBackendPromotionPublicFixture(stageBundle) {
+function buildRobinhoodBackendPromotionPublicFixture(stageBundle) {
   const privateInput = buildRobinhoodBackendPromotionFixture(stageBundle);
   const privateInputBytes = Buffer.from(`${JSON.stringify(privateInput, null, 2)}\n`, "utf8");
   return Object.freeze({
@@ -1126,7 +1136,7 @@ export function buildRobinhoodBackendPromotionPublicFixture(stageBundle) {
   });
 }
 
-export function validateRobinhoodBackendPromotionPublicInput({
+function validateRobinhoodBackendPromotionPublicInput({
   input,
   stageBundle,
   now = () => new Date(),
@@ -1361,14 +1371,14 @@ export function validateRobinhoodBackendPromotionPublicInput({
   });
 }
 
-export function computeRobinhoodBackendAuthorizationDigest(value) {
+function computeRobinhoodBackendAuthorizationDigest(value) {
   return framedSha256(
     ROBINHOOD_BACKEND_AUTHORIZATION_SCHEMA,
     Object.fromEntries(Object.entries(value).filter(([key]) => key !== "authorizationDigest")),
   );
 }
 
-export function buildRobinhoodBackendCaptureAuthorization(value) {
+function buildRobinhoodBackendCaptureAuthorization(value) {
   const result = { ...structuredClone(value), verificationDigest: null };
   result.verificationDigest = framedSha256(
     ROBINHOOD_BACKEND_CAPTURE_AUTHORIZATION_SCHEMA,
@@ -1377,7 +1387,7 @@ export function buildRobinhoodBackendCaptureAuthorization(value) {
   return Object.freeze(result);
 }
 
-export function validateRobinhoodBackendCaptureAuthorization({
+function validateRobinhoodBackendCaptureAuthorization({
   authorization,
   inputBytes,
   attestationBundleBytes,
@@ -1466,13 +1476,13 @@ export function validateRobinhoodBackendCaptureAuthorization({
   return Object.freeze(structuredClone(authorization));
 }
 
-export function buildRobinhoodBackendAuthorization(value) {
+function buildRobinhoodBackendAuthorization(value) {
   const result = { ...structuredClone(value), authorizationDigest: null };
   result.authorizationDigest = computeRobinhoodBackendAuthorizationDigest(result);
   return Object.freeze(result);
 }
 
-export function validateRobinhoodBackendAuthorization({
+function validateRobinhoodBackendAuthorization({
   authorization,
   stageBundle,
   stageBundleBytes,
@@ -1590,7 +1600,7 @@ function readback(kind, hostname, requestPath, authentication, body, index, {
   };
 }
 
-export function buildRobinhoodBackendPromotionFixture(stageBundle) {
+function buildRobinhoodBackendPromotionFixture(stageBundle) {
   const binding = stageBundle.artifacts.cliReleaseBinding.value;
   const sourceCommit = "8".repeat(40);
   const sourceTree = "9".repeat(40);
@@ -1787,7 +1797,7 @@ async function fetchRawReadback({
   };
 }
 
-export async function freshVerifyRobinhoodBackendPromotionInput({
+async function freshVerifyRobinhoodBackendPromotionInput({
   stageBundle,
   capturedInput,
   fetch: fetchImpl = globalThis.fetch,
@@ -1961,17 +1971,7 @@ async function main(argv) {
       fixture.backendPromotionInputDigest })}\n`);
 }
 
-const invoked = process.argv[1] ? path.resolve(process.argv[1]) : null;
-if (invoked === fileURLToPath(import.meta.url)) {
-  try {
-    await main(process.argv.slice(2));
-  } catch (error) {
-    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-    process.exitCode = 1;
-  }
-}
-
-export const ROBINHOOD_BACKEND_DIGEST_DOMAINS = Object.freeze({
+const ROBINHOOD_BACKEND_DIGEST_DOMAINS = Object.freeze({
   promotionInput: ROBINHOOD_BACKEND_PROMOTION_INPUT_SCHEMA,
   captureAuthorization: ROBINHOOD_BACKEND_CAPTURE_AUTHORIZATION_SCHEMA,
   authorization: ROBINHOOD_BACKEND_AUTHORIZATION_SCHEMA,
@@ -1990,3 +1990,115 @@ export const ROBINHOOD_BACKEND_DIGEST_DOMAINS = Object.freeze({
   freshBackendReadback:
     "programmable.robinhood-custom-launch.fresh-backend-readback.v1",
 });
+
+return Object.freeze({
+  ROBINHOOD_BACKEND_PROMOTION_INPUT_SCHEMA,
+  ROBINHOOD_BACKEND_PROMOTION_PUBLIC_INPUT_SCHEMA,
+  ROBINHOOD_BACKEND_AUTHORIZATION_SCHEMA,
+  ROBINHOOD_BACKEND_AUTHORIZATION_WORKFLOW,
+  ROBINHOOD_BACKEND_CAPTURE_AUTHORIZATION_SCHEMA,
+  ROBINHOOD_BACKEND_CAPTURE_WORKFLOW,
+  ROBINHOOD_BACKEND_CAPTURE_WORKFLOW_NAME,
+  ROBINHOOD_BACKEND_CAPTURE_TRUST_CLASS,
+  ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_IDENTITY,
+  ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_OIDC_ISSUER,
+  ROBINHOOD_BACKEND_CAPTURE_SOURCE_REF,
+  ROBINHOOD_BACKEND_CAPTURE_TRIGGER,
+  ROBINHOOD_BACKEND_COSIGN_VERSION,
+  ROBINHOOD_BACKEND_COSIGN_LINUX_AMD64_SHA256,
+  SIGSTORE_BUNDLE_V03_MEDIA_TYPE,
+  ROBINHOOD_BACKEND_READINESS_SCHEMA,
+  ROBINHOOD_BACKEND_EVIDENCE_SCHEMA,
+  ROBINHOOD_BACKEND_HOSTNAME,
+  ROBINHOOD_FLY_MACHINES_HOSTNAME,
+  ROBINHOOD_FLY_GRAPHQL_HOSTNAME,
+  ROBINHOOD_FLY_APP,
+  ROBINHOOD_BACKEND_PROMOTION_INPUT_PATH,
+  ROBINHOOD_BACKEND_PROMOTION_PUBLIC_INPUT_PATH,
+  ROBINHOOD_BACKEND_AUTHORIZATION_PATH,
+  ROBINHOOD_BACKEND_AUTHORIZATION_ATTESTATION_PATH,
+  ROBINHOOD_BACKEND_ATTESTATION_BUNDLE_PATH,
+  ROBINHOOD_STAGE_BUNDLE_PATH,
+  ROBINHOOD_BACKEND_PRIVATE_ARTIFACT_BYTES,
+  validateSigstoreMessageBundleV03,
+  buildRobinhoodBackendCosignVerifyBlobArgs,
+  computeRobinhoodBackendPromotionInputDigest,
+  buildRobinhoodBackendPromotionInput,
+  validateRobinhoodBackendPromotionInput,
+  computeRobinhoodBackendPromotionPublicInputDigest,
+  computeRobinhoodBackendPromotionSemanticDigest,
+  buildRobinhoodBackendPromotionPublicInput,
+  buildRobinhoodBackendPromotionPublicInputFromPrivate,
+  buildRobinhoodBackendPromotionPublicFixture,
+  validateRobinhoodBackendPromotionPublicInput,
+  computeRobinhoodBackendAuthorizationDigest,
+  buildRobinhoodBackendCaptureAuthorization,
+  validateRobinhoodBackendCaptureAuthorization,
+  buildRobinhoodBackendAuthorization,
+  validateRobinhoodBackendAuthorization,
+  buildRobinhoodBackendPromotionFixture,
+  freshVerifyRobinhoodBackendPromotionInput,
+  ROBINHOOD_BACKEND_DIGEST_DOMAINS,
+  main,
+});
+}
+
+export const {
+  ROBINHOOD_BACKEND_PROMOTION_INPUT_SCHEMA,
+  ROBINHOOD_BACKEND_PROMOTION_PUBLIC_INPUT_SCHEMA,
+  ROBINHOOD_BACKEND_AUTHORIZATION_SCHEMA,
+  ROBINHOOD_BACKEND_AUTHORIZATION_WORKFLOW,
+  ROBINHOOD_BACKEND_CAPTURE_AUTHORIZATION_SCHEMA,
+  ROBINHOOD_BACKEND_CAPTURE_WORKFLOW,
+  ROBINHOOD_BACKEND_CAPTURE_WORKFLOW_NAME,
+  ROBINHOOD_BACKEND_CAPTURE_TRUST_CLASS,
+  ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_IDENTITY,
+  ROBINHOOD_BACKEND_CAPTURE_CERTIFICATE_OIDC_ISSUER,
+  ROBINHOOD_BACKEND_CAPTURE_SOURCE_REF,
+  ROBINHOOD_BACKEND_CAPTURE_TRIGGER,
+  ROBINHOOD_BACKEND_COSIGN_VERSION,
+  ROBINHOOD_BACKEND_COSIGN_LINUX_AMD64_SHA256,
+  SIGSTORE_BUNDLE_V03_MEDIA_TYPE,
+  ROBINHOOD_BACKEND_READINESS_SCHEMA,
+  ROBINHOOD_BACKEND_EVIDENCE_SCHEMA,
+  ROBINHOOD_BACKEND_HOSTNAME,
+  ROBINHOOD_FLY_MACHINES_HOSTNAME,
+  ROBINHOOD_FLY_GRAPHQL_HOSTNAME,
+  ROBINHOOD_FLY_APP,
+  ROBINHOOD_BACKEND_PROMOTION_INPUT_PATH,
+  ROBINHOOD_BACKEND_PROMOTION_PUBLIC_INPUT_PATH,
+  ROBINHOOD_BACKEND_AUTHORIZATION_PATH,
+  ROBINHOOD_BACKEND_AUTHORIZATION_ATTESTATION_PATH,
+  ROBINHOOD_BACKEND_ATTESTATION_BUNDLE_PATH,
+  ROBINHOOD_STAGE_BUNDLE_PATH,
+  ROBINHOOD_BACKEND_PRIVATE_ARTIFACT_BYTES,
+  validateSigstoreMessageBundleV03,
+  buildRobinhoodBackendCosignVerifyBlobArgs,
+  computeRobinhoodBackendPromotionInputDigest,
+  buildRobinhoodBackendPromotionInput,
+  validateRobinhoodBackendPromotionInput,
+  computeRobinhoodBackendPromotionPublicInputDigest,
+  computeRobinhoodBackendPromotionSemanticDigest,
+  buildRobinhoodBackendPromotionPublicInput,
+  buildRobinhoodBackendPromotionPublicInputFromPrivate,
+  buildRobinhoodBackendPromotionPublicFixture,
+  validateRobinhoodBackendPromotionPublicInput,
+  computeRobinhoodBackendAuthorizationDigest,
+  buildRobinhoodBackendCaptureAuthorization,
+  validateRobinhoodBackendCaptureAuthorization,
+  buildRobinhoodBackendAuthorization,
+  validateRobinhoodBackendAuthorization,
+  buildRobinhoodBackendPromotionFixture,
+  freshVerifyRobinhoodBackendPromotionInput,
+  ROBINHOOD_BACKEND_DIGEST_DOMAINS,
+} = createRobinhoodBackendPromotionTools();
+
+const invoked = process.argv[1] ? path.resolve(process.argv[1]) : null;
+if (invoked === fileURLToPath(import.meta.url)) {
+  try {
+    await createRobinhoodBackendPromotionTools().main(process.argv.slice(2));
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  }
+}

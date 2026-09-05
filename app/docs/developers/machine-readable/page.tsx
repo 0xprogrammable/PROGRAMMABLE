@@ -7,6 +7,14 @@ import {
 } from "@/components/launch-stamp-docs-contract";
 import styles from "@/components/developer-docs.module.css";
 import { DocsShell } from "@/components/docs-shell";
+import { V4_API_PROFILE_VERSION } from "@/lib/custom-launch/v4-api-discovery";
+import { robinhoodV4PublicContractDiscovery, robinhoodV4PublicLaunchRequirements } from "@/lib/custom-launch/v4-public-contract-discovery";
+
+const robinhoodContract = robinhoodV4PublicContractDiscovery(V4_API_PROFILE_VERSION);
+const robinhoodVersion = V4_API_PROFILE_VERSION === "4.1.0" ? "4.1.0" : "4.0.0";
+const robinhoodOpenApiPath = robinhoodContract.openApiUrl?.replace("https://programmable.market", "") ?? "/openapi/custom-launch-v4.json";
+const robinhoodPackConfigPath = robinhoodContract.packConfigSchemaUrl?.replace("https://programmable.market", "") ?? "/schemas/custom-launch/v4/pack-config.json";
+const robinhoodSourceVerificationPath = robinhoodContract.sourceVerificationSchemaUrl?.replace("https://programmable.market", "") ?? "/schemas/custom-launch/v4/source-verification-status.json";
 
 export const metadata: Metadata = {
   title: "Machine-readable docs · Programmable",
@@ -98,13 +106,13 @@ export default function MachineReadableDocsPage() {
             </span>
           </li>
           <li>
-            <a href="/openapi/custom-launch-v4.json">
-              <code>/openapi/custom-launch-v4.json</code>
+            <a href={robinhoodOpenApiPath}>
+              <code>{robinhoodOpenApiPath}</code>
             </a>
             <span>
-              Robinhood Chain Mainnet V4 contract.
-              Public discovery promotion, writes and authorization remain
-              inactive; this pointer is not activation evidence.
+              {robinhoodVersion === "4.1.0"
+                ? "Robinhood Chain Mainnet V4.1 contract with a funding plan, atomic minimum initial buy and native fee proof. Require live publicWrites, publicAuthorization and releaseReady; this pointer is not activation evidence."
+                : "Robinhood Chain Mainnet V4 contract. Public discovery promotion, writes and authorization remain inactive; this pointer is not activation evidence."}
             </span>
           </li>
           <li>
@@ -128,8 +136,8 @@ export default function MachineReadableDocsPage() {
             </span>
           </li>
           <li>
-            <a href="/schemas/custom-launch/v4/pack-config.json">
-              <code>/schemas/custom-launch/v4/pack-config.json</code>
+            <a href={robinhoodPackConfigPath}>
+              <code>{robinhoodPackConfigPath}</code>
             </a>
             <span>
               V4 pack-config schema for chain 4663. Check
@@ -137,10 +145,8 @@ export default function MachineReadableDocsPage() {
             </span>
           </li>
           <li>
-            <a href="/schemas/custom-launch/v4/source-verification-status.json">
-              <code>
-                /schemas/custom-launch/v4/source-verification-status.json
-              </code>
+            <a href={robinhoodSourceVerificationPath}>
+              <code>{robinhoodSourceVerificationPath}</code>
             </a>
             <span>
               Server-authored post-finality source-verification status. It does
@@ -196,11 +202,15 @@ export default function MachineReadableDocsPage() {
           <h2>Read Robinhood V4 release discovery</h2>
           <p>
             CLI <code>3.3.9</code> remains the installable live Ethereum V3
-            release. For Robinhood V4, verify the immutable <code>4.0.0</code> release,
+            release. For Robinhood V4, verify the immutable <code>{robinhoodVersion}</code> release,
             source commit, release manifest and tarball checksum from live discovery
             before installing.
           </p>
         </div>
+
+        {robinhoodV4PublicLaunchRequirements(V4_API_PROFILE_VERSION).map((requirement) => (
+          <p className={styles.bodyCopy} key={requirement}>{requirement}</p>
+        ))}
 
         <ul className={styles.checkList}>
           <li>

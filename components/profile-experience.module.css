@@ -117,6 +117,16 @@
   text-wrap: pretty;
 }
 
+.publicRefreshNote {
+  align-items: center;
+  color: var(--webde-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 14px;
+  gap: 12px;
+  margin-block: 12px 0;
+}
+
 .editButton,
 .imageAction,
 .editAction,
@@ -1425,6 +1435,28 @@
   margin-block-start: 34px;
 }
 
+.profileSkeletonChain {
+  background: var(--profile-panel);
+  border: 1px solid var(--profile-line);
+  border-radius: var(--webde-radius-control);
+  display: flex;
+  gap: 4px;
+  margin: 24px 0;
+  padding: 4px;
+  width: fit-content;
+}
+
+.profileSkeletonChain span {
+  border-radius: var(--webde-radius-control);
+  display: block;
+  height: 44px;
+  width: 44px;
+}
+
+.profileSkeletonChain span:first-child {
+  background: var(--profile-subtle);
+}
+
 .profileSkeletonSummary,
 .profileSkeletonClaims {
   background: var(--profile-panel);
@@ -2087,8 +2119,13 @@
   padding-top: 17px;
 }
 
+.hero.publicHero { align-items: center; min-height: 0; }
+.publicHero .avatar { margin: 0; }
+.publicHero .heroCopy { padding-top: 0; }
+
 .nameRow {
   gap: 14px;
+  flex-wrap: wrap;
 }
 
 .nameRow h1 {
@@ -2141,7 +2178,7 @@
   display: inline-flex;
   font-size: 14px;
   gap: 8px;
-  min-height: 40px;
+  min-height: 44px;
   transition: color 160ms ease;
 }
 
@@ -2532,6 +2569,20 @@
 
   .heroCopy {
     padding-top: 13px;
+  }
+
+  .heroCopy .address {
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+
+  .usernameRow {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .usernameRow input {
+    grid-column: 1 / -1;
   }
 
   .nameRow {

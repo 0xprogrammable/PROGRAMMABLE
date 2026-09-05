@@ -12,6 +12,7 @@ import {
 } from "../src/api-client.mjs";
 import { sha256Digest, sha256Hex } from "../src/io.mjs";
 import { canonicalizeJson } from "../src/canonical-json.mjs";
+import { ROBINHOOD_PROFILE_V41 } from "../src/profile-v41.mjs";
 import {
   V4_API_KEY,
   V4_LAUNCH_ID,
@@ -39,6 +40,65 @@ const CAPABILITIES_URL = `${API_ORIGIN}/v4/chains/4663/capabilities`;
 const CREATE_URL = `${API_ORIGIN}/v4/chains/4663/custom-launches`;
 const PREFLIGHT_URL = `${CREATE_URL}/preflight`;
 const STATUS_URL = `${CREATE_URL}/${V4_LAUNCH_ID}`;
+
+test("4.1 build-only submit stops before API key, network or journal side effects", async () => {
+  const request = requestWithWalletContract();
+  request.profile = ROBINHOOD_PROFILE_V41;
+  request.funding = { schemaVersion: "programmable.custom-launch-funding-intent.v2", mode: "none", valueWei: "0" };
+  request.fundingPlan = { schemaVersion: "programmable.robinhood-funding-plan.v1", capitalSource: "buyer-funded",
+    pricingModel: "concentrated-liquidity", nativeAllocations: { initialLiquidityWei: "0", initialBuyWei: "0", reserveWei: "0", otherLaunchValueWei: "0" },
+    maxLaunchValueWei: "0", maxGasCostWei: "0", launchMode: "build-only" };
+  const bytes = v4RequestBytes(request);
+  await assert.rejects(submitLaunch({ launchPath: "/not-created/launch.json", configPath: "/not-created/config.json",
+    readLaunchBytesImpl: async () => bytes, validateLaunchFileImpl: v4Validation(request, bytes),
+    fetchImpl: async () => { throw new Error("must not use network"); },
+    loadApiKeyImpl: async () => { throw new Error("must not read API key"); },
+  }), { code: "FUNDING_PLAN_BUILD_ONLY" });
+});
+
+test("current 4.1 capabilities retain readable historical 4.0 resources", async () => {
+  const request = requestWithWalletContract();
+  const resource = validV4Resource(request, v4RequestBytes(request));
+  const result = await statusLaunch({ apiVersion: 4, chainId: "4663", requestId: V4_LAUNCH_ID,
+    maxAttempts: 1, loadApiKeyImpl: async () => V4_API_KEY,
+    fetchImpl: async url => {
+      if (url === CAPABILITIES_URL) return jsonResponse(validV4Capabilities({ profile: ROBINHOOD_PROFILE_V41 }));
+      assert.equal(url, STATUS_URL);
+      return jsonResponse(resource);
+    },
+  });
+  assert.equal(result.resource.profile.profileVersion, "4.0.0");
+});
+
+test("4.1 capabilities allow only an existing byte-identical 4.0 journal replay", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "programmable-v4-history-"));
+  try {
+    const request = requestWithWalletContract();
+    const bytes = v4RequestBytes(request);
+    let successor = true;
+    let creates = 0;
+    let keys = 0;
+    const options = { launchPath: path.join(root, "launch.json"), configPath: path.join(root, "config.json"),
+      stateDirectory: path.join(root, "state"), maxAttempts: 1,
+      readLaunchBytesImpl: async () => bytes, validateLaunchFileImpl: v4Validation(request, bytes),
+      loadApiKeyImpl: async () => { keys++; return V4_API_KEY; },
+      fetchImpl: async (url, init) => {
+        if (url === CAPABILITIES_URL) return jsonResponse(validV4Capabilities(successor ? { profile: ROBINHOOD_PROFILE_V41 } : {}));
+        assert.equal(url, CREATE_URL); assert.deepEqual(Buffer.from(init.body), bytes); creates++;
+        return jsonResponse(validV4Resource(request, bytes), { status: 202 });
+      },
+    };
+    await assert.rejects(submitLaunch(options), error => error.details?.code === "CUSTOM_LAUNCH_PROFILE_MISMATCH");
+    assert.equal(keys, 0); assert.equal(creates, 0);
+    successor = false;
+    const original = await submitLaunch(options);
+    successor = true;
+    const replay = await submitLaunch(options);
+    assert.equal(replay.idempotencyKey, original.idempotencyKey);
+    assert.equal(replay.resource.profile.profileVersion, "4.0.0");
+    assert.equal(creates, 2);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
 
 test("V4 remote validation fetches unauthenticated chain capabilities before the API key", async () => {
   const request = requestWithWalletContract();

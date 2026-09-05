@@ -29,6 +29,7 @@ import { parseLaunchPartnerAttributionV1 } from
   "@/lib/launch-partner-attribution";
 import type { ClassicV3Reward } from "@/lib/profile/classic-v3-rewards";
 
+import { ProfileLaunchesSkeleton } from "@/components/profile-skeleton";
 import styles from "./profile-projects.module.css";
 
 export {
@@ -505,7 +506,7 @@ export function ProfileProjects({
         <div className={styles.empty}>
           <p>Your finalized launches will appear here.</p>
           <Link className={styles.refresh} href="/launch">
-            Create a launch
+            Launch a token
           </Link>
         </div>
       ) : (
@@ -1015,24 +1016,8 @@ function RewardReceiverDialog({
   ), document.body);
 }
 
-function ProfileProjectsSkeleton() {
-  return (
-    <div className={styles.skeletonList} aria-busy="true">
-      <span className={styles.visuallyHidden} role="status">
-        Loading launches
-      </span>
-      {Array.from({ length: creatorProjectPageSize }, (_, item) => (
-        <div className={styles.skeletonProject} aria-hidden="true" key={item}>
-          <span className={styles.skeletonArt} />
-          <span className={styles.skeletonCopy}>
-            <span />
-            <span />
-          </span>
-          <span className={styles.skeletonAction} />
-        </div>
-      ))}
-    </div>
-  );
+export function ProfileProjectsSkeleton() {
+  return <ProfileLaunchesSkeleton />;
 }
 
 function CreatorArticleEditorOpening({

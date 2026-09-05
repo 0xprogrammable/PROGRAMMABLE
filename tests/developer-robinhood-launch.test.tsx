@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { developerApiKeysInitialSection } from
-  "../app/developers/api-keys/page";
+  "../lib/developer-api-key-route";
 import {
   DeveloperRobinhoodLaunch,
   MAX_ROBINHOOD_LAUNCH_BYTES,
@@ -252,13 +252,11 @@ describe("Robinhood Custom launch website flow", () => {
     expect(html).not.toContain("fee-policy-pending");
   });
 
-  it("routes the Custom card into the chain-bound launch section", () => {
+  it("shares key management while retaining explicit Robinhood launch deep links", () => {
     expect(launchEntrySource).toContain(
-      'href="/developers/api-keys?start=custom&chainId=4663"',
+      'href="/developers/api-keys"',
     );
-    expect(launchEntrySource).toContain(
-      'data-status="pending">Preflight required</small>',
-    );
+    expect(launchEntrySource).toContain('data-launch-model-launchable="false"');
     expect(launchEntrySource).not.toContain("Live API");
     expect(apiKeysSource).toContain(
       'url.searchParams.get("start") === "custom"',

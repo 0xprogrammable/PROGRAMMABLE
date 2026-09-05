@@ -1,4 +1,6 @@
-import type { RobinhoodLaunch, RobinhoodLaunchList } from "@/lib/robinhood-launches";
+import type { RobinhoodLaunch, RobinhoodLaunchList, RobinhoodProfileLaunchList } from "@/lib/robinhood-launches";
+import { DEFAULT_EXPLORE_FILTERS, type RobinhoodExploreFilters } from "@/lib/robinhood-explore-filters";
+import { isPinnedRobinhoodToken, isVisibleRobinhoodToken } from "@/lib/robinhood-explore-policy";
 
 export type Checkpoint = { number: string; hash: string };
 export type RobinhoodSnapshot = {
@@ -77,19 +79,63 @@ function asPending(value: unknown) {
   return value as { block: Checkpoint; items: RobinhoodLaunch[] };
 }
 
-export function launchList(snapshot: RobinhoodSnapshot | null, page = 1, query = "", now = Date.now()): RobinhoodLaunchList {
+export function launchList(snapshot: RobinhoodSnapshot | null, page = 1, query = "", now = Date.now(), filters: RobinhoodExploreFilters = DEFAULT_EXPLORE_FILTERS, marketCaps: ReadonlyMap<string, number> = new Map()): RobinhoodLaunchList {
   const q = query.trim().toLowerCase();
-  const items = (snapshot?.items ?? []).filter((row) => !q ||
-    [row.name, row.symbol, row.tokenAddress, row.hookAddress].some((value) => value?.toLowerCase().includes(q)))
-    .toSorted((a, b) => BigInt(a.blockNumber) === BigInt(b.blockNumber)
-      ? b.logIndex - a.logIndex : BigInt(a.blockNumber) > BigInt(b.blockNumber) ? -1 : 1);
-  const totalPages = Math.ceil(items.length / 50);
+  const visible = (snapshot?.items ?? []).filter((row) => isVisibleRobinhoodToken(row.tokenAddress));
+  const pinned = visible.find((row) => isPinnedRobinhoodToken(row.tokenAddress));
+  const cap = (address: string) => {
+    const value = marketCaps.get(address.toLowerCase());
+    return value != null && Number.isFinite(value) && value >= 0 ? value : null;
+  };
+  const items = visible.filter((row) => row !== pinned && (!q
+    || [row.name, row.symbol, row.tokenAddress, row.hookAddress].some((value) => value?.toLowerCase().includes(q))))
+    .toSorted((a, b) => {
+    if (filters.sort === "highest" || filters.sort === "lowest") {
+      const aCap = cap(a.tokenAddress);
+      const bCap = cap(b.tokenAddress);
+      if (aCap === null && bCap !== null) return 1;
+      if (bCap === null && aCap !== null) return -1;
+      if (aCap !== null && bCap !== null && aCap !== bCap) return filters.sort === "highest" ? bCap - aCap : aCap - bCap;
+    }
+    const newest = BigInt(a.blockNumber) === BigInt(b.blockNumber)
+      ? b.logIndex - a.logIndex : BigInt(a.blockNumber) > BigInt(b.blockNumber) ? -1 : 1;
+    return (filters.sort === "oldest" ? -newest : newest) || a.tokenAddress.toLowerCase().localeCompare(b.tokenAddress.toLowerCase());
+  });
+  // Reserve the first slot for the verified main token on every page and sort.
+  const pageSize = pinned ? 49 : 50;
+  const totalItems = items.length + Number(Boolean(pinned));
+  const totalPages = Math.max(pinned ? 1 : 0, Math.ceil(items.length / pageSize));
   const number = Math.min(Math.max(1, page), Math.max(1, totalPages));
   const status = !snapshot ? "unavailable"
     : now - Date.parse(snapshot.updatedAt) > 300_000 ? "stale"
     : snapshot.pending || snapshot.cursor?.number !== snapshot.finalizedBlock ? "syncing" : "ready";
   return {
     chainId: 4663, status, updatedAt: snapshot?.updatedAt ?? null,
+    items: [...(pinned ? [pinned] : []), ...items.slice((number - 1) * pageSize, number * pageSize)],
+    page: { number, size: 50, totalItems, totalPages, hasMore: number < totalPages },
+  };
+}
+
+// A profile shows the recorded launch wallet's history. Explore's display policy
+// and market ranking do not change which canonical launches belong to that wallet.
+export function profileLaunchList(snapshot: RobinhoodSnapshot | null, account: string, page = 1, now = Date.now()): RobinhoodProfileLaunchList {
+  const normalizedAccount = account.toLowerCase();
+  if (!ADDRESS.test(normalizedAccount)) throw new Error("Invalid Robinhood profile account");
+  const items = (snapshot?.items ?? [])
+    .filter((row) => row.creator.toLowerCase() === normalizedAccount)
+    .toSorted((a, b) => {
+      const newest = BigInt(a.blockNumber) === BigInt(b.blockNumber)
+        ? b.logIndex - a.logIndex : BigInt(a.blockNumber) > BigInt(b.blockNumber) ? -1 : 1;
+      return newest || a.tokenAddress.toLowerCase().localeCompare(b.tokenAddress.toLowerCase());
+    });
+  const totalPages = Math.ceil(items.length / 50);
+  const requestedPage = Number.isSafeInteger(page) && page > 0 ? page : 1;
+  const number = Math.min(requestedPage, Math.max(1, totalPages));
+  const status = !snapshot ? "unavailable"
+    : now - Date.parse(snapshot.updatedAt) > 300_000 ? "stale"
+    : snapshot.pending || snapshot.cursor?.number !== snapshot.finalizedBlock ? "syncing" : "ready";
+  return {
+    chainId: 4663, account: normalizedAccount, status, updatedAt: snapshot?.updatedAt ?? null,
     items: items.slice((number - 1) * 50, number * 50),
     page: { number, size: 50, totalItems: items.length, totalPages, hasMore: number < totalPages },
   };

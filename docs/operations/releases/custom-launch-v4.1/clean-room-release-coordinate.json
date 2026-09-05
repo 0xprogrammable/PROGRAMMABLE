@@ -1,0 +1,42 @@
+{
+  "$schema": "./clean-room-release-coordinate.schema.json",
+  "assets": [
+    {
+      "name": "programmable-launch-4.1.0.cdx.json",
+      "sha256": "sha256:8382eb1fc17c45ea744806409528c8509bcb01b676f39848b8f060934450bcf7"
+    },
+    {
+      "name": "programmable-launch-4.1.0.release.json",
+      "sha256": "sha256:8bbfb2864db15e3657a5cff0139b00a9aa950aaff248dcf515a3ed7ca9998460"
+    },
+    {
+      "name": "programmable-launch-4.1.0.tgz",
+      "sha256": "sha256:9d7d26a74b0b4aaa3b3d8acddc80f821cbd79511ee1ada6acc7b935aeb21cac5"
+    },
+    {
+      "name": "programmable-launch-4.1.0.tgz.sha256",
+      "sha256": "sha256:7074478e3f73da0f3db84114717046e60a71e259e867ef5416d33ef651dfc0a8"
+    }
+  ],
+  "blockers": [],
+  "machineContractBinding": {
+    "path": "docs/operations/releases/custom-launch-v4.1/cli-release-binding.json",
+    "schemaVersion": "programmable.launch-cli-v4-release-binding.v2",
+    "sha256": "sha256:d8c36266908b2f1c7f0d9ac517fbf2547541f81ab09f8eb8377e625d8eccc75e"
+  },
+  "manifestSha256": "sha256:8bbfb2864db15e3657a5cff0139b00a9aa950aaff248dcf515a3ed7ca9998460",
+  "releaseBinding": {
+    "path": "docs/operations/releases/custom-launch-v4.1/cli-release-binding.json",
+    "sha256": "sha256:d8c36266908b2f1c7f0d9ac517fbf2547541f81ab09f8eb8377e625d8eccc75e"
+  },
+  "releaseReady": true,
+  "repository": "programmablehq/PROGRAMMABLE",
+  "schemaVersion": "programmable.launch-v4-clean-room-release-coordinate.v2",
+  "source": {
+    "commitSha": "b17e40b9ff20bb16feb857bf77451b0a590e7105",
+    "ref": "refs/heads/production",
+    "treeSha": "373bceebe355e4f26eb8ffb265bff91630224ab6"
+  },
+  "tag": "programmable-launch-v4.1.0",
+  "version": "4.1.0"
+}

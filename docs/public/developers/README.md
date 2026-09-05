@@ -8,10 +8,12 @@ Programmable has two separate developer surfaces. The Developer API at `https://
 
 Robinhood Chain Mainnet (`eip155:4663`) uses V4. Require `publicWrites: true`, `publicAuthorization: true` and
 `releaseReady: true` in both the V4 and chain 4663 entries of live discovery before authenticated preflight or
-submission. Stop if a gate is false or missing. Verify the immutable 4.0.0 CLI release evidence linked by discovery.
-The V4 request contract is published through the
+submission. Stop if a gate is false or missing. Verify the exact immutable CLI release version and evidence linked by discovery; historical `4.0.0` and successor `4.1.0` are separate contracts.
+The historical 4.0 request contract is published through the
 [V4 OpenAPI](https://programmable.market/openapi/custom-launch-v4.json) and
-[pack-config schema](https://programmable.market/schemas/custom-launch/v4/pack-config.json), using only
+[pack-config schema](https://programmable.market/schemas/custom-launch/v4/pack-config.json). When discovery selects
+4.1, use its [OpenAPI](https://programmable.market/openapi/custom-launch-v4.1.json) and
+[pack-config schema](https://programmable.market/schemas/custom-launch/v4.1/pack-config.json). Authenticate using only
 `$PROGRAMMABLE_API_KEY`. The server selects the chain-bound policy profile; clients cannot select or bypass it.
 External contract references gain trust only from protected server evidence binding their exact `eip155:4663`
 address, runtime hash, source-verification evidence, declared role and checkpoint. Arbitrary or unbound references do
@@ -22,7 +24,7 @@ deployment evidence. Sourcify v2 provider-native `match` is required; exact sour
 degraded; it cannot support an exact-source claim or block or revise finality.
 
 CLI `3.3.9` remains the installable release for live Ethereum V3. Use one platform API key for its granted chains;
-Robinhood V4 uses CLI `4.0.0` after the public discovery and immutable-release checks pass. Guard V4 status reads with
+Robinhood V4 uses the exact CLI version advertised by live discovery after its public gates and immutable-release checks pass. When selected, 4.1 requires the [4.1 schemas](https://programmable.market/schemas/custom-launch/v4.1/pack-config.json), a funding plan and an atomic initial buy of at least USD 1; follow the [active agent guide](https://programmable.market/docs/developers.md). Guard V4 status reads with
 `programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until authorized`, stop for the
 controller to review, sign and broadcast the exact transaction, then poll the same command with `--until finalized`.
 The CLI never signs or broadcasts. V4 resources use `received`, `validating`, `action_required`, `authorized`,

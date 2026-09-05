@@ -3,6 +3,11 @@ import Link from "next/link";
 
 import styles from "@/components/developer-docs.module.css";
 import { DocsShell } from "@/components/docs-shell";
+import { V4_API_PROFILE_VERSION } from "@/lib/custom-launch/v4-api-discovery";
+import { robinhoodV4PublicContractDiscovery, robinhoodV4PublicLaunchRequirements } from "@/lib/custom-launch/v4-public-contract-discovery";
+
+const robinhoodContract = robinhoodV4PublicContractDiscovery(V4_API_PROFILE_VERSION);
+const robinhoodVersion = V4_API_PROFILE_VERSION === "4.1.0" ? "4.1.0" : "4.0.0";
 
 export const metadata: Metadata = {
   title: "Custom Launch API · Programmable",
@@ -215,7 +220,7 @@ export default function CustomLaunchApiDocsPage() {
         with nonretryable{" "}
         <code>CUSTOM_LAUNCH_V2_READ_ONLY</code> and{" "}
         <code>CUSTOM_LAUNCH_V1_READ_ONLY</code>. On Ethereum, only V3.3 accepts new submissions.
-        For Robinhood V4, read the live discovery manifest and use version 4.0.0
+        For Robinhood V4, read the live discovery manifest and use version {robinhoodVersion}{" "}
         only after its public release gates and immutable CLI evidence pass.
       </p>
 
@@ -319,21 +324,25 @@ export default function CustomLaunchApiDocsPage() {
 
         <p className={styles.bodyCopy}>
           CLI <code>3.3.9</code> remains the installable release for live Ethereum
-          V3. Robinhood V4 uses <code>4.0.0</code> after public activation.
+          V3. Robinhood V4 uses <code>{robinhoodVersion}</code> after public activation.
           Verify its release manifest, exact source commit and tarball checksum.
           The{" "}
-          <a href="/openapi/custom-launch-v4.json">V4 OpenAPI</a>,{" "}
-          <a href="/schemas/custom-launch/v4/pack-config.json">
+          <a href={robinhoodContract.openApiUrl ?? "/openapi/custom-launch-v4.json"}>V4 OpenAPI</a>,{" "}
+          <a href={robinhoodContract.packConfigSchemaUrl ?? "/schemas/custom-launch/v4/pack-config.json"}>
             pack-config schema
           </a>{" "}
           and{" "}
-          <a href="/schemas/custom-launch/v4/source-verification-status.json">
+          <a href={robinhoodContract.sourceVerificationSchemaUrl ?? "/schemas/custom-launch/v4/source-verification-status.json"}>
             source-verification schema
           </a>{" "}
           describe the V4 request contract. Re-read live discovery and current
           capabilities before use. Your platform API key authorizes requests;
           your wallet separately signs the onchain transaction and pays gas.
         </p>
+
+        {robinhoodV4PublicLaunchRequirements(V4_API_PROFILE_VERSION).map((requirement) => (
+          <p className={styles.bodyCopy} key={requirement}>{requirement}</p>
+        ))}
 
         <dl className={`${styles.resultList} ${styles.lifecycleList}`}>
           {robinhoodV4Lifecycle.map(([status, meaning]) => (

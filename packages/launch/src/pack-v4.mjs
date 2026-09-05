@@ -48,6 +48,9 @@ import {
   v4GraphChainContext,
 } from "./v4-contract.mjs";
 import { buildVerificationBundle } from "./verification.mjs";
+import { isRobinhoodProfileV41, OPENAPI_URL_V41 } from "./profile-v41.mjs";
+import { assertRobinhoodNativeFeeKernelBuildV1 } from "./robinhood-native-fee-v1.mjs";
+import { normalizeRobinhoodFundingPlanV1 } from "./funding-plan-v1.mjs";
 
 const NONZERO_HEX32 = /^0x(?!0{64}$)[0-9a-f]{64}$/u;
 const DECIMAL = /^(?:0|[1-9][0-9]*)$/u;
@@ -64,6 +67,8 @@ export async function buildV4Launch({ config, configPath }) {
   const profile = normalizeV4ProfileRef(config.profile);
   const externalContracts = normalizeV4ExternalContracts(config.externalContracts);
   const funding = normalizeV4FundingIntent(config.funding);
+  const fundingPlan = isRobinhoodProfileV41(profile)
+    ? normalizeRobinhoodFundingPlanV1(config.fundingPlan, funding) : null;
   const liquidityModel = normalizeV4LiquidityModel(config.liquidityModel);
   const permitWindow = validateDirectNativePermitWindow(config.permitWindow);
   const nonce = canonicalNonce(config.nonce);
@@ -76,6 +81,10 @@ export async function buildV4Launch({ config, configPath }) {
     targets.push(await loadTargetArtifact(target, index, sourceRoot, unitsById, {
       apiVersion: "v2",
     }));
+  }
+  if (isRobinhoodProfileV41(profile)) {
+    const target = targets.find(({ targetId }) => targetId === config.pool.hookTargetId);
+    assertRobinhoodNativeFeeKernelBuildV1({ target, unit: unitsById.get(target?.compilationUnitId) });
   }
   const tokenTarget = targets.find(({ componentKind }) => componentKind === "token");
   const projectMetadata = await buildProjectMetadata(config.projectMetadata, {
@@ -173,6 +182,7 @@ export async function buildV4Launch({ config, configPath }) {
     ...(behaviorScenarioInputsHash === null ? {} : { behaviorScenarioInputsHash }),
     verificationBundleHash,
     funding,
+    ...(fundingPlan === null ? {} : { fundingPlan }),
     liquidityModel,
   });
   const agentAttestation = {
@@ -207,6 +217,7 @@ export async function buildV4Launch({ config, configPath }) {
       : { behaviorScenarioInputs, behaviorScenarioInputsHash }),
     verificationBundle,
     funding,
+    ...(fundingPlan === null ? {} : { fundingPlan }),
     liquidityModel,
     launchIntentHash,
     agentAttestation,
@@ -219,7 +230,7 @@ export async function buildV4Launch({ config, configPath }) {
   const receipt = {
     schemaVersion: "programmable.launch-pack-receipt.v4",
     package: { name: "@programmable/launch", version: PACKAGE_VERSION },
-    openapi: OPENAPI_URL_V4,
+    openapi: isRobinhoodProfileV41(profile) ? OPENAPI_URL_V41 : OPENAPI_URL_V4,
     apiVersion: "v4",
     chainId: ROBINHOOD_CHAIN_ID,
     caip2: ROBINHOOD_CAIP2,
@@ -240,6 +251,7 @@ export async function buildV4Launch({ config, configPath }) {
     verificationBundleHash,
     launchIntentHash,
     funding,
+    ...(fundingPlan === null ? {} : { fundingPlan }),
     liquidityModel,
     predictions,
   };
@@ -264,6 +276,7 @@ export async function buildV4Launch({ config, configPath }) {
 }
 
 export function validateV4PackConfig(config) {
+  const profile = normalizeV4ProfileRef(config?.profile);
   const commonKeys = [
     "schemaVersion",
     "chainId",
@@ -285,6 +298,7 @@ export function validateV4PackConfig(config) {
   ];
   assertExactKeys(config, [
     ...commonKeys,
+    ...(isRobinhoodProfileV41(profile) ? ["fundingPlan"] : []),
     ...(Object.hasOwn(config, "behaviorScenarioInputs") ? ["behaviorScenarioInputs"] : []),
   ], "V4 pack config");
   if (config.schemaVersion !== PACK_CONFIG_SCHEMA_V4
@@ -295,7 +309,8 @@ export function validateV4PackConfig(config) {
   normalizeV4ChainDeployment(config.chainDeployment);
   normalizeV4ProfileRef(config.profile);
   normalizeV4ExternalContracts(config.externalContracts);
-  normalizeV4FundingIntent(config.funding);
+  const funding = normalizeV4FundingIntent(config.funding);
+  if (isRobinhoodProfileV41(profile)) normalizeRobinhoodFundingPlanV1(config.fundingPlan, funding);
   normalizeV4LiquidityModel(config.liquidityModel);
   validateDirectNativePermitWindow(config.permitWindow);
   getAddress(config.launchWallet);

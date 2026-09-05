@@ -30,3 +30,7 @@ export type RobinhoodLaunchList = Readonly<{
     hasMore: boolean;
   }>;
 }>;
+
+export type RobinhoodProfileLaunchList = RobinhoodLaunchList & Readonly<{
+  account: string;
+}>;

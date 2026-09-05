@@ -8,6 +8,8 @@ import {
   DATABASE_RUNTIME_TEST_PATHS,
   READ_MODEL_CONTRACT_DOC_PATHS,
   ROBINHOOD_PHASE_B_BACKEND_EVIDENCE_PATHS,
+  ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATHS,
+  ROBINHOOD_V41_CLI_COORDINATE_PATH,
 } from "./classify-verify-paths.mjs";
 
 const none = {
@@ -20,6 +22,8 @@ const none = {
   read_model: false,
   robinhood_phase_b_evidence: false,
   robinhood_phase_b_evidence_exact: false,
+  robinhood_v41_phase_b_evidence: false,
+  robinhood_v41_phase_b_evidence_exact: false,
 };
 
 test("routes only the exact Robinhood Phase B backend pair through its short-lived evidence gate", () => {
@@ -51,6 +55,98 @@ test("routes only the exact Robinhood Phase B backend pair through its short-liv
     interface: true,
     read_model: true,
   });
+});
+
+test("routes only the exact Robinhood V4.1 pair through its own fresh evidence gate", () => {
+  assert.deepEqual(classifyVerifyPaths(ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATHS), {
+    ...none,
+    robinhood_v41_phase_b_evidence: true,
+    robinhood_v41_phase_b_evidence_exact: true,
+  });
+  for (const path of ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATHS) {
+    assert.deepEqual(classifyVerifyPaths([path]), {
+      ...none,
+      robinhood_v41_phase_b_evidence: true,
+    });
+  }
+  assert.deepEqual(classifyVerifyPaths([
+    ...ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATHS,
+    "README.md",
+  ]), { ...none, robinhood_v41_phase_b_evidence: true });
+  assert.deepEqual(classifyVerifyPaths([
+    ...ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATHS,
+    "components/token-card.tsx",
+  ]), { ...none, interface: true, robinhood_v41_phase_b_evidence: true });
+});
+
+test("rejects complete and partial cross-version evidence imports in both lanes", () => {
+  const mixed = { ...none,
+    robinhood_phase_b_evidence: true,
+    robinhood_v41_phase_b_evidence: true,
+  };
+  assert.deepEqual(classifyVerifyPaths([
+    ...ROBINHOOD_PHASE_B_BACKEND_EVIDENCE_PATHS,
+    ...ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATHS,
+  ]), mixed);
+  for (const oldPath of ROBINHOOD_PHASE_B_BACKEND_EVIDENCE_PATHS) {
+    for (const successorPath of ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATHS) {
+      assert.deepEqual(classifyVerifyPaths([oldPath, successorPath]), mixed);
+    }
+  }
+  assert.deepEqual(classifyVerifyPaths([
+    ...ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATHS,
+    ".github/workflows/verify.yml",
+  ]), {
+    ...classifyVerifyPaths([], { forceAll: true }),
+    robinhood_v41_phase_b_evidence: true,
+  });
+});
+
+test("does not narrow unknown successor release files to the evidence lane", () => {
+  for (const path of [
+    "release/robinhood-chain-4663/v4.1/backend-promotion-input.json",
+    "release/robinhood-chain-4663/v4.1/backend-promotion-input.public.json.mjs",
+    "release/robinhood-chain-4663/v4.2/backend-promotion-input.public.json",
+  ]) {
+    assert.deepEqual(classifyVerifyPaths([path]), classifyVerifyPaths([], { forceAll: true }));
+  }
+});
+
+test("routes only the exact immutable V4.1 CLI coordinate through its Interface audit", () => {
+  assert.deepEqual(classifyVerifyPaths([ROBINHOOD_V41_CLI_COORDINATE_PATH]), {
+    ...none,
+    interface: true,
+  });
+  assert.deepEqual(classifyVerifyPaths([
+    ROBINHOOD_V41_CLI_COORDINATE_PATH,
+    "lib/custom-launch/v4-api-discovery.ts",
+    "tests/public-robinhood-v41-agent-docs.test.ts",
+  ]), { ...none, interface: true });
+  assert.deepEqual(classifyVerifyPaths([
+    ROBINHOOD_V41_CLI_COORDINATE_PATH,
+    "contracts/src/ChangedHook.sol",
+  ]), { ...none, interface: true, contracts: true });
+});
+
+test("keeps coordinate schemas, verifiers, unknown successors and mixed evidence on their full gates", () => {
+  for (const path of [
+    `${ROBINHOOD_V41_CLI_COORDINATE_PATH}.mjs`,
+    ROBINHOOD_V41_CLI_COORDINATE_PATH.replace(".json", ".schema.json"),
+    ROBINHOOD_V41_CLI_COORDINATE_PATH.replace("v4.1", "v4.2"),
+    "scripts/programmable-v41-api-activation.mjs",
+    "scripts/lib/programmable-launch-clean-room-runner.mjs",
+    "packages/launch/src/profile-v41.mjs",
+    ".github/workflows/verify.yml",
+  ]) {
+    assert.deepEqual(
+      classifyVerifyPaths([ROBINHOOD_V41_CLI_COORDINATE_PATH, path]),
+      classifyVerifyPaths([], { forceAll: true }),
+    );
+  }
+  assert.deepEqual(classifyVerifyPaths([
+    ROBINHOOD_V41_CLI_COORDINATE_PATH,
+    ...ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATHS,
+  ]), { ...none, interface: true, robinhood_v41_phase_b_evidence: true });
 });
 
 test("routes the versioned Custom V2 surface without legacy market lanes", () => {
@@ -290,7 +386,7 @@ test("keeps protected jobs fail closed and production pushes path scoped", () =>
   assert.doesNotMatch(workflow, /run: npm run verify\n/u);
   assert.match(
     workflow,
-    /name: Verify affected interface\n        if: needs\.scope\.outputs\.interface == 'true'/u,
+    /name: Require complete interface verification\n        env:\n          SCOPE_RESULT: \$\{\{ needs\.scope\.result \}\}/u,
   );
   assert.equal(workflow.match(/^    if: always\(\)$/gmu)?.length, 6);
   assert.equal(
@@ -330,4 +426,51 @@ test("keeps protected jobs fail closed and production pushes path scoped", () =>
   }
   assert.match(workflow, /SCOPE_RESULT: \$\{\{ needs\.scope\.result \}\}/u);
   assert.match(workflow, /test "\$result" = success/u);
+});
+
+test("wires successor activation and exact evidence validation into protected Verify", () => {
+  const workflow = readFileSync(".github/workflows/verify.yml", "utf8");
+  const step = (name) => {
+    const matches = workflow.split(`      - name: ${name}\n`);
+    assert.equal(matches.length, 2, `${name} must occur exactly once`);
+    return matches[1].split(/\n      - name: |\n  [a-z][a-z-]*:/u)[0];
+  };
+  const contracts = workflow.split("\n  contracts:\n")[1].split("\n  custom-v2:\n")[0];
+  for (const key of ["robinhood_v41_phase_b_evidence", "robinhood_v41_phase_b_evidence_exact"]) {
+    assert.ok(workflow.includes(`${key}: \${{ steps.scope.outputs.${key} }}`));
+    assert.ok(workflow.includes(`echo '${key}=false' >> "$RUNNER_TEMP/verify-scope.txt"`));
+  }
+  assert.match(workflow, /git show "\$BASE_SHA:scripts\/ci\/classify-verify-paths\.mjs"/u);
+  for (const version of ["v4", "v41"]) {
+    const activation = step(`Verify ${version === "v4" ? "V4" : "V4.1"} public API activation evidence`);
+    assert.match(activation, /if: needs\.scope\.outputs\.interface == 'true'/u);
+    assert.match(activation, /GH_TOKEN: \$\{\{ github\.token \}\}/u);
+    assert.ok(activation.includes(`node --test scripts/test/programmable-${version}-api-activation.test.mjs`));
+    assert.ok(activation.includes(`node scripts/programmable-${version}-api-activation.mjs audit --repository-root "$GITHUB_WORKSPACE"`));
+    assert.doesNotMatch(activation, /continue-on-error|\|\| true/u);
+  }
+  const reject = step("Reject partial or mixed Robinhood V4.1 Phase B backend evidence imports");
+  assert.match(reject, /robinhood_v41_phase_b_evidence == 'true' &&\n\s+needs\.scope\.outputs\.robinhood_v41_phase_b_evidence_exact != 'true'\n\s+run: exit 1/u);
+  for (const name of [
+    "Install locked dependencies for exact Robinhood Phase B backend evidence",
+    "Install exact Cosign verifier for Robinhood Phase B backend evidence",
+  ]) {
+    assert.match(step(name), /robinhood_phase_b_evidence_exact == 'true' \|\|\n\s+needs\.scope\.outputs\.robinhood_v41_phase_b_evidence_exact == 'true'/u);
+  }
+  assert.equal(contracts.match(/robinhood_v41_phase_b_evidence == 'true'/gu)?.length, 3);
+  assert.match(step("Skip unaffected contracts"), /robinhood_v41_phase_b_evidence != 'true'/u);
+  const verify = step("Verify exact fresh Robinhood V4.1 Phase B backend evidence");
+  assert.match(verify, /if: needs\.scope\.outputs\.robinhood_v41_phase_b_evidence_exact == 'true'/u);
+  assert.match(verify, /git ls-files --stage -- "\$evidence_path"/u);
+  assert.match(verify, /100644/u);
+  assert.match(verify, /test -f "\$evidence_path"/u);
+  assert.match(verify, /test ! -L "\$evidence_path"/u);
+  assert.match(verify, /stat -c '%a' "\$evidence_path"/u);
+  for (const path of ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATHS) assert.ok(verify.includes(path));
+  assert.match(verify, /node contracts\/scripts\/finalize-robinhood-custom-launch-v41-deployment\.mjs \\\n\s+verify-backend-import/u);
+  assert.ok(verify.includes("--stage release/robinhood-chain-4663/programmable-stage-bundle.json"));
+  assert.ok(verify.includes("--backend-input release/robinhood-chain-4663/v4.1/backend-promotion-input.public.json"));
+  assert.match(verify, /--backend-attestation-bundle \\\n\s+release\/robinhood-chain-4663\/v4\.1\/backend-promotion-input\.attestation\.json/u);
+  assert.ok(verify.includes('--repository-root "$GITHUB_WORKSPACE"'));
+  assert.doesNotMatch(verify, /continue-on-error|\|\| true|--allow/u);
 });

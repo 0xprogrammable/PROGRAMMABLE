@@ -18,6 +18,11 @@ import {
 } from "react";
 
 import { useWallet } from "@/components/wallet-provider";
+import type { ViewChainId } from "@/lib/view-chain";
+import { ProfileChainSelector } from "@/components/profile-chain-selector";
+import { ProfileLoadingSkeleton } from "@/components/profile-skeleton";
+export { ProfileLoadingSkeleton } from "@/components/profile-skeleton";
+import { RobinhoodProfileLaunches } from "@/components/robinhood-profile-launches";
 import {
   ProfileProjects,
   ProfileProjectsLoadingState,
@@ -80,6 +85,7 @@ import { PROGRAMMABLE_MAIN_TOKEN_ADDRESS } from
   "@/lib/creator-article/programmable-example-v1";
 import {
   getProfileStorageKey,
+  profileDraftBelongsToAccount,
   getProfileUsernameError,
   normalizeProfileUsername,
   parseLocalProfile,
@@ -351,6 +357,8 @@ export function stockPairedCheckpointAfterReceipt(
 
 export type ProfileViewProps = {
   onchainData?: ProfileOnchainData;
+  viewChainId?: ViewChainId;
+  onChangeChain?: (chain: ViewChainId) => void;
 };
 
 type ProfileWorkspaceSourceStatus =
@@ -1396,7 +1404,8 @@ export function formatBannerPositionStatus(position: {
   )}, ${formatBannerPositionValue("vertical", position.y)}.`;
 }
 
-export function ProfileView({ onchainData }: ProfileViewProps = {}) {
+export function ProfileView({ onchainData, viewChainId = 4663, onChangeChain }: ProfileViewProps = {}) {
+  const ethereumView = viewChainId === 1;
   const {
     wallet,
     openWallet,
@@ -1407,6 +1416,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
+  const profileImageRequestRef = useRef(0);
   const bannerDragRef = useRef<{
     pointerId: number;
     startClientX: number;
@@ -1469,7 +1479,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     message: "",
   });
   const liveProfileRefresh = useLiveDataRefresh({
-    enabled: Boolean(account),
+    enabled: Boolean(account) && ethereumView,
     intervalMs: PROFILE_LIVE_REFRESH_INTERVAL_MS,
   });
   const [terminalErrorReadyKey, setTerminalErrorReadyKey] = useState("");
@@ -1628,6 +1638,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     };
   }, [abortTransactionPolls, account]);
 
+  // A view change must not interrupt receipt tracking for an already submitted transaction.
   useEffect(
     () => () => {
       abortTransactionPolls();
@@ -1663,7 +1674,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
 
   useEffect(() => {
     if (onchainData) return;
-    if (!account) return;
+    if (!account || !ethereumView) return;
 
     const controller = new AbortController();
     const confirmedTransactions = new Map(
@@ -1732,10 +1743,11 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     liveProfileRefresh,
     onchainData,
     profileRefresh,
+    ethereumView,
   ]);
 
   useEffect(() => {
-    if (!account || !classicV3ReleaseAvailable) return;
+    if (!account || !ethereumView || !classicV3ReleaseAvailable) return;
     const controller = new AbortController();
     let cancelled = false;
     const cachedProfile = readCachedClassicV3Profile(account);
@@ -1840,10 +1852,11 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     completeProfileRefreshSource,
     liveProfileRefresh,
     profileRefresh,
+    ethereumView,
   ]);
 
   useEffect(() => {
-    if (!account || !deepReleaseAvailable) return;
+    if (!account || !ethereumView || !deepReleaseAvailable) return;
     const controller = new AbortController();
     const confirmedTransactions = new Map(
       confirmedProfileTransactionsRef.current.deep,
@@ -1902,10 +1915,11 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     completeProfileRefreshSource,
     liveProfileRefresh,
     profileRefresh,
+    ethereumView,
   ]);
 
   useEffect(() => {
-    if (!account || !deepV3ReleaseAvailable) return;
+    if (!account || !ethereumView || !deepV3ReleaseAvailable) return;
     const controller = new AbortController();
     void fetchDeepV3CreatorProfile(account, controller.signal)
       .then((data) => {
@@ -1937,10 +1951,11 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     completeProfileRefreshSource,
     liveProfileRefresh,
     profileRefresh,
+    ethereumView,
   ]);
 
   useEffect(() => {
-    if (!account || !stockPairedReleaseAvailable) return;
+    if (!account || !ethereumView || !stockPairedReleaseAvailable) return;
     const controller = new AbortController();
     const confirmedTransactions = new Map(
       confirmedProfileTransactionsRef.current["stock-paired"],
@@ -2000,6 +2015,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     completeProfileRefreshSource,
     liveProfileRefresh,
     profileRefresh,
+    ethereumView,
   ]);
 
   function populateProfileDrafts(profile: typeof savedProfile) {
@@ -2023,6 +2039,8 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
 
   function beginEditingProfile() {
     populateProfileDrafts(latestProfileForEditor());
+    profileImageRequestRef.current += 1;
+    setPreparingImage(false);
     setUsernameError("");
     setAvatarError("");
     setBannerError("");
@@ -2032,6 +2050,8 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
 
   function cancelEditingProfile() {
     populateProfileDrafts(latestProfileForEditor());
+    profileImageRequestRef.current += 1;
+    setPreparingImage(false);
     setUsernameError("");
     setAvatarError("");
     setBannerError("");
@@ -2041,7 +2061,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
 
   function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!account || preparingImage) return;
+    if (!account || preparingImage || !profileDraftBelongsToAccount(editingAccount, account)) return;
 
     const nextUsername = normalizeProfileUsername(usernameDraft);
     const nextUsernameError = getProfileUsernameError(nextUsername);
@@ -2090,40 +2110,51 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
+    const editingWallet = editingAccount;
+    const requestId = ++profileImageRequestRef.current;
+    const currentRequest = () => requestId === profileImageRequestRef.current
+      && profileDraftBelongsToAccount(editingWallet, activeAccountRef.current ?? "");
 
     setPreparingImage(true);
     setAvatarError("");
     setSaveError("");
 
     try {
-      setAvatarDraft(await prepareAvatarImage(file));
+      const image = await prepareAvatarImage(file);
+      if (currentRequest()) setAvatarDraft(image);
     } catch (caught) {
-      setAvatarError(
+      if (currentRequest()) setAvatarError(
         caught instanceof Error
           ? caught.message
           : "The image could not be prepared",
       );
     } finally {
-      setPreparingImage(false);
+      if (requestId === profileImageRequestRef.current) setPreparingImage(false);
     }
   }
 
   async function prepareBanner(file: File | undefined) {
     if (!file) return;
+    const editingWallet = editingAccount;
+    const requestId = ++profileImageRequestRef.current;
+    const currentRequest = () => requestId === profileImageRequestRef.current
+      && profileDraftBelongsToAccount(editingWallet, activeAccountRef.current ?? "");
     setPreparingImage(true);
     setBannerError("");
     setSaveError("");
     try {
-      setBannerDraft(await prepareProfileBannerImage(file));
+      const image = await prepareProfileBannerImage(file);
+      if (!currentRequest()) return;
+      setBannerDraft(image);
       setBannerPositionDraft({ x: 50, y: 50 });
     } catch (caught) {
-      setBannerError(
+      if (currentRequest()) setBannerError(
         caught instanceof Error
           ? caught.message
           : "The banner could not be prepared",
       );
     } finally {
-      setPreparingImage(false);
+      if (requestId === profileImageRequestRef.current) setPreparingImage(false);
     }
   }
 
@@ -2398,7 +2429,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
   );
 
   useEffect(() => {
-    if (!account) return;
+    if (!account || !ethereumView) return;
     let pending: PendingProfileTransactionRecord[] = [];
     try {
       pending = readPendingProfileTransactions(window.localStorage, account);
@@ -2466,6 +2497,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     account,
     liveProfileRefresh,
     profileRefresh,
+    ethereumView,
     settleSubmittedTransaction,
   ]);
 
@@ -3406,9 +3438,7 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     return (
       <ProfileSessionLoadingState
         showDashboard={
-          clientHydrated &&
-          requestedProfileAccount === null &&
-          (hasSession || Boolean(account))
+          Boolean(requestedProfileAccount) || hasSession || Boolean(account)
         }
       />
     );
@@ -3418,7 +3448,10 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
     return (
       <PublicCreatorProfile
         account={publicProfileAccount}
+        connectedAccount={account}
         onConnect={openWallet}
+        viewChainId={viewChainId}
+        onChangeChain={onChangeChain}
       />
     );
   }
@@ -3548,6 +3581,9 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
               </button>
             ) : null}
           </div>
+          <p className={styles.address} aria-label={`Profile wallet ${account}`}>
+            {account}
+          </p>
           {!editingProfile && savedProfile.bio ? (
             <p className={styles.profileBio}>{savedProfile.bio}</p>
           ) : null}
@@ -3785,7 +3821,9 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         </div>
       </section>
 
-      <ProfileProjects
+      <ProfileChainSelector value={viewChainId} onChange={onChangeChain} />
+
+      {ethereumView ? <><ProfileProjects
         key={account?.toLowerCase() ?? "disconnected"}
         classicRewards={
           scopedClassicV3Rewards.status === "ready"
@@ -3829,6 +3867,10 @@ export function ProfileView({ onchainData }: ProfileViewProps = {}) {
         refreshStatusMessage={profileRefreshStatusMessage}
         terminalErrorReady={terminalErrorReady}
       />
+      </> : <>
+        <RobinhoodProfileLaunches key={account.toLowerCase()} account={account} />
+        <RobinhoodProfileRewards />
+      </>}
     </div>
   );
 }
@@ -4555,70 +4597,12 @@ function ProfileLoadingState() {
   return <ProfileLoadingSkeleton label="Loading profile" />;
 }
 
-export function ProfileLoadingSkeleton({
-  label,
-  showHero = false,
-}: {
-  label: string;
-  showHero?: boolean;
-}) {
-  return (
-    <section
-      className={`${styles.profileSkeleton} ${
-        showHero ? styles.profileSkeletonPage : styles.profileSkeletonInline
-      }`}
-      aria-busy="true"
-      aria-label={label}
-    >
-      <span className={styles.visuallyHidden} role="status">
-        {label}
-      </span>
-      {showHero ? (
-        <div className={styles.profileSkeletonHero} aria-hidden="true">
-          <span className={styles.profileSkeletonBanner} />
-          <span className={styles.profileSkeletonAvatar} />
-          <span className={styles.profileSkeletonCopy}>
-            <span />
-            <span />
-          </span>
-        </div>
-      ) : null}
-      {showHero ? <ProfileProjectsLoadingState /> : null}
-      <div
-        className={`${styles.profileSkeletonWorkspace} ${
-          showHero ? styles.profileSkeletonWorkspacePage : ""
-        }`}
-        aria-hidden="true"
-      >
-        <div className={styles.profileSkeletonSummary}>
-          <span className={styles.profileSkeletonHeading} />
-          <span className={styles.profileSkeletonMetric} />
-          <span className={styles.profileSkeletonLine} />
-          <span className={styles.profileSkeletonBar} />
-        </div>
-        <div className={styles.profileSkeletonClaims}>
-          <span className={styles.profileSkeletonSectionHeader}>
-            <span className={styles.profileSkeletonHeading} />
-          </span>
-          <span className={styles.profileSkeletonRows}>
-            {Array.from({ length: profileClaimPageSize }, (_, item) => (
-              <span className={styles.profileSkeletonRow} key={item}>
-                <span />
-                <span />
-                <span />
-              </span>
-            ))}
-          </span>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 export function ProfileRouterLaunches({
   entries,
+  refreshing = false,
 }: {
   entries: readonly ProfilePortfolioEntry[];
+  refreshing?: boolean;
 }) {
   if (!entries.length) return null;
 
@@ -4626,9 +4610,11 @@ export function ProfileRouterLaunches({
     <section
       className={styles.launchesPanel}
       aria-labelledby="profile-launches-title"
+      aria-busy={refreshing || undefined}
     >
       <header className={styles.launchesHeader}>
         <h2 id="profile-launches-title">Launches</h2>
+        <span className={styles.visuallyHidden} role="status">{refreshing ? "Refreshing launches" : ""}</span>
       </header>
 
       <div className={styles.launchList}>
@@ -4674,85 +4660,104 @@ export function ProfileRouterLaunches({
   );
 }
 
-function PublicCreatorProfile({
+export function beginPublicProfileRefresh(data: ProfileOnchainData, account: string): ProfileOnchainData {
+  return data.status === "ready" && data.chainId === 1 && isProfileDataForAccount(data, account)
+    ? data
+    : loadingProfileData(account);
+}
+
+export function PublicCreatorProfile({
   account,
+  connectedAccount,
   onConnect,
+  viewChainId,
+  onChangeChain,
 }: {
   account: string;
+  connectedAccount?: string;
   onConnect: () => void;
+  viewChainId: ViewChainId;
+  onChangeChain?: (chain: ViewChainId) => void;
 }) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [data, setData] = useState<ProfileOnchainData>(() =>
     loadingProfileData(account)
   );
+  const [refreshingAccount, setRefreshingAccount] = useState<string | null>(null);
 
   useEffect(() => {
+    if (viewChainId !== 1) return;
+    let disposed = false;
+    let timedOut = false;
     const controller = new AbortController();
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 10_000);
     queueMicrotask(() => {
-      if (!controller.signal.aborted) setData(loadingProfileData(account));
+      if (disposed) return;
+      setRefreshingAccount(account.toLowerCase());
+      setData((current) => beginPublicProfileRefresh(current, account));
     });
     void fetchCreatorProfile(account, controller.signal).then(
       (profile) => {
         if (!controller.signal.aborted) setData(profile);
       },
       (caught) => {
-        if (controller.signal.aborted) return;
-        const errorKind = caught instanceof ProfileResponseError
-          ? caught.kind
-          : "temporary";
-        setData(errorProfileData(
-          account,
-          caught instanceof Error
-            ? caught.message
-            : "Public profile data is temporarily unavailable",
-          errorKind,
+        if (disposed) return;
+        setData((current) => resolveCreatorProfileReadFailure(
+          beginPublicProfileRefresh(current, account), account,
+          timedOut ? new ProfileResponseError("Launches took too long to load", "temporary") : caught,
         ));
       },
-    );
-    return () => controller.abort();
-  }, [account, refreshKey]);
+    ).finally(() => {
+      window.clearTimeout(timeout);
+      if (!disposed) setRefreshingAccount(null);
+    });
+    return () => {
+      disposed = true;
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [account, refreshKey, viewChainId]);
 
-  const entries = data.status === "ready"
+  const scopedData = data.status === "ready" ? beginPublicProfileRefresh(data, account)
+    : isProfileDataForAccount(data, account) ? data : loadingProfileData(account);
+  const refreshing = refreshingAccount === account.toLowerCase();
+  const entries = scopedData.status === "ready"
     ? profileRouterLaunchEntries(
-        buildProfilePortfolio(data.tokens, [], []),
+        buildProfilePortfolio(scopedData.tokens, [], []),
       )
     : [];
 
   return (
     <div className={`${styles.page} page-width`}>
-      <section className={styles.hero} aria-labelledby="public-profile-title">
+      <section className={`${styles.hero} ${styles.publicHero}`} aria-labelledby="public-profile-title">
         <div className={styles.avatar} aria-hidden="true">
           <span>{account.slice(2, 4).toUpperCase()}</span>
         </div>
         <div className={styles.heroCopy}>
           <div className={`${styles.nameRow} ${styles.publicProfileNameRow}`}>
             <h1 id="public-profile-title">Creator profile</h1>
-            <button
+            {connectedAccount ? <Link className={styles.editButton} href="/profile">My profile</Link> : <button
               className={styles.editButton}
               type="button"
               onClick={onConnect}
             >
               Connect wallet
-            </button>
+            </button>}
           </div>
-          <p className={styles.address}>{account}</p>
+          <p className={styles.address} aria-label={`Profile wallet ${account}`}>{account}</p>
           <p className={styles.publicProfileNote}>
-            Finalized launches are public. If this is your wallet, connect it
-            to manage the profile and rewards.
+            {connectedAccount ? "You’re viewing another wallet’s launches." : "Connect this wallet to manage its profile."}
           </p>
         </div>
       </section>
 
-      {data.status === "loading" ? (
-        <section
-          className={`${styles.launchesPanel} ${styles.publicProfileState}`}
-          aria-busy="true"
-          aria-live="polite"
-        >
-          <h2>Loading launches</h2>
-          <p>Reading finalized Router launches.</p>
-        </section>
-      ) : data.status === "error" ? (
+      <ProfileChainSelector value={viewChainId} onChange={onChangeChain} />
+      {viewChainId === 4663 ? <RobinhoodProfileLaunches key={account.toLowerCase()} account={account} /> : scopedData.status === "loading" ? (
+        <ProfileProjectsLoadingState />
+      ) : scopedData.status === "error" ? (
         <section
           className={`${styles.launchesPanel} ${styles.publicProfileState}`}
           aria-live="polite"
@@ -4768,7 +4773,13 @@ function PublicCreatorProfile({
           </button>
         </section>
       ) : entries.length ? (
-        <ProfileRouterLaunches entries={entries} />
+        <>
+          <ProfileRouterLaunches entries={entries} refreshing={refreshing} />
+          {scopedData.sourceQuality === "stale" && !refreshing ? <p className={styles.publicRefreshNote} role="status">
+            Couldn’t refresh launches.
+            <button className={styles.retryButton} type="button" onClick={() => setRefreshKey((current) => current + 1)}>Try again</button>
+          </p> : null}
+        </>
       ) : (
         <section
           className={`${styles.launchesPanel} ${styles.publicProfileState}`}
@@ -4779,6 +4790,23 @@ function PublicCreatorProfile({
       )}
     </div>
   );
+}
+
+export function RobinhoodProfileRewards() {
+  return <section className={styles.portfolio} aria-label="Profile overview">
+    <div className={`${styles.profileWorkspace} liquid-glass-surface`}>
+      <FeeEarningsPanel nativeEarned={null} nativeClaimable={null} nativeClaimed={null} />
+      <section className={styles.claimablePanel} aria-labelledby="profile-claimable-title">
+        <header className={styles.panelHeader}>
+          <h2 id="profile-claimable-title">Claim rewards</h2>
+        </header>
+        <div className={styles.claimEmpty}>
+          <strong>Rewards depend on the hook</strong>
+          <p>Custom hooks manage their own fees and claims.</p>
+        </div>
+      </section>
+    </div>
+  </section>;
 }
 
 export function ProfileAccountWorkspace({
@@ -5154,7 +5182,7 @@ function FeeEarningsPanel({
 
       <div className={styles.feeSummary}>
         <span className={styles.feeSummaryLabel}>Total earned</span>
-        {nativeEarned === null ? null : <strong>{formatWei(nativeEarned)}</strong>}
+        <strong>{nativeEarned === null ? <span aria-label="Not available">—</span> : formatWei(nativeEarned)}</strong>
         <div className={styles.feeBreakdown}>
           <span>
             Available <b>{nativeClaimable === null ? "—" : formatWei(nativeClaimable)}</b>

@@ -17,12 +17,12 @@ describe("launch model artwork", () => {
     const source = read("components/launch-entry.tsx");
 
     expect(source).toContain(
-      'src="/brand/atmosphere/programmable-floral-hooks-v1.avif"',
+      'src="/brand/atmosphere/programmable-floral-hooks-v1.webp"',
     );
     expect(source).toContain(
       'src="/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png"',
     );
-    expect(source).toContain('calc((100vw - 96px) / 2), 560px');
+    expect(source).toContain('calc((100vw - 96px) / 2), 624px');
     expect(source).not.toContain('calc((100vw - 96px) / 4), 260px');
     for (const marker of removedPartnerMarkers) {
       expect(source).not.toContain(marker);
@@ -54,7 +54,7 @@ describe("launch model artwork", () => {
       'aria-labelledby="launch-model-classic-title"',
     );
     expect(source).toContain(
-      'aria-describedby="launch-model-classic-description launch-model-classic-status"',
+      'aria-describedby={classicV3LaunchAvailable ? "launch-model-classic-description" : "launch-model-classic-description launch-model-classic-status"}',
     );
     expect(source).toContain(
       'aria-labelledby="launch-model-custom-title"',
@@ -66,23 +66,19 @@ describe("launch model artwork", () => {
     expect(source).toContain('data-launch-model-available="true"');
     expect(source).toContain('data-launch-model-entry="api-key-launch"');
     expect(source).toContain(
-      'href="/developers/api-keys?start=custom&chainId=4663"',
+      'href="/developers/api-keys"',
     );
     expect(source).not.toContain('onChoose("custom")');
     expect(source).not.toContain("customLaunchPublicEnabled");
     expect(source).not.toContain("custom-launch-experience");
     expect(source).not.toContain("custom-launch-local-preview");
-    expect(route).toContain("return <LaunchExperience />;");
+    expect(route).toContain("return <LaunchExperience initialViewChainId={initialViewChainId} />;");
     expect(route).not.toContain("isCustomLaunchPublicEnabled");
     expect(route).not.toContain("configuredLaunchPermitSignersV2");
     for (const marker of removedPartnerMarkers) {
       expect(source).not.toContain(marker);
     }
-    expect(
-      source.match(
-        /src="\/brand\/atmosphere\/programmable-floral-hooks-v1\.avif"/g,
-      ),
-    ).toHaveLength(2);
+    expect(source.match(/<LaunchArtworkImage \/>/g)).toHaveLength(2);
     expect(source.match(/aria-hidden="true"/g)?.length).toBeGreaterThanOrEqual(2);
     expect(source).not.toContain("launchExperience.predictionRail");
   });

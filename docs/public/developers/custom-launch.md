@@ -11,11 +11,14 @@ subkeys on Ethereum Mainnet. V2 and V1 history and schemas remain available, whi
 Registry and GitHub submission intake is closed.
 
 The public Ethereum V3 CLI is `@programmable/launch` `3.3.9`. For Robinhood V4, read the live
-[discovery manifest](https://programmable.market/.well-known/programmable.json). Use CLI `4.0.0` only when both
+[discovery manifest](https://programmable.market/.well-known/programmable.json). Use the exact advertised CLI version only when both
 `customLaunchApi.versions.v4` and `chains[]` for `chainId: 4663` report `publicAuthorization: true`,
 `publicWrites: true` and `releaseReady: true`. If either entry is false, incomplete or missing, stop before
 authenticated preflight or submission. Verify the immutable official GitHub Release, exact source commit, release
 manifest and tarball checksum from `customLaunchApi.versions.v4.cli.release` before installing. A repository source candidate is not an installable release.
+
+Historical `4.0.0` resources retain their original contract. When discovery selects `4.1.0`, use that immutable CLI
+and its advertised schemas for new launches; this guide is not activation evidence for either version.
 
 V2 detail reads are observation-only while an existing request is `prepared` or `simulating`: GET does not advance
 simulation or authorization and cannot expose a new `walletTransaction`. Existing `authorized` and `submitted`
@@ -48,13 +51,32 @@ The V4 contract uses
 `/v4/chains/4663/capabilities`, `/v4/chains/4663/custom-launches/preflight`,
 `/v4/chains/4663/custom-launches`, `/v4/chains/4663/custom-launches/{launchId}` and
 `/v4/chains/4663/finalized-custom-launches`. Read the
-[V4 OpenAPI pointer](https://programmable.market/openapi/custom-launch-v4.json), the
-[V4 pack-config schema](https://programmable.market/schemas/custom-launch/v4/pack-config.json) and the
-[V4 source-verification schema](https://programmable.market/schemas/custom-launch/v4/source-verification-status.json), plus the
-[V4 admission descriptor](https://github.com/programmablehq/Launch-Policy/blob/main/policy/custom-launch-admission-v4.json).
+[historical 4.0 OpenAPI](https://programmable.market/openapi/custom-launch-v4.json),
+[pack-config schema](https://programmable.market/schemas/custom-launch/v4/pack-config.json),
+[source-verification schema](https://programmable.market/schemas/custom-launch/v4/source-verification-status.json) and
+[admission descriptor](https://github.com/programmablehq/Launch-Policy/blob/main/policy/custom-launch-admission-v4.json)
+only for that contract. When live discovery selects 4.1, follow the
+[4.1 OpenAPI](https://programmable.market/openapi/custom-launch-v4.1.json),
+[4.1 pack config](https://programmable.market/schemas/custom-launch/v4.1/pack-config.json),
+[4.1 source verification](https://programmable.market/schemas/custom-launch/v4.1/source-verification-status.json) and
+[4.1 admission descriptor](https://github.com/programmablehq/Launch-Policy/blob/main/policy/custom-launch-admission-v4.1.json).
 Authentication is handed off only through `$PROGRAMMABLE_API_KEY`; it never selects a policy profile or grants wallet
-authority. V4 currently advertises only no funding and exact wallet transaction value. ERC-20 funding needs separate
+authority. Historical 4.0 supports no funding and exact wallet transaction value; a funded 4.1 launch requires
+positive wallet transaction value. ERC-20 funding needs separate
 settlement proof before it can be advertised.
+
+For selected 4.1, agree the funding source and pricing model before building and include a `fundingPlan` with exact
+native allocations and user-confirmed `maxLaunchValueWei` and `maxGasCostWei`. Count an initial buy once inside the
+wallet value; gas is additional. A build-only plan cannot obtain a permit. Every funded launch requires an atomic
+initial buy of at least USD 1 at permit authorization and positive minimum token output to the launch wallet. Read
+public `GET /v4/chains/4663/initial-buy-quote` first; the server obtains its own quote no older than 60 seconds, without
+stale fallback. Never raise the amount or budget without user confirmation. Execution stays on Robinhood; the
+Ethereum price reference does not guarantee dollar value at execution or third-party indexing.
+
+4.1 admission requires an exact native fee kernel for the stamped PoolKey. It accrues 20 bps (0.2%) of the gross
+native ETH leg once per successful buy or sell, rounded up, separately from creator and LP fees, as PoolManager
+native claims for `0xD88539d3c4C460136a733A3Fd60cf6BF269079da`. Permissionless claiming pays only that fixed recipient.
+Admission does not prove deployed state, completed trades or collected revenue; API keys never claim fees.
 
 V4 metadata images are exactly PNG or single-frame GIF, as published by `metadataImage.mediaTypes` and `gifFrames`.
 JPEG, WebP, and animated GIF are rejected by the V4 packer before any network request.

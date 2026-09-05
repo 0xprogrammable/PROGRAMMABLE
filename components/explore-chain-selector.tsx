@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { usePathname, useRouter } from "next/navigation";
 
 import { useViewChain, type ViewChainId } from "@/components/view-chain";
-import { resolveExploreChainId } from "@/lib/explore-chain";
+import { exploreChainPath, resolveExploreChainId } from "@/lib/explore-chain";
 import styles from "@/components/explore-chain-selector.module.css";
 
 type ExploreChainOption = Readonly<{
@@ -59,11 +60,13 @@ function ExploreChainMark({
   return <span className={styles.robinhoodMark} aria-hidden="true" />;
 }
 
-export function ExploreChainSelector() {
+export function ExploreChainSelector({ chainId }: Readonly<{ chainId?: ViewChainId }> = {}) {
   const { hydrated, viewChainId, setViewChainId } = useViewChain();
+  const pathname = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const exploreChainOptions = EXPLORE_CHAIN_OPTIONS;
-  const selectedViewChainId = resolveExploreChainId(viewChainId);
+  const selectedViewChainId = resolveExploreChainId(chainId ?? viewChainId);
   const selectedIndex = Math.max(
     0,
     exploreChainOptions.findIndex(
@@ -113,8 +116,16 @@ export function ExploreChainSelector() {
 
   function selectChain(option: ExploreChainOption) {
     if (!option.available || option.viewChainId === undefined) return;
+    const main = rootRef.current?.closest("main");
     setViewChainId(option.viewChainId);
-    closeListbox();
+    if (pathname === "/explore" || pathname?.startsWith("/explore/")) {
+      router.push(exploreChainPath(option.viewChainId), { scroll: false });
+    }
+    closeListbox(false);
+    window.requestAnimationFrame(() => {
+      const trigger = triggerRef.current ?? main?.querySelector<HTMLButtonElement>(`button[aria-label="Explore chain: ${option.label}"]`);
+      trigger?.focus();
+    });
   }
 
   function handleOptionKeyDown(

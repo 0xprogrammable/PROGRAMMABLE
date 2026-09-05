@@ -1,4 +1,4 @@
-import { V4_API_DISCOVERY } from "../lib/custom-launch/v4-api-discovery";
+import { V4_API_DISCOVERY, V4_API_PROFILE_VERSION } from "../lib/custom-launch/v4-api-discovery";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -91,7 +91,7 @@ describe("Custom Launch API documentation", () => {
     ];
 
     for (const source of v4Sources) {
-      expect(source).toContain("4.0.0");
+      expect(source).toContain(source === developerDocsMarkdown ? V4_API_PROFILE_VERSION : "4.0.0");
       expect(source).toMatch(
         /(?:source|release)[\s-]candidate|immutable.*release/iu,
       );
@@ -129,7 +129,7 @@ describe("Custom Launch API documentation", () => {
         runtimeStatus: "routes-deployed",
         activationStage: V4_API_DISCOVERY.activationStage,
         targetLaunchPath: "public-self-serve",
-        profileVersion: "4.0.0",
+        profileVersion: V4_API_PROFILE_VERSION,
         released: V4_API_DISCOVERY.cliReleased,
         installable: V4_API_DISCOVERY.cliInstallable,
         releaseReady: V4_API_DISCOVERY.releaseReady,

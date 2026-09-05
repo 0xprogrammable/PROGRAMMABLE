@@ -5,8 +5,12 @@ import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 
 import { useWallet } from "@/components/wallet-provider";
+import { useViewChain, type ViewChainId } from "@/components/view-chain";
+import { ProfileChainSelector } from "@/components/profile-chain-selector";
+import { ProfileLoadingSkeleton } from "@/components/profile-skeleton";
 
 import styles from "./profile-entry.module.css";
+import profileStyles from "./profile-experience.module.css";
 
 const ethereumAddressPattern = /^0x[0-9a-f]{40}$/;
 const loadProfileView = () =>
@@ -42,10 +46,14 @@ function ProfileEntryFrame({
   loading,
   onConnect,
   onPrepareProfile,
+  viewChainId = 4663,
+  onChangeChain,
 }: Readonly<{
   loading: boolean;
   onConnect?: () => void;
   onPrepareProfile?: () => void;
+  viewChainId?: ViewChainId;
+  onChangeChain?: (chain: ViewChainId) => void;
 }>) {
   const titleId = loading
     ? "profile-entry-loading-title"
@@ -72,6 +80,7 @@ function ProfileEntryFrame({
           priority
         />
         <h1 id={titleId}>Profile</h1>
+        {onChangeChain ? <ProfileChainSelector value={viewChainId} onChange={onChangeChain} /> : null}
         {loading ? (
           <>
             <span
@@ -107,12 +116,15 @@ function ProfileEntryFrame({
 }
 
 export function ProfileEntryLoadingState() {
-  return <ProfileEntryFrame loading />;
+  return <div className={`${profileStyles.page} page-width`}>
+    <ProfileLoadingSkeleton label="Loading profile" showHero />
+  </div>;
 }
 
 export function ProfileEntry() {
   const searchParams = useSearchParams();
-  const { connecting, openWallet, wallet } = useWallet();
+  const { connecting, openingWallet, openWallet, wallet } = useWallet();
+  const { viewChainId, setViewChainId } = useViewChain();
   const publicProfileRequested = profileEntryHasPublicAccount(
     searchParams?.getAll("account") ?? [],
   );
@@ -121,10 +133,12 @@ export function ProfileEntry() {
     account: wallet?.account,
     publicProfileRequested,
   })) {
-    return <ProfileView />;
+    return <ProfileView viewChainId={viewChainId} onChangeChain={setViewChainId} />;
   }
 
-  if (connecting) return <ProfileEntryLoadingState />;
+  if (connecting) return openingWallet
+    ? <ProfileEntryFrame loading viewChainId={viewChainId} onChangeChain={setViewChainId} />
+    : <ProfileEntryLoadingState />;
 
   function connectWallet() {
     preloadProfileView();
@@ -136,6 +150,8 @@ export function ProfileEntry() {
       loading={false}
       onConnect={connectWallet}
       onPrepareProfile={preloadProfileView}
+      viewChainId={viewChainId}
+      onChangeChain={setViewChainId}
     />
   );
 }
