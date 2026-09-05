@@ -48,7 +48,7 @@ original command. Guidance coverage cannot satisfy this shared-work condition.
 ## Contracts
 
 `Contracts build` bootstraps pinned dependencies, checks variants/format/lint,
-and compiles the complete default Foundry profile once. Four independent
+and compiles the complete default Foundry profile once. Three independent
 consumers receive that run's exact artifact ID, with artifact digest mismatch
 treated as an error, and verify its source/run/attempt/workflow/toolchain receipt:
 
@@ -60,7 +60,11 @@ treated as an error, and verify its source/run/attempt/workflow/toolchain receip
   verification, release bindings, and late-migration checks. All default-profile
   consumers finish before the late-migration profile compiles, avoiding the
   former repeated default/late/default compilation.
-- `Contracts static analysis` retains both Slither profiles in its own checkout.
+
+`Contracts static analysis` retains both Slither profiles in its own checkout.
+Slither intentionally cleans and rebuilds its own build-info, so this worker
+starts directly after scope classification without waiting for or downloading
+the default-profile artifact. Its pinned toolchain and both analyses remain.
 
 This is not a cross-commit compiler or release-proof cache. Artifact selection
 has no repository/run override, and the receipt rejects another checkout,

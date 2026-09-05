@@ -66,7 +66,9 @@ Forge inventories contain all 93 source suites; local execution passed 804 tests
 with the same two existing skips. No fuzz or invariant setting changes.
 
 Default-profile release consumers finish before the late-migration profile
-compiles. Slither runs separately. Missing, failed, cancelled, partially skipped,
+compiles. Slither rebuilds its own complete build-info for both profiles and starts
+directly after scope, without waiting for or downloading the default artifact.
+Missing, failed, cancelled, partially skipped,
 or substituted workers fail the protected aggregate. Detailed command ownership
 and artifact boundaries are documented in `scripts/ci/README.md`.
 

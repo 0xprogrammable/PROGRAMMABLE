@@ -29,6 +29,15 @@ test("contract test partitions and integrations consume only the complete build 
     assert.equal(step(job, "Install dependencies").run, "npm ci --no-audit --no-fund");
     assert.equal(step(job, "Check out repository").with?.ref, undefined);
     if (id === "contracts-build") continue;
+    if (id === "contracts-analysis") {
+      assert.deepEqual(job.needs, ["scope"]);
+      assert.ok(job.steps.every((candidate) => !candidate.uses?.startsWith("actions/download-artifact@")));
+      assert.ok(job.steps.every((candidate) => !candidate.run?.includes("verify-receipt")));
+      assert.equal(step(job, "Install exact Slither").run, "pipx install slither-analyzer==0.11.5");
+      assert.equal(step(job, "Run both unchanged Slither profiles in their isolated checkout").run,
+        "node scripts/ci/contracts-ci.mjs analysis");
+      continue;
+    }
     assert.deepEqual(job.needs, ["scope", "contracts-build"]);
     const download = step(job, "Download only this run's contract build");
     assert.equal(download.uses, "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c");
