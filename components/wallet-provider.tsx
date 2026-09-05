@@ -3105,7 +3105,7 @@ function WalletDialog({
         <div className="connected-wallet">
           <div className="wallet-account-row">
             <span>Active wallet</span>
-            <strong>{wallet.account}</strong>
+            <strong>{wallet.account.slice(0, 22)}<wbr />{wallet.account.slice(22)}</strong>
           </div>
           <dl className="wallet-network-row">
             <dt>Wallet network</dt>
