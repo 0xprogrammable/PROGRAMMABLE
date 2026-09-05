@@ -115,7 +115,96 @@ contract ModuleProgramsV1Test is ModuleRuntimeTestBase {
         vm.expectRevert();
         engine.register(binding, selected);
         selected = _single(_reward(1, true));
-        selected[0].config = abi.encode(uint32(1), uint128(1), uint128(1), uint64(block.timestamp), true);
+        selected[0].config = abi.encode(uint32(1), uint128(1), uint128(1), uint64(block.timestamp), true, alice);
+        binding = _binding(selected, 1);
+        vm.expectRevert();
+        engine.register(binding, selected);
+    }
+
+    function test_reclaimRequiresRefundActorAfterExpiryAndPreservesWinnerClaims() public {
+        (bytes32 key, ModuleNativeRuntimeV1.Instance[] memory instances_) = _register(_single(_reward(1, true)), 1);
+        EveryNthBuyRewardV1 reward = EveryNthBuyRewardV1(instances_[0].module);
+        bytes32 id = instances_[0].instanceId;
+        bytes32 actionId = reward.RECLAIM_UNUSED();
+        uint64 endTime = reward.endsAt();
+        vault.fund{ value: 0.005 ether }(id);
+        engine.applyTrade(key, _trade(key, bob, 0.1 ether, true));
+        assertEq(vault.claimable(id, bob), 0.001 ether);
+        assertEq(vault.available(id), 0.004 ether);
+
+        vm.prank(alice);
+        vm.expectRevert();
+        runtime.executeAction(key, 0, actionId, "", 0, endTime);
+        assertEq(runtime.actionNonce(key, alice), 0);
+        vm.warp(reward.endsAt());
+        vm.prank(bob);
+        vm.expectRevert();
+        runtime.executeAction(key, 0, actionId, "", 0, block.timestamp);
+        assertEq(runtime.actionNonce(key, bob), 0);
+        vm.prank(alice);
+        runtime.executeAction(key, 0, actionId, "", 0, block.timestamp);
+        assertEq(runtime.actionNonce(key, alice), 1);
+        assertEq(vault.claimable(id, alice), 0.004 ether);
+        assertEq(vault.claimable(id, bob), 0.001 ether);
+        assertEq(vault.available(id), 0);
+        assertEq(reward.totalReclaimed(), 0.004 ether);
+        vault.claim(id, alice);
+        assertEq(alice.balance, 0.004 ether);
+        assertEq(vault.claimable(id, bob), 0.001 ether);
+        vault.claim(id, bob);
+        assertEq(bob.balance, 0.001 ether);
+        _assertBacking();
+    }
+
+    function test_reclaimNoOpRetriesFreshFundingAndOtherInstanceIsolation() public {
+        (bytes32 key, ModuleNativeRuntimeV1.Instance[] memory instances_) = _register(_single(_reward(1, true)), 1);
+        (, ModuleNativeRuntimeV1.Instance[] memory otherInstances) = _register(_single(_reward(1, true)), 2);
+        EveryNthBuyRewardV1 reward = EveryNthBuyRewardV1(instances_[0].module);
+        bytes32 id = instances_[0].instanceId;
+        bytes32 actionId = reward.RECLAIM_UNUSED();
+        vault.fund{ value: 0.01 ether }(otherInstances[0].instanceId);
+        vm.warp(reward.endsAt());
+        vm.prank(alice);
+        runtime.executeAction(key, 0, actionId, "", 0, block.timestamp);
+        assertEq(runtime.actionNonce(key, alice), 1);
+        assertEq(reward.totalReclaimed(), 0);
+        vault.fund{ value: 0.002 ether }(id);
+        vm.prank(alice);
+        vm.expectRevert(ModuleNativeRuntimeV1.InvalidAction.selector);
+        runtime.executeAction(key, 0, actionId, "", 0, block.timestamp);
+        vm.prank(alice);
+        runtime.executeAction(key, 0, actionId, "", 1, block.timestamp);
+        vm.prank(alice);
+        runtime.executeAction(key, 0, actionId, "", 2, block.timestamp);
+        assertEq(runtime.actionNonce(key, alice), 3);
+        assertEq(reward.totalReclaimed(), 0.002 ether);
+        assertEq(vault.claimable(id, alice), 0.002 ether);
+        assertEq(vault.available(otherInstances[0].instanceId), 0.01 ether);
+        _assertBacking();
+    }
+
+    function test_reclaimRejectsWrongActionAndUnexpectedInputs() public {
+        (bytes32 key, ModuleNativeRuntimeV1.Instance[] memory instances_) = _register(_single(_reward(1, true)), 1);
+        EveryNthBuyRewardV1 reward = EveryNthBuyRewardV1(instances_[0].module);
+        bytes32 actionId = reward.RECLAIM_UNUSED();
+        vm.warp(reward.endsAt());
+        vm.prank(alice);
+        vm.expectRevert();
+        runtime.executeAction(key, 0, bytes32("different-action"), "", 0, block.timestamp);
+        vm.prank(alice);
+        vm.expectRevert();
+        runtime.executeAction(key, 0, actionId, hex"00", 0, block.timestamp);
+        assertEq(runtime.actionNonce(key, alice), 0);
+    }
+
+    function test_oldConfigAndZeroRefundWalletAreRejected() public {
+        T.Selection[] memory selected = _single(_reward(1, true));
+        selected[0].config = abi.encode(uint32(1), uint128(1), uint128(1), uint64(block.timestamp + 1), true);
+        T.LaunchBinding memory binding = _binding(selected, 1);
+        vm.expectRevert();
+        engine.register(binding, selected);
+        selected[0].config =
+            abi.encode(uint32(1), uint128(1), uint128(1), uint64(block.timestamp + 1), true, address(0));
         binding = _binding(selected, 1);
         vm.expectRevert();
         engine.register(binding, selected);

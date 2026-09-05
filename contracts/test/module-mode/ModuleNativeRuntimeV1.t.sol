@@ -66,7 +66,12 @@ abstract contract ModuleRuntimeTestBase is Test {
             rewardFactory.moduleCodeHash(),
             300_000,
             abi.encode(
-                everyN, uint128(0.01 ether), uint128(0.001 ether), uint64(block.timestamp + 1 days), includeInitial
+                everyN,
+                uint128(0.01 ether),
+                uint128(0.001 ether),
+                uint64(block.timestamp + 1 days),
+                includeInitial,
+                alice
             )
         );
     }

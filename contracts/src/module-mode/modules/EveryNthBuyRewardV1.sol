@@ -9,24 +9,32 @@ import { IModuleProgramV1, IModuleProgramFactoryV1, IModuleNativeBudgetRuntimeV1
 /// @dev Predictable ordering permits strategic buying; wallet identity does not establish different human owners.
 ///      A depleted budget skips that reward permanently, without creating debt or blocking a trade.
 contract EveryNthBuyRewardV1 is ModuleProgramBaseV1 {
+    bytes32 public constant RECLAIM_UNUSED = keccak256("programmable.module-mode.reward.reclaim-unused.v1");
     uint32 public everyN;
     uint128 public minimumGrossNative;
     uint128 public rewardNative;
     uint64 public endsAt;
     bool public includeInitialBuy;
+    address public refundWallet;
     uint256 public qualifiedBuys;
     uint256 public rewardedBuys;
+    uint256 public totalReclaimed;
 
     error InvalidConfiguration();
+    error ReclaimNotAvailable();
 
     event RewardEarned(bytes32 indexed executionId, address indexed beneficiary, uint256 qualifyingBuy, uint256 amount);
     event RewardSkipped(bytes32 indexed executionId, uint256 qualifyingBuy, uint256 availableNative);
+    event UnusedBudgetReclaimed(bytes32 indexed executionId, address indexed beneficiary, uint256 amount);
 
     constructor(T.InstanceBinding memory binding, bytes memory config) ModuleProgramBaseV1(binding) {
-        if (config.length != 160 || keccak256(config) != binding.configHash) revert InvalidConfiguration();
-        (everyN, minimumGrossNative, rewardNative, endsAt, includeInitialBuy) =
-            abi.decode(config, (uint32, uint128, uint128, uint64, bool));
-        if (everyN == 0 || minimumGrossNative == 0 || rewardNative == 0 || endsAt <= block.timestamp) {
+        if (config.length != 192 || keccak256(config) != binding.configHash) revert InvalidConfiguration();
+        (everyN, minimumGrossNative, rewardNative, endsAt, includeInitialBuy, refundWallet) =
+            abi.decode(config, (uint32, uint128, uint128, uint64, bool, address));
+        if (
+            everyN == 0 || minimumGrossNative == 0 || rewardNative == 0 || endsAt <= block.timestamp
+                || refundWallet == address(0)
+        ) {
             revert InvalidConfiguration();
         }
     }
@@ -51,9 +59,18 @@ contract EveryNthBuyRewardV1 is ModuleProgramBaseV1 {
         return IModuleProgramV1.onTrade.selector;
     }
 
-    function onAction(T.ActionContext calldata context, bytes calldata) external view returns (bytes4) {
+    function onAction(T.ActionContext calldata context, bytes calldata inputs) external returns (bytes4) {
         _authenticate(context.launchKey, context.instanceId);
-        revert UnsupportedAction();
+        if (context.actionId != RECLAIM_UNUSED || inputs.length != 0) revert UnsupportedAction();
+        if (context.actor != refundWallet || block.timestamp < endsAt) revert ReclaimNotAvailable();
+        IModuleNativeBudgetRuntimeV1 host = IModuleNativeBudgetRuntimeV1(_runtime());
+        uint256 balance = host.available(_instanceId());
+        if (balance != 0) {
+            totalReclaimed += balance;
+            host.credit(refundWallet, balance);
+            emit UnusedBudgetReclaimed(context.executionId, refundWallet, balance);
+        }
+        return IModuleProgramV1.onAction.selector;
     }
 }
 
