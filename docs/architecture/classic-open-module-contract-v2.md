@@ -12,6 +12,8 @@ New protected actions or fundamentally different settlement models can require a
 
 ## Required execution context
 
+The lifecycle starts with market construction. A package may supply a launch variant that chooses the quote asset, curve configuration, initial acquisition path and supporting components before the primary pool is created. Existing trade callbacks alone are not the open architecture. See [launch variants, assets and services](classic-launch-variants.md) for the required asset-independent construction and accounting boundaries.
+
 The engine authenticates and binds an execution ID, chain, source, pool, recipe, module instance, lifecycle phase, direction, actor, payer, token recipient, payment authorization and slippage/deadline limits. The completed context contains measured executed amounts. The module does not establish these facts by returning an arbitrary address or amount.
 
 `msg.sender` in a V4 callback is the PoolManager; the callback's `sender` is generally its router. In the current Classic initial buy, it is the launcher. Current V1 ignores `hookData`, so it supplies no authenticated end-user identity to a module. A caller address in unverified `hookData` must not qualify for rewards or spend another user's authorization.
@@ -60,7 +62,7 @@ Custom launches retain their own original stamp/source proof. A shared offchain 
 
 A new contributor package supplies source/build/dependency bindings, immutable revision, wallet ownership, config schema, declared lifecycle needs, rights, budget/funding, dependency/conflict constraints and tests. Authenticated public intake and isolated review workers remain to be implemented.
 
-The acceptance demonstration must add the next-buyer behavior through the same package mechanism as another stateful module while leaving core source and common identity schema unchanged. The builder derives normal controls from config metadata; the collector records the module commitment without importing contributor code. Novel complex UI can be isolated separately, never executed as privileged code inside the product.
+The acceptance demonstration must add the next-buyer behavior through the same package mechanism as another stateful module while leaving core source and common identity schema unchanged. It must also construct both native-quoted and ERC-20-quoted primary pools through the common market-building contract; a stock symbol is configuration and verified asset identity, not a new business-feature branch in the kernel. The builder derives normal controls from config metadata; the collector records the module commitment without importing contributor code. Novel complex UI can be isolated separately, never executed as privileged code inside the product.
 
 An ABI-conformant module can still be unsafe or economically incompatible. Review binds an exact revision and admissible parameter/composition envelope. Routine new modules using supported primitives should need validation, review and catalogue activation rather than bespoke infrastructure coding. Review time is a property of the contribution's risk and evidence; the platform must not promise instantaneous safety approval.
 
