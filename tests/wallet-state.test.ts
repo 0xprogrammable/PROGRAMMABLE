@@ -205,10 +205,6 @@ describe("wallet recovery state", () => {
       "const ConfiguredWalletProvider = memo(function ConfiguredWalletProvider",
     );
     expect(provider).not.toContain("if (!runtime) {");
-    expect(provider).toContain("const hydrationPending = !authReady");
-    expect(provider).toContain(
-      "const openingWallet = connecting && authReady",
-    );
     expect(provider).toMatch(/openingWallet\s*\?\s*"Opening wallet"/u);
     expect(provider).toMatch(/hydrationPending\s*\?\s*"Loading wallet"/u);
     expect(provider).toContain("wallet-button-hydrating");

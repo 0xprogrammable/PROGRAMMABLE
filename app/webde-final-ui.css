@@ -506,6 +506,79 @@ body:has([data-docs-shell]) .site-header::before {
   }
 }
 
+.wallet-dialog {
+  --surface-raised: var(--webde-surface-raised);
+  --border: var(--webde-line);
+  --muted: var(--webde-muted);
+  --text: var(--webde-ink);
+  --accent: var(--webde-ink);
+  background: var(--webde-surface);
+  border-color: var(--webde-line);
+  border-radius: var(--webde-radius-card);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 0.3);
+  color: var(--webde-ink);
+}
+
+.wallet-dialog .dialog-heading {
+  gap: 12px;
+}
+
+.wallet-dialog .dialog-heading .icon-button {
+  flex: none;
+}
+
+.wallet-dialog .wallet-account-row,
+.wallet-dialog .wallet-switch-option {
+  border-radius: var(--webde-radius-control);
+}
+
+.wallet-dialog .dialog-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.wallet-dialog :is(.secondary-button, .icon-button) {
+  background: var(--webde-surface-raised);
+  border: 1px solid var(--webde-line);
+  border-radius: var(--webde-radius-control);
+  box-shadow: none;
+  color: var(--webde-ink);
+  filter: none;
+}
+
+.wallet-dialog .secondary-button {
+  font-size: 14px;
+  font-weight: 500;
+  min-height: 44px;
+  padding: 10px 12px;
+}
+
+.wallet-dialog .dialog-actions .danger-text {
+  grid-column: 1 / -1;
+  justify-content: center;
+  margin: 0;
+  min-height: 44px;
+  width: 100%;
+}
+
+.wallet-dialog :is(button, a):focus-visible {
+  outline: 2px solid var(--webde-ink);
+  outline-offset: 3px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .wallet-dialog :is(.secondary-button, .icon-button, .wallet-switch-option):hover:not(:disabled) {
+    background: var(--webde-control);
+    border-color: var(--webde-muted);
+  }
+}
+
+@media (max-width: 380px) {
+  .wallet-dialog .dialog-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .route-transition {
     animation-duration: 0.01ms;

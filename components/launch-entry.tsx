@@ -6,11 +6,12 @@ import { useEffect, useState } from "react";
 import { ArrowRight } from "lucide-react";
 
 import launchExperience from "@/components/launch-experience.module.css";
+import { ProfileChainSelector } from "@/components/profile-chain-selector";
 import { useViewChain, type ViewChainId } from "@/components/view-chain";
 import { isConfiguredClassicV3ReleaseReady } from "@/lib/classic-v3-release";
 import { resolveImplementedLaunchModel } from "@/lib/launch-model-gating";
 import type { LaunchModel } from "@/lib/launch";
-import { DEFAULT_VIEW_CHAIN_ID, VIEW_CHAIN_OPTIONS } from "@/lib/view-chain";
+import { DEFAULT_VIEW_CHAIN_ID } from "@/lib/view-chain";
 
 const launchEnvironment =
   process.env.NEXT_PUBLIC_PROGRAMMABLE_ONCHAIN_NETWORK === "rehearsal"
@@ -26,6 +27,22 @@ function loadLaunchForm() {
 type LaunchBuilderComponent =
   (typeof import("@/components/launch-builder"))["LaunchBuilderForm"];
 type LaunchPickerChoice = LaunchModel;
+
+function LaunchArtworkImage() {
+  const [ready, setReady] = useState(false);
+  return (
+    <Image
+      className={launchExperience.artImage}
+      src="/brand/atmosphere/programmable-floral-hooks-v1.webp"
+      alt=""
+      fill
+      sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 96px) / 2), 624px"
+      priority
+      data-ready={ready}
+      onLoad={() => setReady(true)}
+    />
+  );
+}
 
 export function LaunchExperience({
   initialViewChainId = DEFAULT_VIEW_CHAIN_ID,
@@ -141,15 +158,7 @@ export function LaunchModelPicker({
         className={`launch-model-art ${launchExperience.modelArt} ${launchExperience.customArt}`}
         aria-hidden="true"
       >
-        <Image
-          className={launchExperience.artImage}
-          src="/brand/atmosphere/programmable-floral-hooks-v1.avif"
-          alt=""
-          fill
-          loading="eager"
-          sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 96px) / 2), 560px"
-          priority
-        />
+        <LaunchArtworkImage />
         <Image
           className={`${launchExperience.classicLogo} ${launchExperience.customLogo}`}
           src="/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png"
@@ -192,35 +201,18 @@ export function LaunchModelPicker({
         className={`launch-model-heading ${launchExperience.pickerHeading}`}
       >
         <h1 className="sr-only">Launch</h1>
-        <fieldset
+        <ProfileChainSelector
           className={launchExperience.chainChoice}
+          label="Launch chain"
+          name="launch-chain"
+          value={chainId}
+          onChange={onChangeChain}
           disabled={preparingModel !== null}
-        >
-          <legend className="sr-only">Launch chain</legend>
-          {VIEW_CHAIN_OPTIONS.map((chain) => (
-            <label key={chain.id} className={launchExperience.chainOption} title={chain.label}>
-              <input
-                className="sr-only"
-                type="radio"
-                name="launch-chain"
-                aria-label={chain.label}
-                value={chain.id}
-                checked={chainId === chain.id}
-                onChange={() => onChangeChain?.(chain.id)}
-              />
-              {chain.id === 1 ? (
-                <svg className={launchExperience.chainMark} viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
-                  <path d="M12 2 5.5 12.2 12 9.25l6.5 2.95L12 2Z" fill="currentColor" />
-                  <path d="m5.5 13.35 6.5 3.7 6.5-3.7L12 22 5.5 13.35Z" fill="currentColor" />
-                  <path d="m12 9.25-6.5 2.95L12 15.9l6.5-3.7L12 9.25Z" fill="currentColor" />
-                </svg>
-              ) : <span className={launchExperience.robinhoodMark} aria-hidden="true" />}
-            </label>
-          ))}
-        </fieldset>
+        />
       </header>
 
       <div
+        key={chainId}
         className={`launch-model-grid ${launchExperience.modelGrid} ${isEthereum ? "" : launchExperience.singleModelGrid}`}
       >
         {isEthereum ? (
@@ -247,14 +239,7 @@ export function LaunchModelPicker({
               className={`launch-model-art launch-model-art-classic ${launchExperience.modelArt} ${launchExperience.classicArt}`}
               aria-hidden="true"
             >
-              <Image
-                className={launchExperience.artImage}
-                src="/brand/atmosphere/programmable-floral-hooks-v1.avif"
-                alt=""
-                fill
-                sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1280px) calc((100vw - 96px) / 2), 560px"
-                priority
-              />
+              <LaunchArtworkImage />
               <Image
                 className={launchExperience.classicLogo}
                 src="/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png"

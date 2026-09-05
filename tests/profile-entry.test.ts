@@ -70,4 +70,10 @@ describe("profile entry", () => {
     );
     expect(profileEntrySource).toContain("onPointerEnter={onPrepareProfile}");
   });
+
+  it("uses the same identity-free skeleton during passive session restoration", () => {
+    expect(profileEntrySource).toContain('from "@/components/profile-skeleton"');
+    expect(profileEntrySource).toMatch(/if \(connecting\) return openingWallet[\s\S]*?<ProfileEntryFrame loading[\s\S]*?: <ProfileEntryLoadingState \/>/u);
+    expect(profileEntrySource).toContain('<ProfileLoadingSkeleton label="Loading profile" showHero />');
+  });
 });

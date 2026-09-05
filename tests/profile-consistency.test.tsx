@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ProfileProjectsLoadingState } from "@/components/profile-projects";
-import { PublicCreatorProfile, RobinhoodProfileRewards } from "@/components/profile-view";
+import { beginPublicProfileRefresh, PublicCreatorProfile, RobinhoodProfileRewards } from "@/components/profile-view";
+import { ProfileLoadingSkeleton } from "@/components/profile-skeleton";
+import { loadingProfileData, type ProfileOnchainData } from "@/lib/profile/onchain-profile";
 import { RobinhoodProfileLaunches } from "@/components/robinhood-profile-launches";
 import { readLocalProfile, writeLocalProfile } from "@/lib/profile/local-profile";
 
@@ -9,6 +11,22 @@ const creator = "0x245099E77F8F0Cad9a75B1B56db8FDE7C948d5B1";
 const connected = `0x${"a".repeat(40)}`;
 
 describe("shared wallet profile", () => {
+  it("retains only a ready launch snapshot belonging to the same wallet and chain", () => {
+    const ready: ProfileOnchainData = { ...loadingProfileData(creator), status: "ready", chainId: 1 };
+    expect(beginPublicProfileRefresh(ready, creator.toLowerCase())).toBe(ready);
+    expect(beginPublicProfileRefresh(ready, connected)).toEqual(loadingProfileData(connected));
+    expect(beginPublicProfileRefresh({ ...ready, chainId: 4663 as 1 }, creator)).toMatchObject({ status: "loading", tokens: [] });
+    expect(beginPublicProfileRefresh({ ...ready, status: "error" }, creator)).toMatchObject({ status: "loading", tokens: [] });
+  });
+
+  it("keeps the initial skeleton free of account identity and focusable dummy controls", () => {
+    const html = renderToStaticMarkup(<ProfileLoadingSkeleton label="Loading profile" showHero />);
+    expect(html).toContain("Loading profile");
+    expect(html).toContain("profileSkeletonChain");
+    expect(html).not.toContain(creator);
+    expect(html).not.toContain("<button");
+    expect(html.match(/class="[^"]*skeletonProject[^"]*"/g)).toHaveLength(1);
+  });
   it("uses the same launch loading structure for both chains", () => {
     const ethereum = renderToStaticMarkup(<ProfileProjectsLoadingState />);
     const robinhood = renderToStaticMarkup(<RobinhoodProfileLaunches account={creator} />);

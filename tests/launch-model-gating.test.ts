@@ -226,7 +226,7 @@ describe("unreleased launch model gating", () => {
     }
     // Next/Image may emit the source as an encoded optimizer URL. Assert the
     // asset identity without coupling this contract to that transport detail.
-    expect(html.match(/programmable-floral-hooks-v1\.avif/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(html.match(/programmable-floral-hooks-v1\.webp/g)?.length).toBeGreaterThanOrEqual(2);
     expect(html).not.toContain("In development");
     expect(html).not.toContain("launch-model-classic-details");
     expect(html).not.toContain('data-launch-model-option="stock-paired"');

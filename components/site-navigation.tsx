@@ -19,6 +19,7 @@ import {
 } from "@/components/brand-icons";
 import {
   NavigationCloseIcon,
+  NavigationChevronIcon,
   NavigationMenuIcon,
 } from "@/components/navigation-icons";
 import { useWallet } from "@/components/wallet-provider";
@@ -36,14 +37,12 @@ const menuNavItems = [
 ];
 
 const mobileNavItems = [...desktopNavItems, ...menuNavItems];
-const warmedNavigationRoutes = new Set<string>();
 
 function warmNavigationRoute(
   router: ReturnType<typeof useRouter>,
   href: string,
 ) {
-  if (warmedNavigationRoutes.has(href)) return;
-  warmedNavigationRoutes.add(href);
+  // The router deduplicates fresh entries and renews expired route data.
   router.prefetch(href);
 }
 
@@ -133,11 +132,13 @@ function HeaderWalletButton({
     wallet,
     hasSession,
     connecting,
+    openingWallet,
     disconnecting,
     openWallet,
     preloadWallet,
     disconnect,
   } = useWallet();
+  const router = useRouter();
   const menuId = useId();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const busyRef = useRef(false);
@@ -157,7 +158,7 @@ function HeaderWalletButton({
   const label = disconnecting
     ? "Disconnecting"
     : connecting
-      ? "Opening wallet"
+      ? openingWallet ? "Opening wallet" : "Loading wallet"
       : wallet
         ? shortenAddress(wallet.account)
         : hasSession
@@ -197,11 +198,21 @@ function HeaderWalletButton({
           }
         }}
       >
-        {label}
+        <span>{label}</span>
+        {wallet && !connecting && !disconnecting ? <NavigationChevronIcon /> : null}
       </button>
       {menuOpen && wallet ? (
         <div className={styles.walletMenu} id={menuId} role="group" aria-label="Wallet actions">
-          <Link href="/profile" prefetch={false} onClick={onClose}>Profile</Link>
+          <Link href="/profile" prefetch={false}
+            onFocus={() => warmNavigationRoute(router, "/profile")}
+            onPointerEnter={() => warmNavigationRoute(router, "/profile")}
+            onPointerDown={() => warmNavigationRoute(router, "/profile")}
+            onClick={onClose}>Profile</Link>
+          <button type="button" disabled={disconnecting} onClick={() => {
+            onClose();
+            triggerRef.current?.focus();
+            openWallet();
+          }}>Manage wallets</button>
           <button type="button" onClick={async () => {
             try {
               await navigator.clipboard.writeText(wallet.account);
@@ -209,7 +220,7 @@ function HeaderWalletButton({
             } catch {
               setFeedback("Could not copy address. Try again.");
             }
-          }}>Copy Address</button>
+          }}>Copy address</button>
           <button type="button" aria-disabled={disconnecting || undefined} aria-busy={disconnecting || undefined} onClick={async () => {
             if (busyRef.current) return;
             busyRef.current = true;
@@ -263,6 +274,7 @@ function DesktopNavigation() {
             aria-current={current ? "page" : undefined}
             onFocus={() => warmNavigationRoute(router, item.href)}
             onPointerEnter={() => warmNavigationRoute(router, item.href)}
+            onPointerDown={() => warmNavigationRoute(router, item.href)}
           >
             {item.label}
           </Link>
@@ -448,6 +460,7 @@ export function MobileNavigation({
             tabIndex={open ? undefined : -1}
             onFocus={() => warmNavigationRoute(router, item.href)}
             onPointerEnter={() => warmNavigationRoute(router, item.href)}
+            onPointerDown={() => warmNavigationRoute(router, item.href)}
             onClick={onNavigate}
           >
             <span>{item.label}</span>

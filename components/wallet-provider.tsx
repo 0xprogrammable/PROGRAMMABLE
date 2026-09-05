@@ -9,7 +9,6 @@ import {
   ChevronDown,
   Copy,
   LogOut,
-  Network,
   Wallet,
   X,
 } from "lucide-react";
@@ -163,9 +162,11 @@ type WalletContextValue = {
   username: string;
   avatarDataUrl: string;
   authReady: boolean;
+  sessionReady: boolean;
   authenticated: boolean;
   hasSession: boolean;
   connecting: boolean;
+  openingWallet: boolean;
   disconnecting: boolean;
   switchingNetwork: boolean;
   preloadWallet: () => void;
@@ -359,8 +360,11 @@ function getWalletNetwork(expectedChainId?: string) {
 
 function getWalletNetworkLabel(chainId: string) {
   if (chainId === appChainHex) return appNetworkName;
-  if (chainId === robinhoodChainHex) return robinhoodChain.name;
-  return chainId;
+  if (chainId === robinhoodChainHex) return "Robinhood";
+  const chainNumber = Number(chainId);
+  return Number.isSafeInteger(chainNumber) && chainNumber > 0
+    ? `Network ${chainNumber}`
+    : "Unknown network";
 }
 
 export function getWalletSessionAction(ready: boolean, authenticated: boolean) {
@@ -993,6 +997,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   return (
     <DeferredWalletProvider
       active={active}
+      openingWallet={pendingAction !== null}
       configuredValue={configuredValue}
       loadFailed={loadFailed}
       onActivate={activateWalletRuntime}
@@ -1014,6 +1019,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
 function DeferredWalletProvider({
   active,
+  openingWallet,
   children,
   configuredValue,
   loadFailed,
@@ -1021,6 +1027,7 @@ function DeferredWalletProvider({
   onPreload,
 }: Readonly<{
   active: boolean;
+  openingWallet: boolean;
   children: ReactNode;
   configuredValue: WalletContextValue | null;
   loadFailed: boolean;
@@ -1034,9 +1041,11 @@ function DeferredWalletProvider({
       username: "",
       avatarDataUrl: "",
       authReady: false,
+      sessionReady: false,
       authenticated: false,
       hasSession: false,
       connecting: active && !loadFailed,
+      openingWallet: openingWallet && !loadFailed,
       disconnecting: false,
       switchingNetwork: false,
       preloadWallet: onPreload,
@@ -1104,7 +1113,7 @@ function DeferredWalletProvider({
         throw new Error("Wallet sign-in is still loading");
       },
     }),
-    [active, loadFailed, onActivate, onPreload],
+    [active, loadFailed, onActivate, onPreload, openingWallet],
   );
 
   return (
@@ -1240,6 +1249,7 @@ function PrivyWalletBridge({
   const [walletLoginStatus, setWalletLoginStatus] = useState("");
   const [sessionSuppressed, setSessionSuppressed] = useState(false);
   const [switchingNetwork, setSwitchingNetwork] = useState(false);
+  const networkSwitchPendingRef = useRef(false);
   const [error, setError] = useState("");
   const [providerTimedOut, setProviderTimedOut] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState<{
@@ -1448,20 +1458,39 @@ function PrivyWalletBridge({
     };
   }, [connectedWalletAddress, connectedWalletChainId]);
   const walletLinked = connectedWallet?.linked === true;
+  const walletSessionGenerationRef = useRef(0);
   const walletRequestSessionRef = useRef({
-    authenticated: activeAuthenticated,
+    authenticated: activeAuthenticated && ready && walletsReady && !disconnecting,
     privyUserId: user?.id ?? null,
     account: wallet?.account ?? null,
     walletCapability: connectedWallet ?? null,
   });
-  useEffect(() => {
-    walletRequestSessionRef.current = {
-      authenticated: activeAuthenticated,
+  useLayoutEffect(() => {
+    const previous = walletRequestSessionRef.current;
+    const current = {
+      authenticated: activeAuthenticated && ready && walletsReady && !disconnecting,
       privyUserId: user?.id ?? null,
       account: wallet?.account ?? null,
       walletCapability: connectedWallet ?? null,
     };
-  }, [activeAuthenticated, connectedWallet, user?.id, wallet?.account]);
+    if (previous.authenticated !== current.authenticated
+      || previous.privyUserId !== current.privyUserId
+      || previous.account?.toLowerCase() !== current.account?.toLowerCase()
+      || previous.walletCapability?.getEthereumProvider !== current.walletCapability?.getEthereumProvider
+      || previous.walletCapability?.switchChain !== current.walletCapability?.switchChain) {
+      walletSessionGenerationRef.current += 1;
+    }
+    walletRequestSessionRef.current = current;
+  }, [activeAuthenticated, connectedWallet, disconnecting, ready, user?.id, wallet?.account, walletsReady]);
+  useLayoutEffect(() => () => {
+    walletSessionGenerationRef.current += 1;
+    walletRequestSessionRef.current = {
+      authenticated: false,
+      privyUserId: null,
+      account: null,
+      walletCapability: null,
+    };
+  }, []);
   const providerSettled = isWalletProviderSettled(
     ready,
     walletsReady,
@@ -1839,6 +1868,8 @@ function PrivyWalletBridge({
   const disconnect = useCallback(async (options?: {
     showDialogOnFailure?: boolean;
   }) => {
+    walletSessionGenerationRef.current += 1;
+    walletRequestSessionRef.current.authenticated = false;
     applicantRefreshUserGate.invalidate();
     setDisconnecting(true);
     setError("");
@@ -1895,20 +1926,39 @@ function PrivyWalletBridge({
   }, [wallet]);
 
   const switchWalletNetwork = useCallback(async (expectedChainId?: string) => {
-    if (!connectedWallet) return false;
+    if (!connectedWallet || !wallet || !ownerUserId || networkSwitchPendingRef.current) return false;
+    const expectedAccount = wallet.account.toLowerCase();
+    const expectedUser = ownerUserId;
+    const expectedGeneration = walletSessionGenerationRef.current;
+    const isCurrentSession = () => {
+      const current = walletRequestSessionRef.current;
+      return walletSessionGenerationRef.current === expectedGeneration
+        && current.authenticated
+        && current.privyUserId === expectedUser
+        && current.account?.toLowerCase() === expectedAccount
+        // Privy replaces the public wallet wrapper when its chain changes.
+        // Connection methods remain stable until the underlying wallet changes.
+        && current.walletCapability?.getEthereumProvider === connectedWallet.getEthereumProvider
+        && current.walletCapability?.switchChain === connectedWallet.switchChain;
+    };
+    if (!isCurrentSession()) return false;
     const target = getWalletNetwork(expectedChainId);
     if (!target) {
       setError("The approved launch network is not available in this environment.");
       return false;
     }
 
+    networkSwitchPendingRef.current = true;
     setSwitchingNetwork(true);
     setError("");
 
     try {
       await connectedWallet.switchChain(target.chain.id);
+      if (!isCurrentSession()) return false;
       const provider = await connectedWallet.getEthereumProvider();
+      if (!isCurrentSession()) return false;
       const connectedChainId = await provider.request({ method: "eth_chainId" });
+      if (!isCurrentSession()) return false;
       if (
         typeof connectedChainId !== "string"
         || normalizeChainId(connectedChainId) !== target.chainHex
@@ -1916,14 +1966,28 @@ function PrivyWalletBridge({
         setError(`Unable to verify ${target.name}. Try again.`);
         return false;
       }
+      if (connectedWallet.walletClientType !== "privy" && connectedWallet.walletClientType !== "privy-v2") {
+        const accounts = await provider.request({ method: "eth_accounts" });
+        if (!isCurrentSession()) return false;
+        if (!Array.isArray(accounts) || typeof accounts[0] !== "string"
+          || accounts[0].toLowerCase() !== expectedAccount) {
+          setError("The active wallet changed. Reconnect and try again.");
+          return false;
+        }
+      }
       return true;
-    } catch {
-      setError(`Unable to switch to ${target.name}. Try again.`);
+    } catch (cause) {
+      if (isCurrentSession()) {
+        const rejected = typeof cause === "object" && cause !== null
+          && "code" in cause && cause.code === 4001;
+        setError(rejected ? "Network change cancelled." : `Unable to switch to ${target.name}. Try again.`);
+      }
       return false;
     } finally {
+      networkSwitchPendingRef.current = false;
       setSwitchingNetwork(false);
     }
-  }, [connectedWallet]);
+  }, [connectedWallet, ownerUserId, wallet]);
 
   const sendTransaction = useCallback(
     async (transaction: PreparedTransaction) => {
@@ -2752,10 +2816,12 @@ function PrivyWalletBridge({
       username,
       avatarDataUrl,
       authReady: ready,
+      sessionReady: providerSettled,
       authenticated: activeAuthenticated,
       hasSession,
       connecting:
         loginPending || (!providerSettled && !providerTimedOut),
+      openingWallet: loginPending || autoAction !== null,
       disconnecting,
       switchingNetwork,
       preloadWallet: () => undefined,
@@ -2791,6 +2857,7 @@ function PrivyWalletBridge({
     }),
     [
       activeAuthenticated,
+      autoAction,
       avatarDataUrl,
       authorizeGithubLaunchApp,
       connectGithub,
@@ -2858,7 +2925,6 @@ function PrivyWalletBridge({
           disconnecting={disconnecting}
           error={error}
           status={walletLoginStatus}
-          switchingNetwork={switchingNetwork}
           walletOptions={walletOptions}
           onAddWallet={addWallet}
           onReconnectWallet={reconnectWallet}
@@ -2872,7 +2938,6 @@ function PrivyWalletBridge({
             setError("");
             setDialogOpen(false);
           }}
-          onSwitchNetwork={switchWalletNetwork}
         />
       ) : null}
     </>
@@ -2889,9 +2954,11 @@ function UnconfiguredWalletProvider({ children }: { children: ReactNode }) {
       username: "",
       avatarDataUrl: "",
       authReady: false,
+      sessionReady: false,
       authenticated: false,
       hasSession: false,
       connecting: false,
+      openingWallet: false,
       disconnecting: false,
       switchingNetwork: false,
       preloadWallet: () => undefined,
@@ -2996,7 +3063,6 @@ function WalletDialog({
   disconnecting,
   error,
   status,
-  switchingNetwork,
   walletOptions,
   onAddWallet,
   onReconnectWallet,
@@ -3005,7 +3071,6 @@ function WalletDialog({
   onLogout,
   onRetryLogin,
   onSelectWallet,
-  onSwitchNetwork,
 }: {
   wallet: WalletState | null;
   authenticated: boolean;
@@ -3015,7 +3080,6 @@ function WalletDialog({
   disconnecting: boolean;
   error: string;
   status: string;
-  switchingNetwork: boolean;
   walletOptions: readonly WalletState[];
   onAddWallet: () => void;
   onReconnectWallet: () => void;
@@ -3024,7 +3088,6 @@ function WalletDialog({
   onLogout: () => Promise<boolean>;
   onRetryLogin: () => void;
   onSelectWallet: (account: `0x${string}`) => void;
-  onSwitchNetwork: () => void;
 }) {
   const title = wallet
     ? "Connected account"
@@ -3041,8 +3104,13 @@ function WalletDialog({
       {wallet ? (
         <div className="connected-wallet">
           <div className="wallet-account-row">
-            <strong>{shortenAddress(wallet.account)}</strong>
+            <span>Active wallet</span>
+            <strong>{wallet.account.slice(0, 22)}<wbr />{wallet.account.slice(22)}</strong>
           </div>
+          <dl className="wallet-network-row">
+            <dt>Wallet network</dt>
+            <dd>{getWalletNetworkLabel(wallet.chainId)}</dd>
+          </dl>
 
           {walletOptions.length > 1 ? (
             <div className="wallet-switcher" aria-label="Connected wallets">
@@ -3061,29 +3129,11 @@ function WalletDialog({
                       onClick={() => onSelectWallet(candidate.account)}
                     >
                       <span>{shortenAddress(candidate.account)}</span>
-                      <small>{getWalletNetworkLabel(candidate.chainId)}</small>
                       {active ? <Check aria-hidden="true" size={15} /> : null}
                     </button>
                   );
                 })}
               </div>
-            </div>
-          ) : null}
-
-          {wallet.chainId !== appChainHex && wallet.chainId !== robinhoodChainHex ? (
-            <div className="wallet-network-warning">
-              <p className="inline-notice warning-notice">
-                Programmable uses {appNetworkName} for this release
-              </p>
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={switchingNetwork}
-                onClick={onSwitchNetwork}
-              >
-                <Network aria-hidden="true" size={16} />
-                {switchingNetwork ? "Switching" : `Switch to ${appNetworkName}`}
-              </button>
             </div>
           ) : null}
 
@@ -3292,10 +3342,10 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
     wallet,
     username,
     avatarDataUrl,
-    authReady,
     authenticated,
     hasSession,
     connecting,
+    openingWallet,
     disconnecting,
     disconnect,
     openWallet,
@@ -3311,8 +3361,7 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
   const [menuError, setMenuError] = useState("");
   const [partnerAdminAccount, setPartnerAdminAccount] =
     useState<string | null>(null);
-  const hydrationPending = !authReady;
-  const openingWallet = connecting && authReady;
+  const hydrationPending = connecting && !openingWallet;
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -3506,6 +3555,18 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
         >
           API keys
         </Link>
+        <button
+          type="button"
+          disabled={disconnecting}
+          tabIndex={menuOpen ? undefined : -1}
+          onClick={() => {
+            setMenuOpen(false);
+            menuButtonRef.current?.focus();
+            openWallet();
+          }}
+        >
+          Manage wallets
+        </button>
         {partnerAdminAccount?.toLowerCase()
             === wallet.account.toLowerCase() ? (
           <Link

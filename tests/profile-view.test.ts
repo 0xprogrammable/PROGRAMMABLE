@@ -82,6 +82,10 @@ const profileViewSource = readFileSync(
   new URL("../components/profile-view.tsx", import.meta.url),
   "utf8",
 );
+const profileSkeletonSource = readFileSync(
+  new URL("../components/profile-skeleton.tsx", import.meta.url),
+  "utf8",
+);
 
 function profileCssDeclarationsFor(selectorFragment: string) {
   return [...profileExperienceCss.matchAll(/([^{}]+)\{([^{}]*)\}/gu)]
@@ -534,18 +538,12 @@ describe("profile workspace loading state", () => {
 
   it("holds cold profile geometry until wallet and local profile hydration settle", () => {
     expect(profileViewSource).toContain(
-      "clientHydrated &&",
-    );
-    expect(profileViewSource).toContain(
-      "requestedProfileAccount === null &&",
-    );
-    expect(profileViewSource).toContain(
-      "(hasSession || Boolean(account))",
+      "Boolean(requestedProfileAccount) || hasSession || Boolean(account)",
     );
     expect(profileViewSource).toMatch(
       /showDashboard \? \([\s\S]*?<ProfileLoadingSkeleton label="Loading profile" showHero \/>[\s\S]*?\) : \([\s\S]*?className=\{`\$\{styles\.connectCard\}/,
     );
-    expect(profileViewSource).toContain(
+    expect(profileSkeletonSource).toContain(
       "showHero ? styles.profileSkeletonPage : styles.profileSkeletonInline",
     );
     expect(profileViewSource).toContain(
@@ -569,11 +567,11 @@ describe("profile workspace loading state", () => {
       /@media \(max-width:\s*620px\)[\s\S]*?\.profileSkeletonBanner\s*\{[^}]*height:\s*108px;/s,
     );
     expect(profileViewSource).toContain("<ProfileProjectsLoadingState />");
-    expect(profileViewSource).toContain(
-      "Array.from({ length: profileClaimPageSize }, (_, item)",
+    expect(profileSkeletonSource).toContain(
+      "Array.from({ length: 4 }, (_, item)",
     );
-    expect(profileViewSource).toMatch(
-      /className=\{styles\.profileSkeletonClaims\}[\s\S]*?className=\{styles\.profileSkeletonSectionHeader\}[\s\S]*?className=\{styles\.profileSkeletonRows\}[\s\S]*?Array\.from\(\{ length: profileClaimPageSize \}/,
+    expect(profileSkeletonSource).toMatch(
+      /className=\{styles\.profileSkeletonClaims\}[\s\S]*?className=\{styles\.profileSkeletonSectionHeader\}[\s\S]*?className=\{styles\.profileSkeletonRows\}[\s\S]*?Array\.from\(\{ length: 4 \}/,
     );
     expect(profileViewSource).not.toContain("profileSkeletonPrediction");
     expect(profileExperienceCss).toMatch(

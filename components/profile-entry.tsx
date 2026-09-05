@@ -7,8 +7,10 @@ import { useSearchParams } from "next/navigation";
 import { useWallet } from "@/components/wallet-provider";
 import { useViewChain, type ViewChainId } from "@/components/view-chain";
 import { ProfileChainSelector } from "@/components/profile-chain-selector";
+import { ProfileLoadingSkeleton } from "@/components/profile-skeleton";
 
 import styles from "./profile-entry.module.css";
+import profileStyles from "./profile-experience.module.css";
 
 const ethereumAddressPattern = /^0x[0-9a-f]{40}$/;
 const loadProfileView = () =>
@@ -114,12 +116,14 @@ function ProfileEntryFrame({
 }
 
 export function ProfileEntryLoadingState() {
-  return <ProfileEntryFrame loading />;
+  return <div className={`${profileStyles.page} page-width`}>
+    <ProfileLoadingSkeleton label="Loading profile" showHero />
+  </div>;
 }
 
 export function ProfileEntry() {
   const searchParams = useSearchParams();
-  const { connecting, openWallet, wallet } = useWallet();
+  const { connecting, openingWallet, openWallet, wallet } = useWallet();
   const { viewChainId, setViewChainId } = useViewChain();
   const publicProfileRequested = profileEntryHasPublicAccount(
     searchParams?.getAll("account") ?? [],
@@ -132,7 +136,9 @@ export function ProfileEntry() {
     return <ProfileView viewChainId={viewChainId} onChangeChain={setViewChainId} />;
   }
 
-  if (connecting) return <ProfileEntryFrame loading viewChainId={viewChainId} onChangeChain={setViewChainId} />;
+  if (connecting) return openingWallet
+    ? <ProfileEntryFrame loading viewChainId={viewChainId} onChangeChain={setViewChainId} />
+    : <ProfileEntryLoadingState />;
 
   function connectWallet() {
     preloadProfileView();

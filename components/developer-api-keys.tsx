@@ -592,7 +592,7 @@ export function DeveloperApiKeys({
   agentSetupText = PROGRAMMABLE_AGENT_SETUP_TEXT_V1,
 }: DeveloperApiKeysProps) {
   const {
-    authReady,
+    sessionReady: authReady,
     connecting,
     getAccessToken,
     getIdentityToken,

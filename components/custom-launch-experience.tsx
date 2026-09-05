@@ -2934,9 +2934,14 @@ function CustomLaunchRuntime({
       approvedRoute?.chainId,
     );
   const switchApprovedNetwork = async () => {
+    if (!approvedRoute || switchingNetwork) return;
+    const requestBoundary = sessionBoundaryGuardRef.current.snapshot(sessionBoundaryKey);
+    const requestGeneration = flowGenerationRef.current;
     setError("");
     setStatusMessage(`Switching to ${chainLabel(approvedRoute?.chainId)}`);
     const switched = await switchNetwork(approvedRoute?.chainId);
+    if (!sessionBoundaryGuardRef.current.isCurrent(requestBoundary)
+      || requestGeneration !== flowGenerationRef.current) return;
     if (switched) {
       setStatusMessage(`${chainLabel(approvedRoute?.chainId)} connected`);
       return;

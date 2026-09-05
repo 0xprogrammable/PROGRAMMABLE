@@ -13,13 +13,18 @@
 .option {
   align-items: center;
   border: 1px solid transparent;
-  border-radius: var(--webde-radius-control);
+  border-radius: calc(var(--webde-radius-control) - 4px);
   color: var(--webde-muted);
   cursor: pointer;
   display: flex;
+  flex: none;
   height: 44px;
   justify-content: center;
   position: relative;
+  transition:
+    background-color 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    border-color 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    color 180ms cubic-bezier(0.32, 0.72, 0, 1);
   width: 44px;
 }
 
@@ -27,6 +32,12 @@
 .option:has(input:focus-visible) { outline: 2px solid var(--webde-muted); outline-offset: 2px; }
 .mark { height: 20px; width: 20px; }
 .robinhood { background: currentColor; height: 21px; mask: url("/brand/networks/robinhood-feather-white.svg") center / contain no-repeat; width: 16px; }
+
+.selector:disabled .option { cursor: default; opacity: 0.6; }
+
+@media (prefers-reduced-motion: reduce) {
+  .option { transition: none; }
+}
 
 @media (hover: hover) and (pointer: fine) {
   .option:hover { color: var(--webde-ink); }
