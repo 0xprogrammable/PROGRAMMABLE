@@ -94,9 +94,9 @@ describe("Robinhood Chain V4 public self-serve release discovery", () => {
         actionRequiredMeaning:
           "server-authored-remediation-not-wallet-action",
         walletStageStatusCommand:
-          "programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until authorized",
+          "programmable-launch status LAUNCH_ID --api-version 4 --chain-id 4663 --watch --until authorized",
         finalityStatusCommand:
-          "programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until finalized",
+          "programmable-launch status LAUNCH_ID --api-version 4 --chain-id 4663 --watch --until finalized",
         sourceVerificationStartsAfter: "finalized",
         sourceVerificationIndependentFromFinality: true,
         indexingTradingAndPublicationIndependent: true,
@@ -346,7 +346,7 @@ describe("Robinhood Chain V4 public self-serve release discovery", () => {
     expect(publicDocs).toContain("4.0.0");
     expect(publicDocs).toContain("releaseReady: false");
     expect(publicDocs).toContain(
-      "programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663",
+      "programmable-launch status LAUNCH_ID --api-version 4 --chain-id 4663",
     );
     for (const status of [
       "received",

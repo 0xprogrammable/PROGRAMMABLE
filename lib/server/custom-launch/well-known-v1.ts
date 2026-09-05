@@ -1,5 +1,6 @@
 import "server-only";
 import { V4_API_DISCOVERY } from "../../custom-launch/v4-api-discovery";
+import { PROGRAMMABLE_AGENT_INTAKE_V1 } from "../../custom-launch/agent-setup-v1";
 
 import { resolveCustomRegistryPublicManifestV1 } from
   "./registry-manifest-v1";
@@ -36,6 +37,7 @@ export function programmableWellKnownDocumentV1(
     documentationUrl: "https://developers.programmable.family/",
     sourceUrl: "https://github.com/programmablehq/Developers",
     customLaunchApi: Object.freeze({
+      intake: PROGRAMMABLE_AGENT_INTAKE_V1,
       status: "live" as const,
       readStatus: "live" as const,
       apiVersion: "3" as const,
@@ -539,9 +541,9 @@ export function programmableWellKnownDocumentV1(
             actionRequiredMeaning:
               "server-authored-remediation-not-wallet-action" as const,
             walletStageStatusCommand:
-              "programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until authorized" as const,
+              "programmable-launch status LAUNCH_ID --api-version 4 --chain-id 4663 --watch --until authorized" as const,
             finalityStatusCommand:
-              "programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until finalized" as const,
+              "programmable-launch status LAUNCH_ID --api-version 4 --chain-id 4663 --watch --until finalized" as const,
             sourceVerificationStartsAfter: "finalized" as const,
             sourceVerificationIndependentFromFinality: true as const,
             indexingTradingAndPublicationIndependent: true as const,
