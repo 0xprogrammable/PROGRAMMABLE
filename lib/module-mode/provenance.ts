@@ -10,6 +10,7 @@ export const moduleModeLaunchAbi = parseAbi([
   "event ModuleNativeLaunched(bytes32 indexed launchId,address indexed launchWallet,address indexed token,bytes32 poolId,bytes32 recipeHash,address hook,address positionRecipient,uint256 positionTokenId,uint256 initialBuyNative,uint256 initialBuyTokens)",
   "event ModuleNativeProgramBound(bytes32 indexed launchId,bytes32 indexed launchKey,address indexed runtime,bytes32 fundingHash,uint256 totalFunding)",
   "event ModuleNativeConfigurationBound(bytes32 indexed launchId,bytes32 metadataHash,bytes32 creatorConfigurationHash,bytes32 economicsHash)",
+  "event ModuleNativeTokenIdentityBound(bytes32 indexed launchId,bytes32 creatorSalt,bytes32 graffiti)",
   "function getLaunch(address token) view returns ((bytes32 launchId,address launchWallet,address token,bytes32 poolId,bytes32 recipeHash,address hook,address positionRecipient,uint256 positionTokenId,uint256 initialBuyNative,uint256 initialBuyTokens,address runtime,bytes32 launchKey))",
   "function launchIdentityVersion() pure returns (uint256)",
   "function getLaunchIdentity(address token) view returns ((bytes32 launchId,address launchWallet,address token,address poolManager,bytes32 poolId,address hook,bytes32 recipeHash))",
@@ -49,15 +50,15 @@ function launchRecord(value: unknown) {
     initialBuyTokens: uint(item.initialBuyTokens, "initialBuyTokens", true), runtime: address(item.runtime, "runtime"),
     launchKey: hash(item.launchKey, "launchKey") });
 }
-function event(value: unknown, block: Block, tx: Hex, source: Address, name: "ModuleNativeLaunched" | "ModuleNativeProgramBound" | "ModuleNativeConfigurationBound") {
+function event(value: unknown, block: Block, tx: Hex, source: Address, name: "ModuleNativeLaunched" | "ModuleNativeProgramBound" | "ModuleNativeConfigurationBound" | "ModuleNativeTokenIdentityBound") {
   const item = bound(value, ["transactionHash", "logIndex", "address", "topics", "data", "removed"], block, name);
   equal(item.removed, false, `${name}.removed`);
   equal(address(item.address, `${name}.address`), source, `${name}.address`);
   equal(hash(item.transactionHash, `${name}.transactionHash`), tx, `${name}.transactionHash`);
   const topics = list(item.topics, `${name}.topics`, 4).map((topic) => hash(topic, `${name}.topic`)) as [Hex, ...Hex[]];
-  if (topics.length !== (name === "ModuleNativeConfigurationBound" ? 2 : 4)) fail(`${name}.topics`);
+  if (topics.length !== (name === "ModuleNativeLaunched" || name === "ModuleNativeProgramBound" ? 4 : 2)) fail(`${name}.topics`);
   const data = bytes(item.data, `${name}.data`, 224);
-  const words = name === "ModuleNativeLaunched" ? 7 : name === "ModuleNativeProgramBound" ? 2 : 3;
+  const words = name === "ModuleNativeLaunched" ? 7 : name === "ModuleNativeConfigurationBound" ? 3 : 2;
   if (data.length !== 2 + words * 64) fail(`${name}.data-length`);
   try {
     const decoded = decodeEventLog({ abi: moduleModeLaunchAbi, eventName: name, topics, data, strict: true });
@@ -106,7 +107,7 @@ function finality(value: unknown, source: ModuleModeRelease, block: Block, trans
   });
   for (const chain of [1, 4663]) {
     const pair = providers.filter((p) => p.chainId === chain);
-    if (pair.length !== 2 || pair[0].id === pair[1].id || pair[0].trustDomain === pair[1].trustDomain) fail("verification.provider-quorum");
+    if (pair.length !== 2 || pair[0]!.id === pair[1]!.id || pair[0]!.trustDomain === pair[1]!.trustDomain) fail("verification.provider-quorum");
   }
   return Object.freeze({ verificationDigest: hash(proof.verificationDigest, "verification.verificationDigest"),
     ethereumBlockNumber: number, ethereumBlockHash: blockHash, batchNumber: uint(posting.batchNumber, "verification.batchNumber"),
@@ -121,7 +122,7 @@ export function normalizeModuleModeLaunch(evidence: unknown, profile: unknown) {
   const release = bindActiveModuleModeRelease(profile);
   const pins = release.contracts;
   const input = record(evidence, ["schemaVersion", "header", "receipt", "event", "programEvent", "configurationEvent",
-    "getLaunch", "identity", "token", "pool", "program", "registry", "runtimeReads", "verification"], "evidence");
+    "tokenIdentityEvent", "getLaunch", "identity", "token", "pool", "program", "registry", "runtimeReads", "verification"], "evidence");
   equal(input.schemaVersion, MODULE_MODE_EVIDENCE_SCHEMA, "evidence.schemaVersion");
   const header = record(input.header, BLOCK_KEYS, "header");
   equal(header.chainId, 4663, "header.chainId");
@@ -146,7 +147,9 @@ export function normalizeModuleModeLaunch(evidence: unknown, profile: unknown) {
   }
   const programEvent = event(input.programEvent, block, tx, pins.launcher.address, "ModuleNativeProgramBound");
   const configuration = event(input.configurationEvent, block, tx, pins.launcher.address, "ModuleNativeConfigurationBound");
-  if (new Set([emitted.logIndex, programEvent.logIndex, configuration.logIndex]).size !== 3) fail("event.duplicate-log-index");
+  const tokenIdentityEvent = event(input.tokenIdentityEvent, block, tx, pins.launcher.address, "ModuleNativeTokenIdentityBound");
+  if (new Set([emitted.logIndex, programEvent.logIndex, configuration.logIndex, tokenIdentityEvent.logIndex]).size !== 4) fail("event.duplicate-log-index");
+  equal(hash(tokenIdentityEvent.args.launchId, "tokenIdentityEvent.launchId"), launch.launchId, "tokenIdentityEvent.launchId");
   equal(hash(programEvent.args.launchId, "programEvent.launchId"), launch.launchId, "programEvent.launchId");
   equal(hash(programEvent.args.launchKey, "programEvent.launchKey"), launch.launchKey, "programEvent.launchKey");
   equal(address(programEvent.args.runtime, "programEvent.runtime"), launch.runtime, "programEvent.runtime");
@@ -172,9 +175,11 @@ export function normalizeModuleModeLaunch(evidence: unknown, profile: unknown) {
   const symbol = text(token.symbol, "token.symbol", 16);
   const creatorSalt = bytes(token.creatorSalt, "token.creatorSalt", 32);
   if (creatorSalt.length !== 66) fail("token.creatorSalt");
+  equal(bytes(tokenIdentityEvent.args.creatorSalt, "tokenIdentityEvent.creatorSalt", 32), creatorSalt, "tokenIdentityEvent.creatorSalt");
   const graffiti = keccak256(encodeAbiParameters(parseAbiParameters("string,uint256,address,address,bytes32"),
     ["programmable.module-mode.native-token.v1", 4663n, pins.launcher.address, launch.launchWallet, creatorSalt]));
   equal(hash(token.graffiti, "token.graffiti"), graffiti, "token.graffiti");
+  equal(hash(tokenIdentityEvent.args.graffiti, "tokenIdentityEvent.graffiti"), graffiti, "tokenIdentityEvent.graffiti");
   const salt = keccak256(encodeAbiParameters(parseAbiParameters("string,string,uint8,address,bytes32"), [name, symbol, 18, pins.launcher.address, graffiti]));
   equal(getCreate2Address({ from: pins.tokenFactory.address, salt, bytecodeHash: release.tokenCreationCodeHash }).toLowerCase(), launch.token, "token.create2");
   equal(address(token.factoryPrediction, "token.factoryPrediction"), launch.token, "token.factoryPrediction");
@@ -212,7 +217,7 @@ export function normalizeModuleModeLaunch(evidence: unknown, profile: unknown) {
       factoryCodeHash: hash(s.factoryCodeHash, "selection.factoryCodeHash"), moduleCodeHash: hash(s.moduleCodeHash, "selection.moduleCodeHash"), callbackGas: gas, config });
   });
   const families = list(program.families, "program.families", 16).map((family) => hash(family, "program.familyId"));
-  if (families.length !== selections.length || families.some((family, index) => index > 0 && family <= families[index - 1])
+  if (families.length !== selections.length || families.some((family, index) => index > 0 && family <= families[index - 1]!)
     || new Set(selections.map((s) => s.packageId)).size !== selections.length) fail("program.family-order");
   const programHash = keccak256(encodeAbiParameters(parseAbiParameters(`bytes32,${SELECTIONS}`), [keccak256(toHex("programmable.module-mode.native-program.v1")), selections]));
   equal(hash(program.programHash, "program.programHash"), programHash, "program.programHash");
@@ -231,20 +236,20 @@ export function normalizeModuleModeLaunch(evidence: unknown, profile: unknown) {
   if (rawRevisions.length !== selections.length) fail("registry.revisions.length");
   const revisions = rawRevisions.map((raw, index) => {
     const r = record(raw, ["packageId", "familyId", "factory", "factoryCodeHash", "moduleCodeHash", "manifestHash", "callbackGas", "enabled", "author"], "revision");
-    for (const field of ["packageId", "factoryCodeHash", "moduleCodeHash"] as const) equal(hash(r[field], `revision.${field}`), selections[index][field], `revision.${field}`);
+    for (const field of ["packageId", "factoryCodeHash", "moduleCodeHash"] as const) equal(hash(r[field], `revision.${field}`), selections[index]![field], `revision.${field}`);
     equal(hash(r.familyId, "revision.familyId"), families[index], "revision.familyId");
-    equal(address(r.factory, "revision.factory"), selections[index].factory, "revision.factory");
-    equal(r.callbackGas, selections[index].callbackGas, "revision.callbackGas");
+    equal(address(r.factory, "revision.factory"), selections[index]!.factory, "revision.factory");
+    equal(r.callbackGas, selections[index]!.callbackGas, "revision.callbackGas");
     // Availability can change after a successful launch, even in the same finalized block.
     if (typeof r.enabled !== "boolean") fail("revision.enabled");
-    return Object.freeze({ packageId: selections[index].packageId, familyId: families[index],
+    return Object.freeze({ packageId: selections[index]!.packageId, familyId: families[index],
       manifestHash: hash(r.manifestHash, "revision.manifestHash"), author: address(r.author, "revision.author") });
   });
   const rawInstances = list(program.instances, "program.instances", 16);
   if (rawInstances.length !== selections.length) fail("program.instances.length");
   const instances = rawInstances.map((raw, index) => {
     const item = record(raw, ["instanceId", "packageId", "configHash", "factory", "factoryCodeHash", "module", "moduleCodeHash", "callbackGas", "bindingHash"], "instance");
-    const selected = selections[index];
+    const selected = selections[index]!;
     const instanceId = keccak256(encodeAbiParameters(parseAbiParameters("bytes32,uint256"), [launch.launchKey, BigInt(index)]));
     const configHash = keccak256(selected.config);
     equal(hash(item.instanceId, "instance.instanceId"), instanceId, "instance.instanceId");
@@ -259,7 +264,7 @@ export function normalizeModuleModeLaunch(evidence: unknown, profile: unknown) {
   if (new Set(instances.map((instance) => instance.module)).size !== instances.length) fail("instance.duplicate-module");
   const expectedCode = new Map<Address, Hex>(Object.values(pins).map((pin) => [pin.address, pin.runtimeCodeHash]));
   selections.forEach((selection, index) => {
-    for (const [account, codeHash] of [[selection.factory, selection.factoryCodeHash], [instances[index].module, selection.moduleCodeHash]] as const) {
+    for (const [account, codeHash] of [[selection.factory, selection.factoryCodeHash], [instances[index]!.module, selection.moduleCodeHash]] as const) {
       if (expectedCode.has(account) && expectedCode.get(account) !== codeHash) fail("runtime.conflicting-pin");
       if (account === launch.token) fail("runtime.token-as-module");
       expectedCode.set(account, codeHash);
@@ -300,7 +305,7 @@ export function normalizeModuleModeLaunches(evidence: readonly unknown[], profil
   return Object.freeze(list(evidence, "batch", 1000).map((input) => {
     const row = normalizeModuleModeLaunch(input, profile);
     const keys = [row.id, row.launchIdentity, row.poolIdentity, `${row.transactionHash}:${row.logIndex}`];
-    keys.forEach((key, index) => { if (seen[index].has(key)) fail("batch.duplicate-identity"); seen[index].add(key); });
+    keys.forEach((key, index) => { if (seen[index]!.has(key)) fail("batch.duplicate-identity"); seen[index]!.add(key); });
     return row;
   }));
 }

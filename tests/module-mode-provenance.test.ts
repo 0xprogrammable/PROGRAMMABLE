@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import preview from "../config/module-mode/robinhood.preview.json";
-import { bindActiveModuleModeRelease, ModuleModeProvenanceError } from "../lib/module-mode/release";
+import { bindActiveModuleModeRelease, computeModuleModeReleaseDigest, MODULE_MODE_DEPENDENCIES, ModuleModeProvenanceError } from "../lib/module-mode/release";
 import { normalizeModuleModeLaunch, normalizeModuleModeLaunches } from "../lib/module-mode/provenance";
 import { a, h, moduleEvidenceFixture } from "./fixtures/module-mode-evidence";
 
@@ -34,6 +34,7 @@ describe("Module Mode native source provenance",()=>{
   it.each([
     ["header.chainId",1], ["receipt.status","reverted"], ["event.removed",true], ["event.address",a(999)],
     ["programEvent.transactionHash",h(999)], ["configurationEvent.blockHash",h(888)], ["programEvent.logIndex",10],
+    ["tokenIdentityEvent.logIndex",10], ["tokenIdentityEvent.address",a(800)],
     ["getLaunch.record.launchWallet",a(666)], ["identity.version",2], ["identity.record.poolManager",a(777)],
     ["token.creator",a(888)], ["token.factoryPrediction",a(111)], ["token.graffiti",h(99)], ["token.name","Replacement"],
     ["token.totalSupply","999"], ["pool.key.currency0",a(1)], ["pool.key.hooks",a(888)], ["pool.poolId",h(50)],
@@ -63,5 +64,38 @@ describe("Module Mode native source provenance",()=>{
     expect(()=>bindActiveModuleModeRelease({...release,enabledByUser:true})).toThrow("release.keys");
     let accessed=false; Object.defineProperty(evidence.token,"name",{get(){accessed=true;return "x";},enumerable:true});
     expect(()=>normalizeModuleModeLaunch(evidence,release)).toThrow(ModuleModeProvenanceError); expect(accessed).toBe(false);
+  });
+});
+
+
+describe("Module Mode immutable release digest", () => {
+  it("matches the fixed canonical Keccak identity vector and ignores object key order", () => {
+    const { release } = moduleEvidenceFixture();
+    expect(computeModuleModeReleaseDigest(release)).toBe("0xd545a5ca686c4e1f381acdc9af54dc71655a8391e24a8a80fabaf01e6ecbc1cb");
+    const reordered = Object.fromEntries(Object.entries(release).reverse());
+    reordered.contracts = Object.fromEntries(Object.entries(release.contracts).reverse());
+    expect(bindActiveModuleModeRelease(reordered).releaseDigest).toBe(release.releaseDigest);
+  });
+  it.each([
+    ["sourceCommit", "b".repeat(40)], ["startBlock", "51"], ["minimumInitialBuyNative", "1001"],
+    ["tokenCreationCodeHash", h(333)],
+    ...MODULE_MODE_DEPENDENCIES.flatMap((role, index) => [[`contracts.${role}.address`, a(10000 + index)], [`contracts.${role}.runtimeCodeHash`, h(20000 + index)]]),
+  ])("binds %s into the immutable identity", (path, value) => {
+    const { release } = moduleEvidenceFixture(); const old = release.releaseDigest;
+    replace(release, path, value);
+    expect(computeModuleModeReleaseDigest(release)).not.toBe(old);
+    expect(() => bindActiveModuleModeRelease(release)).toThrow("release.computedDigest");
+  });
+  it.each([["schemaVersion", "other"], ["sourceVersion", "other"], ["chainId", 1], ["finalityPolicy", "unfinalized"]])("rejects another fixed identity at %s", (path, value) => {
+    const { release } = moduleEvidenceFixture(); replace(release, path as string, value);
+    expect(() => computeModuleModeReleaseDigest(release)).toThrow(ModuleModeProvenanceError);
+  });
+  it("keeps activation/evidence outside the identity while requiring separate active bindings", () => {
+    const { release } = moduleEvidenceFixture(); const expected = release.releaseDigest;
+    for (const field of ["deploymentEvidenceDigest", "sourceVerificationDigest", "lifecycleEvidenceDigest"] as const) release[field] = h(4567);
+    expect(computeModuleModeReleaseDigest(release)).toBe(expected);
+    expect(bindActiveModuleModeRelease(release).releaseDigest).toBe(expected);
+    expect(computeModuleModeReleaseDigest({ ...release, enabled: false, status: "preview" })).toBe(expected);
+    expect(() => bindActiveModuleModeRelease({ ...release, enabled: false })).toThrow("release.enabled");
   });
 });

@@ -1,4 +1,5 @@
 import { encodeAbiParameters, encodeEventTopics, getCreate2Address, keccak256, parseAbiParameters, toHex, type Address, type Hex } from "viem";
+import { computeModuleModeReleaseDigest } from "../../lib/module-mode/release";
 import preview from "../../config/module-mode/robinhood.preview.json";
 import { moduleModeLaunchAbi } from "../../lib/module-mode/provenance";
 
@@ -13,6 +14,7 @@ export function moduleEvidenceFixture(seed = 0, moduleCount = 2) {
   const release = { ...preview, enabled: true, status: "active", releaseDigest: h(999), sourceCommit: "a".repeat(40),
     deploymentEvidenceDigest: h(901), sourceVerificationDigest: h(902), lifecycleEvidenceDigest: h(903), startBlock: "50",
     minimumInitialBuyNative: "1000", tokenCreationCodeHash: keccak256("0x60026002"), contracts };
+  release.releaseDigest = computeModuleModeReleaseDigest(release);
   const wallet = a(90);
   const name = `Fixture ${seed}`; const symbol = `F${seed}`; const creatorSalt = h(500 + seed);
   const graffiti = keccak256(encodeAbiParameters(parseAbiParameters("string,uint256,address,address,bytes32"),
@@ -35,7 +37,7 @@ export function moduleEvidenceFixture(seed = 0, moduleCount = 2) {
   const launch={launchId,launchWallet:wallet,token,poolId,recipeHash,hook:contracts.hook.address,positionRecipient:a(80),positionTokenId:"1",initialBuyNative:"1000",initialBuyTokens:"90000",runtime:contracts.runtime.address,launchKey};
   const block={chainId:4663,blockNumber:String(100+seed),blockHash:h(400+seed)};
   const transactionHash=h(600+seed);
-  const log = (name:"ModuleNativeLaunched"|"ModuleNativeProgramBound"|"ModuleNativeConfigurationBound",args:Record<string,Address|Hex|bigint>,data:Hex,index:number) => ({...block,transactionHash,logIndex:index,address:contracts.launcher.address,
+  const log = (name:"ModuleNativeLaunched"|"ModuleNativeProgramBound"|"ModuleNativeConfigurationBound"|"ModuleNativeTokenIdentityBound",args:Record<string,Address|Hex|bigint>,data:Hex,index:number) => ({...block,transactionHash,logIndex:index,address:contracts.launcher.address,
     topics:encodeEventTopics({abi:moduleModeLaunchAbi,eventName:name,args}),data,removed:false});
   const funding=families.map(()=>"10");
   const fundingHash=keccak256(encodeAbiParameters(parseAbiParameters("uint256[]"),[funding.map(BigInt)]));
@@ -49,6 +51,7 @@ export function moduleEvidenceFixture(seed = 0, moduleCount = 2) {
     event:log("ModuleNativeLaunched",{launchId,launchWallet:wallet,token},encodeAbiParameters(parseAbiParameters("bytes32,bytes32,address,address,uint256,uint256,uint256"),[poolId,recipeHash,launch.hook,launch.positionRecipient,1n,1000n,90000n]),10),
     programEvent:log("ModuleNativeProgramBound",{launchId,launchKey,runtime:launch.runtime},encodeAbiParameters(parseAbiParameters("bytes32,uint256"),[fundingHash,BigInt(moduleCount*10)]),12),
     configurationEvent:log("ModuleNativeConfigurationBound",{launchId},encodeAbiParameters(parseAbiParameters("bytes32,bytes32,bytes32"),[metadataHash,creatorConfigurationHash,economicsHash]),11),
+    tokenIdentityEvent:log("ModuleNativeTokenIdentityBound",{launchId},encodeAbiParameters(parseAbiParameters("bytes32,bytes32"),[creatorSalt,graffiti]),13),
     getLaunch:{...block,address:contracts.launcher.address,token,tokenFactory:contracts.tokenFactory.address,record:launch},
     identity:{...block,address:contracts.launcher.address,version:1,record:{launchId,launchWallet:wallet,token,poolManager:contracts.poolManager.address,poolId,hook:launch.hook,recipeHash}},
     token:{...block,address:token,name,symbol,decimals:18,totalSupply:"1000000000000000000000000000",creator:contracts.launcher.address,graffiti,creatorSalt,factoryPrediction:token},

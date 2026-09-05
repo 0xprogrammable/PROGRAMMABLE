@@ -1,4 +1,4 @@
-import { isAddress, type Address, type Hex } from "viem";
+import { isAddress, keccak256, toHex, type Address, type Hex } from "viem";
 
 export const MODULE_MODE_SOURCE_VERSION = "module-native-v1" as const;
 export const MODULE_MODE_RELEASE_SCHEMA = "programmable.module-mode-source.v1" as const;
@@ -42,7 +42,7 @@ export function moduleRecord(value: unknown, keys: readonly string[], label: str
     || ![Object.prototype, null].includes(Object.getPrototypeOf(value))) rejectModuleEvidence(`${label}.object`);
   const descriptors = Object.getOwnPropertyDescriptors(value);
   if (Reflect.ownKeys(value).length !== keys.length || Object.keys(descriptors).some((key) =>
-    !keys.includes(key) || !descriptors[key].enumerable || !("value" in descriptors[key]))) rejectModuleEvidence(`${label}.keys`);
+    !keys.includes(key) || !descriptors[key]!.enumerable || !("value" in descriptors[key]!))) rejectModuleEvidence(`${label}.keys`);
   return value as Record<string, unknown>;
 }
 export function moduleBytes(value: unknown, label: string, maximum = 24_576): Hex {
@@ -73,6 +73,41 @@ export function moduleEqual(actual: unknown, expected: unknown, label: string): 
   if (actual !== expected) rejectModuleEvidence(`${label}.mismatch`);
 }
 
+function contractPins(value: unknown) {
+  const rawPins = moduleRecord(value, MODULE_MODE_DEPENDENCIES, "release.contracts");
+  const seen = new Set<string>();
+  return Object.freeze(Object.fromEntries(MODULE_MODE_DEPENDENCIES.map((role) => {
+    const raw = moduleRecord(rawPins[role], ["address", "runtimeCodeHash"], `release.contracts.${role}`);
+    const address = moduleAddress(raw.address, `release.contracts.${role}.address`);
+    if (seen.has(address)) rejectModuleEvidence("release.duplicate-address");
+    seen.add(address);
+    return [role, Object.freeze({ address, runtimeCodeHash: moduleHash(raw.runtimeCodeHash, `release.contracts.${role}.runtimeCodeHash`) })];
+  })) as Record<ModuleModeDependency, ModuleModeContractPin>);
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`).join(",")}}`;
+}
+
+/** Immutable identity only. Activation and lifecycle evidence remain separate, avoiding a proof/hash cycle. */
+export function computeModuleModeReleaseDigest(value: unknown): Hex {
+  if (!value || typeof value !== "object" || Array.isArray(value)) rejectModuleEvidence("releaseIdentity.object");
+  const r = moduleRecord(value, Object.keys(value), "releaseIdentity");
+  moduleEqual(r.schemaVersion, MODULE_MODE_RELEASE_SCHEMA, "releaseIdentity.schemaVersion");
+  moduleEqual(r.sourceVersion, MODULE_MODE_SOURCE_VERSION, "releaseIdentity.sourceVersion");
+  moduleEqual(r.chainId, 4663, "releaseIdentity.chainId");
+  moduleEqual(r.finalityPolicy, MODULE_MODE_FINALITY_POLICY, "releaseIdentity.finalityPolicy");
+  if (typeof r.sourceCommit !== "string" || !/^[0-9a-f]{40}$/u.test(r.sourceCommit)) rejectModuleEvidence("releaseIdentity.sourceCommit");
+  const profile = { schemaVersion: MODULE_MODE_RELEASE_SCHEMA, sourceVersion: MODULE_MODE_SOURCE_VERSION,
+    chainId: 4663, sourceCommit: r.sourceCommit, startBlock: moduleUint(r.startBlock, "releaseIdentity.startBlock", true),
+    minimumInitialBuyNative: moduleUint(r.minimumInitialBuyNative, "releaseIdentity.minimumInitialBuyNative", true),
+    tokenCreationCodeHash: moduleHash(r.tokenCreationCodeHash, "releaseIdentity.tokenCreationCodeHash"),
+    finalityPolicy: MODULE_MODE_FINALITY_POLICY, contracts: contractPins(r.contracts) };
+  return keccak256(toHex(canonicalJson({ domain: "programmable.module-mode-release-identity.v1", profile })));
+}
+
 /** Configuration is not release authorization. The caller must authenticate the approved release artifact. */
 export function bindActiveModuleModeRelease(value: unknown): ModuleModeRelease {
   const r = moduleRecord(value, ["schemaVersion", "sourceVersion", "chainId", "enabled", "status",
@@ -85,18 +120,12 @@ export function bindActiveModuleModeRelease(value: unknown): ModuleModeRelease {
   moduleEqual(r.status, "active", "release.status");
   moduleEqual(r.finalityPolicy, MODULE_MODE_FINALITY_POLICY, "release.finalityPolicy");
   if (typeof r.sourceCommit !== "string" || !/^[0-9a-f]{40}$/u.test(r.sourceCommit)) rejectModuleEvidence("release.sourceCommit");
-  const rawPins = moduleRecord(r.contracts, MODULE_MODE_DEPENDENCIES, "release.contracts");
-  const seen = new Set<string>();
-  const contracts = Object.fromEntries(MODULE_MODE_DEPENDENCIES.map((role) => {
-    const raw = moduleRecord(rawPins[role], ["address", "runtimeCodeHash"], `release.contracts.${role}`);
-    const address = moduleAddress(raw.address, `release.contracts.${role}.address`);
-    if (seen.has(address)) rejectModuleEvidence("release.duplicate-address");
-    seen.add(address);
-    return [role, Object.freeze({ address, runtimeCodeHash: moduleHash(raw.runtimeCodeHash, `release.contracts.${role}.runtimeCodeHash`) })];
-  })) as Record<ModuleModeDependency, ModuleModeContractPin>;
+  const contracts = contractPins(r.contracts);
+  const releaseDigest = moduleHash(r.releaseDigest, "release.releaseDigest");
+  moduleEqual(releaseDigest, computeModuleModeReleaseDigest(r), "release.computedDigest");
   return Object.freeze({ schemaVersion: MODULE_MODE_RELEASE_SCHEMA, sourceVersion: MODULE_MODE_SOURCE_VERSION,
     chainId: 4663, enabled: true, status: "active", finalityPolicy: MODULE_MODE_FINALITY_POLICY,
-    releaseDigest: moduleHash(r.releaseDigest, "release.releaseDigest"), sourceCommit: r.sourceCommit,
+    releaseDigest, sourceCommit: r.sourceCommit,
     deploymentEvidenceDigest: moduleHash(r.deploymentEvidenceDigest, "release.deploymentEvidenceDigest"),
     sourceVerificationDigest: moduleHash(r.sourceVerificationDigest, "release.sourceVerificationDigest"),
     lifecycleEvidenceDigest: moduleHash(r.lifecycleEvidenceDigest, "release.lifecycleEvidenceDigest"),
