@@ -65,7 +65,7 @@
       "name": "openapi",
       "path": "public/openapi/custom-launch-v4.1.json",
       "url": "https://programmable.market/openapi/custom-launch-v4.1.json",
-      "sha256": "sha256:1bff58e8c81c4d4cb65776b34a78dd9fecb3a6da0499eb8fdac2ad8b18db885e"
+      "sha256": "sha256:d44a77fd2d7f6d14d60b837fedd45349083b47bc93c5b29de2612274407928df"
     },
     {
       "name": "packConfig",
@@ -83,7 +83,7 @@
       "name": "resource",
       "path": "public/schemas/custom-launch/v4.1/custom-launch.json",
       "url": "https://programmable.market/schemas/custom-launch/v4.1/custom-launch.json",
-      "sha256": "sha256:7bba37f59314a773fa973e4c7b8cac70a9dd9411f95b37763712cbcd6b0acb94"
+      "sha256": "sha256:5236ff66908c86d55f4a8851b2841f20258d17d0cd86d753efa86d3184f21e22"
     },
     {
       "name": "sourceVerificationStatus",
