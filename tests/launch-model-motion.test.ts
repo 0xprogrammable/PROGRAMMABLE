@@ -54,7 +54,7 @@ describe("launch model artwork", () => {
       'aria-labelledby="launch-model-classic-title"',
     );
     expect(source).toContain(
-      'aria-describedby="launch-model-classic-description launch-model-classic-status"',
+      'aria-describedby={classicV3LaunchAvailable ? "launch-model-classic-description" : "launch-model-classic-description launch-model-classic-status"}',
     );
     expect(source).toContain(
       'aria-labelledby="launch-model-custom-title"',
@@ -66,7 +66,7 @@ describe("launch model artwork", () => {
     expect(source).toContain('data-launch-model-available="true"');
     expect(source).toContain('data-launch-model-entry="api-key-launch"');
     expect(source).toContain(
-      'href={`/developers/api-keys?start=custom&chainId=${chainId}`}',
+      'href="/developers/api-keys"',
     );
     expect(source).not.toContain('onChoose("custom")');
     expect(source).not.toContain("customLaunchPublicEnabled");

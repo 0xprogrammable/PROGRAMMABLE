@@ -287,8 +287,9 @@ describe("developer API key interface", () => {
     expect(apiKeysSource).toContain('aria-pressed={activeSection === "history"}');
     expect(apiKeysSource).toContain('activeSection === "keys" ?');
     expect(apiKeysSource).not.toContain("Before anything reaches your wallet");
-    expect(apiKeysSource).toContain('href="/profile"');
-    expect(apiKeysSource).toContain("Back to profile");
+    expect(apiKeysSource).toContain('href="/launch"');
+    expect(apiKeysSource).toContain("<span>Back</span>");
+    expect(apiKeysSource).not.toContain("Back to profile");
     expect(apiKeysSource).toContain("const API_KEY_PAGE_SIZE = 3");
     expect(apiKeysSource).toContain("visibleApiKeys.map");
     expect(apiKeysSource).toContain('aria-label="API key pages"');

@@ -191,23 +191,30 @@ export function LaunchModelPicker({
       <header
         className={`launch-model-heading ${launchExperience.pickerHeading}`}
       >
-        <h1>Choose a chain</h1>
+        <h1 className="sr-only">Create</h1>
         <fieldset
           className={launchExperience.chainChoice}
           disabled={preparingModel !== null}
         >
           <legend className="sr-only">Launch chain</legend>
           {VIEW_CHAIN_OPTIONS.map((chain) => (
-            <label key={chain.id} className={launchExperience.chainOption}>
+            <label key={chain.id} className={launchExperience.chainOption} title={chain.label}>
               <input
                 className="sr-only"
                 type="radio"
                 name="launch-chain"
+                aria-label={chain.label}
                 value={chain.id}
                 checked={chainId === chain.id}
                 onChange={() => onChangeChain?.(chain.id)}
               />
-              {chain.label}
+              {chain.id === 1 ? (
+                <svg className={launchExperience.chainMark} viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                  <path d="M12 2 5.5 12.2 12 9.25l6.5 2.95L12 2Z" fill="currentColor" />
+                  <path d="m5.5 13.35 6.5 3.7 6.5-3.7L12 22 5.5 13.35Z" fill="currentColor" />
+                  <path d="m12 9.25-6.5 2.95L12 15.9l6.5-3.7L12 9.25Z" fill="currentColor" />
+                </svg>
+              ) : <span className={launchExperience.robinhoodMark} aria-hidden="true" />}
             </label>
           ))}
         </fieldset>
@@ -226,7 +233,7 @@ export function LaunchModelPicker({
             disabled={!classicV3LaunchAvailable || preparingModel !== null}
             aria-busy={preparingModel === "classic-v3"}
             aria-labelledby="launch-model-classic-title"
-            aria-describedby="launch-model-classic-description launch-model-classic-status"
+            aria-describedby={classicV3LaunchAvailable ? "launch-model-classic-description" : "launch-model-classic-description launch-model-classic-status"}
             onPointerEnter={
               classicV3LaunchAvailable ? preloadAvailableForm : undefined
             }
@@ -265,12 +272,12 @@ export function LaunchModelPicker({
                 className={`launch-model-card-heading ${launchExperience.modelHeading}`}
               >
                 <strong id="launch-model-classic-title">Classic</strong>
-                <small
+                {!classicV3LaunchAvailable ? <small
                   id="launch-model-classic-status"
-                  data-status={classicV3LaunchAvailable ? "ready" : "pending"}
+                  data-status="pending"
                 >
-                  {classicV3LaunchAvailable ? "Ethereum only" : "Unavailable"}
-                </small>
+                  Unavailable
+                </small> : null}
               </span>
               <span
                 className={`launch-model-description ${launchExperience.modelDescription}`}
@@ -300,7 +307,7 @@ export function LaunchModelPicker({
           data-launch-model-available="true"
           data-launch-model-entry="api-key-launch"
           data-launch-model-launchable="false"
-          href={`/developers/api-keys?start=custom&chainId=${chainId}`}
+          href="/developers/api-keys"
           aria-labelledby="launch-model-custom-title"
           aria-describedby="launch-model-custom-description"
         >

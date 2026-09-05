@@ -1,5 +1,5 @@
 .root { flex: none; position: relative; z-index: 21; }
-.trigger, .panel button, .field select {
+.trigger, .panel button {
   background: var(--webde-surface);
   border: 1px solid var(--webde-line);
   border-radius: var(--webde-radius-control);
@@ -22,9 +22,10 @@
 .trigger[data-active="true"] { border-color: var(--webde-muted); }
 .count {
   align-items: center;
-  background: var(--webde-ink);
+  background: var(--webde-surface-raised);
+  border: 1px solid var(--webde-muted);
   border-radius: 50%;
-  color: var(--webde-canvas);
+  color: var(--webde-ink);
   display: flex;
   font-size: 10px;
   height: 16px;
@@ -51,13 +52,19 @@
 .heading { align-items: center; display: flex; justify-content: space-between; margin: -8px -8px -4px 0; }
 .heading h2 { font-size: 16px; font-weight: 500; line-height: 24px; margin: 0; }
 .panel .close { background: transparent; border: 0; display: grid; padding: 0; place-items: center; width: 44px; }
-.field { display: grid; gap: 8px; min-width: 0; }
-.field > span { color: var(--webde-muted); font-size: 13px; line-height: 20px; }
-.field select { background: var(--webde-surface-raised); cursor: pointer; padding: 8px 12px; width: 100%; }
+.field { border: 0; margin: 0; min-inline-size: 0; padding: 0; }
+.field legend { color: var(--webde-muted); font-size: 13px; line-height: 20px; margin-bottom: 8px; padding: 0; }
+.choices { display: grid; gap: 8px; grid-template-columns: 1fr 1fr; }
+.choices button { color: var(--webde-muted); }
+.choices button[aria-pressed="true"] {
+  background: var(--webde-surface-raised);
+  border-color: color-mix(in srgb, var(--webde-ink) 35%, transparent);
+  color: var(--webde-ink);
+}
 .actions { display: grid; gap: 8px; grid-template-columns: 1fr 1fr; margin-top: 4px; }
 .panel button { cursor: pointer; padding: 8px 12px; }
-.panel .apply { background: var(--webde-ink); border-color: var(--webde-ink); color: var(--webde-canvas); }
-.trigger:focus-visible, .panel button:focus-visible, .field select:focus-visible { outline: 2px solid var(--webde-ink); outline-offset: 2px; }
+.panel .apply { background: var(--webde-surface-raised); border-color: var(--webde-muted); }
+.trigger:focus-visible, .panel button:focus-visible { outline: 2px solid var(--webde-muted); outline-offset: 2px; }
 @media (hover: hover) and (pointer: fine) {
   .trigger:hover:not(:disabled), .panel button:hover:not(.apply) { background: var(--webde-surface-raised); }
   .panel .apply:hover { opacity: .9; }
@@ -65,9 +72,9 @@
 @media (max-width: 700px) {
   .trigger { min-width: 44px; padding: 0; width: 44px; }
   .label { display: none; }
-  .field select { font-size: 16px; }
 }
 @media (forced-colors: active) {
-  .trigger, .panel, .panel button, .field select { border-color: CanvasText; }
-  .trigger:focus-visible, .panel button:focus-visible, .field select:focus-visible { outline-color: Highlight; }
+  .trigger, .panel, .panel button { border-color: CanvasText; }
+  .choices button[aria-pressed="true"] { background: Highlight; color: HighlightText; }
+  .trigger:focus-visible, .panel button:focus-visible { outline-color: Highlight; }
 }

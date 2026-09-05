@@ -646,6 +646,18 @@ describe("Robinhood website launch list", () => {
     expect(saved.items).toEqual([...rows, pinned, hidden]);
   });
 
+  it.each(["highest", "lowest", "newest", "oldest"] as const)("applies %s to V4 search matches while keeping the main token pinned", (sort) => {
+    const pinned = launch(70, 170, { symbol: "V4", tokenAddress: "0xC60bA256B44334A0Cd2C7242E98B88f031abB006" });
+    const matches = Array.from({ length: 20 }, (_, index) => launch(index + 1, 100 + index, { symbol: "V4" }));
+    const unrelated = launch(71, 171, { name: "Another token", symbol: "OTHER" });
+    const caps = new Map(matches.map((row, index) => [row.tokenAddress, 20 - index]));
+    caps.set(unrelated.tokenAddress, 1_000_000);
+    const ordered = sort === "highest" || sort === "oldest" ? matches : matches.toReversed();
+    const result = launchList(snapshot([...matches, unrelated, pinned]), 1, " v4 ", NOW, { sort }, caps);
+    expect(result.items).toEqual([pinned, ...ordered]);
+    expect(result.page.totalItems).toBe(21);
+  });
+
   it("hides only the exact Clean Room address without removing canonical records or inventing a pinned token", () => {
     const hidden = launch(1, 100, { tokenAddress: "0x15fca474b23cafe775120b1fafbcff0e7a827af2" });
     const other = launch(2, 101, { name: "Robinhood Clean Room", symbol: "RHCR" });

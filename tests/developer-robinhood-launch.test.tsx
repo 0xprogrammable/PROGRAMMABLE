@@ -252,9 +252,9 @@ describe("Robinhood Custom launch website flow", () => {
     expect(html).not.toContain("fee-policy-pending");
   });
 
-  it("routes the Custom card into the chain-bound launch section", () => {
+  it("shares key management while retaining explicit Robinhood launch deep links", () => {
     expect(launchEntrySource).toContain(
-      'href={`/developers/api-keys?start=custom&chainId=${chainId}`}',
+      'href="/developers/api-keys"',
     );
     expect(launchEntrySource).toContain('data-launch-model-launchable="false"');
     expect(launchEntrySource).not.toContain("Live API");

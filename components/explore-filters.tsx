@@ -3,7 +3,7 @@
 import { SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import {
-  activeExploreFilterCount, DEFAULT_EXPLORE_FILTERS, LAUNCH_SORT_OPTIONS,
+  activeExploreFilterCount, DEFAULT_EXPLORE_FILTERS,
   type RobinhoodExploreFilters,
 } from "@/lib/robinhood-explore-filters";
 import styles from "./explore-filters.module.css";
@@ -17,7 +17,7 @@ export function ExploreFilters({ value = DEFAULT_EXPLORE_FILTERS, onApply, disab
   const [draft, setDraft] = useState(value);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const firstFieldRef = useRef<HTMLSelectElement>(null);
+  const keyboardOpenRef = useRef(false);
   const panelId = useId();
   const count = activeExploreFilterCount(value);
 
@@ -28,7 +28,7 @@ export function ExploreFilters({ value = DEFAULT_EXPLORE_FILTERS, onApply, disab
 
   useEffect(() => {
     if (!open) return;
-    firstFieldRef.current?.focus();
+    if (keyboardOpenRef.current) rootRef.current?.querySelector<HTMLButtonElement>('[aria-pressed="true"]')?.focus();
     function outside(event: PointerEvent) {
       if (event.target instanceof Node && !rootRef.current?.contains(event.target)) setOpen(false);
     }
@@ -49,7 +49,10 @@ export function ExploreFilters({ value = DEFAULT_EXPLORE_FILTERS, onApply, disab
       aria-expanded={open} aria-controls={panelId} aria-haspopup="dialog"
       title={disabled ? "Filters are unavailable while Ethereum indexing is rebuilt" : undefined}
       data-active={count > 0}
-      onClick={() => { if (open) close(); else { setDraft(value); setOpen(true); } }}
+      onClick={(event) => {
+        if (open) close();
+        else { keyboardOpenRef.current = event.detail === 0; setDraft(value); setOpen(true); }
+      }}
     >
       <SlidersHorizontal size={16} aria-hidden="true" />
       <span className={styles.label}>Filters</span>
@@ -62,13 +65,20 @@ export function ExploreFilters({ value = DEFAULT_EXPLORE_FILTERS, onApply, disab
         <h2>Filters</h2>
         <button className={styles.close} type="button" aria-label="Close filters" onClick={() => close(true)}><X size={18} aria-hidden="true" /></button>
       </div>
-      <label className={styles.field}>
-        <span>Sort by</span>
-        <select ref={firstFieldRef} name="sort" value={draft.sort}
-          onChange={(event) => setDraft((current) => ({ ...current, sort: event.target.value as RobinhoodExploreFilters["sort"] }))}>
-          {LAUNCH_SORT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
-      </label>
+      <fieldset className={styles.field}>
+        <legend>Age</legend>
+        <div className={styles.choices}>
+          <button type="button" aria-pressed={draft.sort === "oldest"} onClick={() => setDraft({ sort: "oldest" })}>Oldest</button>
+          <button type="button" aria-pressed={draft.sort === "newest"} onClick={() => setDraft({ sort: "newest" })}>Newest</button>
+        </div>
+      </fieldset>
+      <fieldset className={styles.field}>
+        <legend>Market cap</legend>
+        <div className={styles.choices}>
+          <button type="button" aria-pressed={draft.sort === "lowest"} onClick={() => setDraft({ sort: "lowest" })}>Lowest</button>
+          <button type="button" aria-pressed={draft.sort === "highest"} onClick={() => setDraft({ sort: "highest" })}>Highest</button>
+        </div>
+      </fieldset>
       <div className={styles.actions}>
         <button type="button" onClick={() => { onApply?.(DEFAULT_EXPLORE_FILTERS); close(true); }}>Reset</button>
         <button className={styles.apply} type="submit">Apply</button>

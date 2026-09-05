@@ -177,8 +177,11 @@ describe("unreleased launch model gating", () => {
     );
 
     expect(html.match(/data-launch-model-option=/g)).toHaveLength(2);
-    expect(html).toContain("<h1>Choose a chain</h1>");
+    expect(html).toContain('<h1 class="sr-only">Create</h1>');
     expect(html).toContain('<legend class="sr-only">Launch chain</legend>');
+    expect(html).toContain('aria-label="Ethereum"');
+    expect(html).toContain('aria-label="Robinhood"');
+    expect(html).not.toContain("Choose a chain");
     expect(html).toMatch(/name="launch-chain"[^>]*checked=""[^>]*value="1"/);
     expect(html).not.toContain('data-launch-model-option="prediction"');
     expect(html).toContain('data-launch-model-option="classic"');
@@ -189,10 +192,10 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain(
       'id="launch-model-classic-title">Classic</strong>',
     );
-    expect(html).toContain('data-status="ready">Ethereum only</small>');
-    expect(html).toContain('id="launch-model-classic-status"');
+    expect(html).not.toContain("Ethereum only");
+    expect(html).not.toContain('id="launch-model-classic-status"');
     expect(html).toContain(
-      'aria-describedby="launch-model-classic-description launch-model-classic-status"',
+      'aria-describedby="launch-model-classic-description"',
     );
     expect(html).toContain('data-launch-model-option="custom"');
     const customCard = html.match(
@@ -202,7 +205,7 @@ describe("unreleased launch model gating", () => {
     expect(customCard).toContain('data-launch-model-entry="api-key-launch"');
     expect(customCard).toContain('data-launch-model-launchable="false"');
     expect(customCard).toContain(
-      'href="/developers/api-keys?start=custom&amp;chainId=1"',
+      'href="/developers/api-keys"',
     );
     expect(customCard).not.toContain("disabled");
     expect(html).toContain(
@@ -234,7 +237,7 @@ describe("unreleased launch model gating", () => {
     expect(html).not.toContain("Liquidity Growth");
   });
 
-  it("offers only Custom on Robinhood and opens the chain-bound launch section", () => {
+  it("offers only Custom on Robinhood and opens the shared API-key page", () => {
     const html = renderToStaticMarkup(
       createElement(LaunchModelPicker, {
         chainId: 4663,
@@ -252,7 +255,7 @@ describe("unreleased launch model gating", () => {
     expect(html).toContain('data-launch-model-launchable="false"');
     expect(html).not.toContain("Preflight required");
     expect(html).toContain(
-      'href="/developers/api-keys?start=custom&amp;chainId=4663"',
+      'href="/developers/api-keys"',
     );
     expect(html).toContain("Open Custom V4 Hook");
     expect(html).not.toContain("approved GitHub revision");
