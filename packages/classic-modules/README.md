@@ -1,5 +1,7 @@
 # Classic Modules V1 contributor tools
 
+The separate [open package candidate v0.1](OPEN-PACKAGES.md) adds a local source/configuration preview through `./open` and three `*-open-*` CLI commands. It does not change the V1 engine or its ABI and never produces a launchable or approved plan.
+
 This local package validates module review requests, builds exact launch recipes and maintains an immutable local review queue. It does not sign, deploy, contact an API, execute contributed source code or grant onchain approval. The package is private and has not been published to npm.
 
 The catalog can contain thousands of versions. A launch selects at most eight distinct module families. V1 supports one creator fee policy and compatible quote-limit modules; new effect kinds require a new engine version.

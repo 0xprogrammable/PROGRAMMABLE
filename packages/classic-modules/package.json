@@ -8,7 +8,9 @@
   "types": "./src/index.d.mts",
   "exports": {
     ".": { "types": "./src/index.d.mts", "default": "./src/index.mjs" },
-    "./io": { "types": "./src/io.d.mts", "default": "./src/io.mjs" }
+    "./io": { "types": "./src/io.d.mts", "default": "./src/io.mjs" },
+    "./open": { "types": "./src/open-packages.d.mts", "default": "./src/open-packages.mjs" },
+    "./open-io": { "types": "./src/open-package-io.d.mts", "default": "./src/open-package-io.mjs" }
   },
   "scripts": { "test": "node --test test/*.test.mjs" },
   "engines": { "node": ">=24.14.0 <25" },

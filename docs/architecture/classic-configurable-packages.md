@@ -1,11 +1,11 @@
 # Configurable Classic packages, templates and actions
 
-Status: design requirements from the 5 September 2026 gap review of `001cba1635ca7b5e69c6ce4e3bba12d53e159a16`. No interfaces or runtime behavior in this document are implemented by publication of this specification. It extends the [open package architecture](classic-open-module-contract-v2.md).
+Status: design requirements from the 5 September 2026 gap review of `001cba1635ca7b5e69c6ce4e3bba12d53e159a16`. The [local open-package SDK candidate](../../packages/classic-modules/OPEN-PACKAGES.md) now implements source-bound descriptors, structured configuration and ABI encoding, asserted reference bindings, typed preparation graphs and exact numeric constraints. It produces configuration previews only. Authentication, actual builds, runtime composition, executable management actions and website/chain availability remain unimplemented. This specification extends the [open package architecture](classic-open-module-contract-v2.md).
 
-## Concrete gaps in the current implementation
+## V1 limitations and remaining integration gaps
 
 - `packages/classic-modules/src/index.mjs:122–177` accepts closed flat configuration objects and at most eight static ABI fields. The associated manifest schema permits only the fixed V1 type/profile set. It cannot generally express nested recipient schedules, conditional variants or semantic account roles.
-- The manifest requires chain, implementation address and runtime hash even for the first validation step. Source contribution and later chain activation are not separate records yet.
+- The V1 manifest requires chain, implementation address and runtime hash even for the first validation step. The new candidate supplies a separate source-first record; authenticated intake and its binding to later chain activation still need implementation.
 - The SDK's split/CTO helpers do not supply a generic post-launch action model. A deployed ABI alone does not describe who may act, required funding or the resulting user state.
 - `ClassicModuleFeeLedgerV1.replaceCreatorWallets` correctly rotates all future Creator payout slots under existing policy. Reusing those slots for an immutable module funding promise would make that promise administratively redirectable. This is an integration conflict in the proposed extension, not a defect in the existing CTO operation.
 
