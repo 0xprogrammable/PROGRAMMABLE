@@ -764,36 +764,10 @@ function LateMigrationClaimSession({
             <p>Connect the wallet that held V4 at the snapshot.</p>
           </div>
 
-          <details className={styles.fomoHelp}>
-            <summary>Using Fomo?</summary>
-            <div className={styles.fomoHelpContent}>
-              <p>
-                Connect your existing Fomo Ethereum account through an external
-                wallet. Signing in here with the same email does not connect
-                your Fomo wallet.
-              </p>
-              <ol>
-                <li>
-                  Open <a href="https://fomo.family/export-key" target="_blank" rel="noopener noreferrer">Fomo’s official export page</a>,
-                  sign in to Fomo, and select <strong>Export EVM wallet</strong>.
-                </li>
-                <li>
-                  Import that EVM account into MetaMask using its <a href="https://support.metamask.io/start/use-an-existing-wallet/" target="_blank" rel="noopener noreferrer">official account import guide</a>.
-                </li>
-                <li>
-                  Check that the imported Ethereum address matches your snapshot
-                  wallet, then connect that account here.
-                </li>
-              </ol>
-              <p>
-                Importing moves no tokens. You do not need ETH for this deposit;
-                Programmable pays the gas.
-              </p>
-              <p className={styles.fomoSafety}>
-                Never paste private keys on this site or send them to support.
-              </p>
-            </div>
-          </details>
+          <p className={styles.fomoHelp}>
+            Using Fomo? We have a tutorial in our{" "}
+            <a href="https://discord.com/invite/programmable" target="_blank" rel="noopener noreferrer">Discord chat</a>.
+          </p>
 
           {account ? (
             <div className={styles.walletLine}>

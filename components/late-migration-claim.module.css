@@ -23,7 +23,7 @@
 .page a { color: inherit; }
 .page button { font: inherit; cursor: pointer; }
 .page button:disabled { cursor: default; }
-.page a:focus-visible, .page button:focus-visible, .page summary:focus-visible {
+.page a:focus-visible, .page button:focus-visible {
   outline: 2px solid #e1efb6;
   outline-offset: 4px;
 }
@@ -43,15 +43,8 @@
 .cardHeading p { color: var(--intake-muted); margin: 16px 0 0; text-wrap: pretty; }
 .cardHeading .eyebrow { color: var(--intake-text); font-size: 12px; line-height: 16px; letter-spacing: .1em; text-transform: uppercase; margin: 0 0 12px; }
 .cardHeading h1 { font-size: 36px; line-height: 40px; font-weight: 500; letter-spacing: -.035em; margin: 0; text-wrap: balance; }
-.fomoHelp { margin: -16px 0 24px; font-size: 14px; line-height: 20px; }
-.fomoHelp summary { width: fit-content; min-height: 44px; padding: 12px 0; color: var(--intake-muted); cursor: pointer; }
-.fomoHelp[open] summary { color: var(--intake-text); }
-.fomoHelpContent { color: var(--intake-muted); text-wrap: pretty; overflow-wrap: anywhere; }
-.fomoHelpContent p { margin: 0 0 12px; }
-.fomoHelpContent ol { padding-left: 24px; margin: 0 0 16px; }
-.fomoHelpContent li + li { margin-top: 12px; }
-.fomoHelpContent a { color: var(--intake-text); text-decoration: underline; text-underline-offset: 4px; }
-.fomoHelpContent strong, .fomoHelpContent .fomoSafety { color: var(--intake-text); font-weight: 500; }
+.fomoHelp { margin: -16px 0 24px; color: var(--intake-muted); font-size: 14px; line-height: 20px; text-wrap: pretty; }
+.fomoHelp a { color: var(--intake-text); text-decoration: underline; text-underline-offset: 4px; }
 .walletLine { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 16px; font-size: 14px; line-height: 20px; }
 .walletLine > span { font-family: var(--font-plex-mono, monospace); }
 .walletButton { color: var(--intake-muted); background: transparent; border: 0; border-radius: 4px; padding: 8px 0 8px 12px; min-height: 44px; text-decoration: underline; text-underline-offset: 4px; }
@@ -88,7 +81,7 @@
   .primaryAction:not(:disabled):hover { background: #fff; border-color: #fff; }
   .maxButton:not(:disabled):hover { background: #313131; }
   .walletButton:hover { color: var(--intake-text); }
-  .fomoHelp summary:hover { color: var(--intake-text); }
+  .fomoHelp a:hover { color: #fff; }
 }
 .page button:not(:disabled):active { transform: translateY(1px); }
 @media (max-width: 600px) {

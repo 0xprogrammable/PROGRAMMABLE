@@ -44,50 +44,38 @@ test.afterEach(async ({ page }) => {
   expect(browserErrors.get(page)).toEqual([]);
 });
 
-test("Fomo help is available before connecting and only opens Fomo after an explicit link click", async ({ page, context }) => {
-  const fomoRequests: string[] = [];
+test("Fomo Discord tutorial is available before connecting and opens only after an explicit link click", async ({ page, context }) => {
+  const discordRequests: string[] = [];
   context.on("request", request => {
-    if (new URL(request.url()).hostname === "fomo.family") fomoRequests.push(request.url());
+    if (new URL(request.url()).hostname === "discord.com") discordRequests.push(request.url());
   });
-  // Exercise the real link navigation without contacting a real export service.
-  await context.route("https://fomo.family/**", route => route.fulfill({
-    contentType: "text/html", body: "<!doctype html><title>Official-link navigation fixture</title>",
+  // Exercise link navigation without contacting the real Discord service.
+  await context.route("https://discord.com/**", route => route.fulfill({
+    contentType: "text/html", body: "<!doctype html><title>Discord navigation fixture</title>",
   }));
   await page.goto(origin);
-  const help = page.locator("details").filter({ has: page.locator("summary", { hasText: "Using Fomo?" }) });
-  const summary = help.locator("summary");
-  const exportLink = help.getByRole("link", { name: "Fomo’s official export page", exact: true });
-  await expect(summary).toBeVisible();
-  await expect(exportLink).not.toBeVisible();
+  const help = page.getByText("Using Fomo? We have a tutorial in our Discord chat.", { exact: true });
+  const discordLink = help.getByRole("link", { name: "Discord chat", exact: true });
+  await expect(help).toBeVisible();
+  await expect(discordLink).toBeVisible();
   await expect(page.getByRole("button", { name: "Connect wallet", exact: true })).toBeVisible();
-  expect(fomoRequests).toEqual([]);
+  await expect(page.locator("details")).toHaveCount(0);
+  expect(discordRequests).toEqual([]);
 
-  await summary.focus();
-  await expect(summary).toBeFocused();
-  expect(await summary.evaluate(element => getComputedStyle(element).outlineStyle)).toBe("solid");
-  await page.keyboard.press("Enter");
-  await expect(help).toHaveAttribute("open", "");
-  await expect(exportLink).toBeVisible();
-  await expect(exportLink).toHaveAttribute("href", "https://fomo.family/export-key");
-  await expect(exportLink).toHaveAttribute("rel", "noopener noreferrer");
-  expect(await exportLink.evaluate(element => getComputedStyle(element).textDecorationLine)).toContain("underline");
-  await expect(help.getByRole("link", { name: "official account import guide", exact: true })).toHaveAttribute("href", "https://support.metamask.io/start/use-an-existing-wallet/");
-  await expect(help).toContainText("Export EVM wallet");
-  await expect(help).toContainText("same email does not connect your Fomo wallet");
-  await expect(help).toContainText("matches your snapshot wallet");
-  await expect(help).toContainText("Importing moves no tokens");
-  await expect(help).toContainText("You do not need ETH for this deposit");
-  await expect(help).toContainText("Never paste private keys on this site or send them to support");
-  await expect(help.locator("input, textarea, form")).toHaveCount(0);
-  expect(fomoRequests).toEqual([]);
+  await discordLink.focus();
+  await expect(discordLink).toBeFocused();
+  expect(await discordLink.evaluate(element => getComputedStyle(element).outlineStyle)).toBe("solid");
+  await expect(discordLink).toHaveAttribute("href", "https://discord.com/invite/programmable");
+  await expect(discordLink).toHaveAttribute("rel", "noopener noreferrer");
+  expect(await discordLink.evaluate(element => getComputedStyle(element).textDecorationLine)).toContain("underline");
   const beforeNavigation = await snapshot(page);
   expect(beforeNavigation.connects).toBe(0);
   expect(beforeNavigation.signatures).toEqual([]);
   expect(beforeNavigation.requests).toEqual([]);
 
-  const [popup] = await Promise.all([page.waitForEvent("popup"), exportLink.click()]);
-  await popup.waitForURL("https://fomo.family/export-key");
-  expect(fomoRequests).toEqual(["https://fomo.family/export-key"]);
+  const [popup] = await Promise.all([page.waitForEvent("popup"), page.keyboard.press("Enter")]);
+  await popup.waitForURL("https://discord.com/invite/programmable");
+  expect(discordRequests).toEqual(["https://discord.com/invite/programmable"]);
   expect(page.url()).toBe(origin + "/");
   expect((await snapshot(page)).signatures).toEqual([]);
   expect(posts(await snapshot(page))).toEqual([]);
@@ -95,11 +83,10 @@ test("Fomo help is available before connecting and only opens Fomo after an expl
 });
 
 for (const width of [1440, 390, 320]) {
-  test(`expanded Fomo help fits at ${width}px before wallet connection`, async ({ page }) => {
+  test(`Fomo Discord hint fits at ${width}px before wallet connection`, async ({ page }) => {
     await page.setViewportSize({ width, height: width === 1440 ? 900 : 844 });
     await page.goto(origin);
-    await page.locator("summary", { hasText: "Using Fomo?" }).click();
-    const help = page.locator("details[open]");
+    const help = page.getByText("Using Fomo? We have a tutorial in our Discord chat.", { exact: true });
     await expect(help).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
     const box = await help.boundingBox();
@@ -107,22 +94,21 @@ for (const width of [1440, 390, 320]) {
     expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(width);
     expect((await snapshot(page)).connects).toBe(0);
     expect((await snapshot(page)).signatures).toEqual([]);
-    await page.screenshot({ path: `output/playwright/late-migration-fomo-${width}-expanded.png`, fullPage: true });
+    await page.screenshot({ path: `output/playwright/late-migration-fomo-discord-${width}.png`, fullPage: true });
   });
 }
 
-test("Fomo help preserves exact MAX and manual payout at 200% zoom", async ({ page }) => {
+test("Fomo Discord hint preserves exact MAX and manual payout at 200% zoom", async ({ page }) => {
   await page.setViewportSize({ width: 780, height: 1000 });
   await ready(page); await selectMax(page);
-  await page.locator("summary", { hasText: "Using Fomo?" }).click();
   await page.evaluate(() => { document.documentElement.style.zoom = "2"; });
   await expect(page.locator("#late-migration-amount")).toHaveText(exactAmount);
   await expect(page.getByText("Manual payout · 80%", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign and send", exact: true })).toBeEnabled();
-  expect(await page.locator("details[open]").evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+  expect(await page.getByText("Using Fomo? We have a tutorial in our Discord chat.", { exact: true }).evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
   expect((await snapshot(page)).signatures).toEqual([]);
   expect(posts(await snapshot(page))).toEqual([]);
-  await page.screenshot({ path: "output/playwright/late-migration-fomo-zoom-200.png", fullPage: true });
+  await page.screenshot({ path: "output/playwright/late-migration-fomo-discord-zoom-200.png", fullPage: true });
 });
 
 
