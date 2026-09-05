@@ -37,9 +37,9 @@ function publicPreflightRequest() {
 
 describe("Stock-Paired launch closure", () => {
   it("removes Stock-Paired from the public launch picker", async () => {
-    const html = renderToStaticMarkup(createElement(ViewChainProvider, {
-      children: await LaunchPage(),
-    }));
+    const html = renderToStaticMarkup(
+      createElement(ViewChainProvider, null, await LaunchPage()),
+    );
 
     expect(html).toContain('data-launch-model-option="classic"');
     expect(html).not.toContain('data-launch-model-option="stock-paired"');
