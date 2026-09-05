@@ -36,7 +36,7 @@ describe("active Robinhood agent setup and generated documentation", () => {
     expect(programmableAgentSetupLinksV1("4.1.0")).toMatchObject({
       robinhoodOpenApi: "https://programmable.market/openapi/custom-launch-v4.1.json",
       robinhoodPackConfigSchema: "https://programmable.market/schemas/custom-launch/v4.1/pack-config.json",
-      robinhoodGuide: "https://programmable.market/docs/developers.md",
+      robinhoodGuide: "https://programmable.market/developers/custom-launch-api-v1.md",
     });
     for (const text of ["CLI for profile 4.1.0", "required fundingPlan", "wallet-transaction-value",
       "initial buy of at least USD 1", "positive minimum token output", "gas is additional",
