@@ -17,6 +17,7 @@ test("build, release, and analysis retain all existing contract checks without a
     ["npm", "run", "contracts:bootstrap"], ["npm", "run", "contracts:slither"],
   ]);
   const commands = CONTRACT_CI_RELEASE.map((command) => command.join(" "));
+  assert.ok(commands.includes("npm run modules:starter:test"));
   assert.ok(commands.includes("npm run contracts:custom-registry-v2:test"));
   assert.ok(commands.includes("npm run contracts:custom-registry-v2:artifacts"));
   assert.ok(commands.includes("npm run contracts:test:forks"));

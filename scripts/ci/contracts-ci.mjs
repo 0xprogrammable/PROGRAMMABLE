@@ -18,6 +18,7 @@ export const CONTRACT_CI_BUILD = Object.freeze([
 ]);
 export const CONTRACT_CI_RELEASE = Object.freeze([
   ["npm", "run", "contracts:bootstrap"],
+  ["npm", "run", "modules:starter:test"],
   ["npm", "run", "contracts:custom-registry-v2:test"],
   ["npm", "run", "contracts:custom-registry-v2:artifacts"],
   ["npm", "run", "contracts:test:forks"],
