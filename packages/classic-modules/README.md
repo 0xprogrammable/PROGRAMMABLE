@@ -34,7 +34,7 @@ node bin/programmable-classic-modules.mjs review-local --queue local-review-queu
 
 The angle-bracket values above are placeholders, not literal shell arguments. `accepted` records a local review decision. The manifest remains `reviewStatus: "requested"`, and every local response still reports `onchainApproved: false`. Reviewer addresses are recorded operator assertions; this local tool does not prove wallet ownership. Protect the queue with ordinary operator filesystem access. A public service needs authenticated authors/reviewers, durable storage, rate limits and signed ownership challenges.
 
-The example catalog, addresses and runtime code hashes are **synthetic offline fixtures**, even though its test entries say `approved`. Never load this fixture catalog into a public API or release. The source artifacts are real compiler inputs for the reference interfaces and modules, pinned to their stated repository commit. A successful hash check is not compilation, security review or runtime verification.
+The example catalog, addresses and runtime code hashes are **synthetic offline fixtures**, even though its test entries say `approved`. Never load this fixture catalog into a public API or release. The source artifacts are real compiler inputs for the reference interfaces and modules, pinned to their stated repository commit. A successful hash check is not compilation, security review or runtime verification. The current fixture sources and interface copies are pinned to local integration commit `8530f033a7787eba2705618638e424642446bb59`; they include the corrected per-swap quote-limit description. Public contributor distribution requires publishing the matching immutable source revision with the package.
 
 ## Create a module
 

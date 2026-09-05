@@ -15,7 +15,7 @@
   "runtimeCodeHash": "0x1c325b876f81a240caa3edf349881ff622d045c1e9d1d73e22d8ac3a81ce7872",
   "source": {
     "repository": "https://github.com/programmablehq/PROGRAMMABLE",
-    "commit": "07b3d30e3b2c853802947e32c8c4346284c57812",
+    "commit": "8530f033a7787eba2705618638e424642446bb59",
     "artifactPath": "source-artifact.json",
     "artifactSha256": "d99697077c369651a77ca1f055ff4ade1591b3b46de35677c15118e7f5ac8df2",
     "compiler": "0.8.26"
