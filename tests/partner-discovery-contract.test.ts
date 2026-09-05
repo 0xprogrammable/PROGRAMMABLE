@@ -163,8 +163,6 @@ describe("partner credential discovery", () => {
     const sources = [
       read("app/docs/developers/custom-launch/page.tsx"),
       read("docs/public/developers/custom-launch.md"),
-      read("docs/public/developers/machine-readable.md"),
-      read("docs/public/developers/README.md"),
       read("public/developers/custom-launch-api-v1.md"),
     ];
 
@@ -172,6 +170,12 @@ describe("partner credential discovery", () => {
       expect(source).toContain("customLaunchApi.partnerCredentials");
       expect(source).toMatch(/partner root/iu);
       expect(source).toMatch(/subkey/iu);
+    }
+    for (const path of [
+      "docs/public/developers/README.md",
+      "docs/public/developers/machine-readable.md",
+    ]) {
+      expect(read(path)).toContain("(custom-launch.md)");
     }
     expect(sources.join("\n")).toMatch(
       /(?:cannot|no (?:api key|credential) can) sign(?:,| or)/iu,

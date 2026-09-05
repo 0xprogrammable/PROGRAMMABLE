@@ -1,14 +1,45 @@
 ---
-description: Developer API reference, live Ethereum V3 resources and the deployed Robinhood V4 release candidate
+description: Developer read endpoints, chain manifests, schemas, ABIs and Custom Launch API contracts
 ---
 
 # API reference
 
-The Developer API version 2 at `https://developers.programmable.family` is read only, requires no API key and publishes stable discovery, manifest, launch and compatibility responses. At `https://api.programmable.market`, V3.3 general-hook creation and lifecycle reads accept wallet keys, partner roots and bounded partner subkeys on Ethereum Mainnet. Public `GET /v3/capabilities` advertises the additive structural boundary; Bearer-authenticated `POST /v3/custom-launches/preflight` evaluates the exact create bytes without consuming launch-creation quota, allocating a nonce or persisting a launch. The authenticated preflight still consumes its ordinary route rate budget, including a partner credential's `prepareRequestsPerHour` budget. V2 and V1 history and schemas remain readable, while fresh POSTs return nonretryable `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY`; only V3.3 accepts new submissions. Start at [`/.well-known/programmable.json`](https://programmable.market/.well-known/programmable.json), read `customLaunchApi.partnerCredentials`, follow `customLaunchApi.agentIntegration`, and fetch the [versioned agent remediation catalog](https://programmable.market/policies/custom-launch-agent-remediation-v1.json) before inspecting an existing project. Validate `programmable-launch.config.json` against the advertised [pack-config schema](https://programmable.market/schemas/custom-launch/v3/pack-config.json). Then use the [Custom Launch API guide](custom-launch.md) and [public V3 OpenAPI contract](https://programmable.market/openapi/custom-launch-v3.json) for the normative production request, lifecycle, partner-lineage history and wallet handoff contract. A partner root aggregates all partner-attributed launches; each subkey sees only its stable lineage, rotation preserves that lineage history, and the Router V1 permit-reissue disposition route is wallet-key-only. CLI and preflight checks are preparation; the API server independently enforces objective static hard blocks and exact Router simulation. Missing behavior execution leaves behavior-derived claims unverified, while an authenticated executed failure blocks wallet handoff. No API key can sign, broadcast or bypass launch gates. The [V2 OpenAPI contract](https://programmable.market/openapi/custom-launch-v2.json) and [V1 OpenAPI contract](https://programmable.market/openapi/custom-launch-v1.json) preserve historical reads and schemas plus their write fences. The [raw agent guide](https://programmable.market/developers/custom-launch-api-v1.md) is executable by agents and scripts.
+The Developer API at `https://developers.programmable.family` is read only and requires no API key.
+The Custom Launch API is hosted separately at `https://api.programmable.market` and uses scoped credentials.
 
-The public-read OpenAPI below describes the Developer API. The standalone V3 Custom Launch API contract defines capabilities, side-effect-free preflight, authenticated public creation, reads and separate wallet handoff for project-owned tokens, hooks and exact multi-contract graphs. It keeps deployment, trading, platform-fee evidence, source verification, indexing and featured state independent and makes no universal or safety claim. A 10 bps claim applies only to a fee-certified profile or adapter and its exact stamped PoolKey; arbitrary custom hooks are not automatically fee-enforced. The V2 and V1 contracts preserve historical reads and schemas with explicit `409 CUSTOM_LAUNCH_V2_READ_ONLY` and `409 CUSTOM_LAUNCH_V1_READ_ONLY` fresh-write fences.
+## Developer read API
 
-The [V4 OpenAPI](https://programmable.market/openapi/custom-launch-v4.json), [V4 pack-config schema](https://programmable.market/schemas/custom-launch/v4/pack-config.json) and [V4 source-verification schema](https://programmable.market/schemas/custom-launch/v4/source-verification-status.json) describe the deployed Robinhood Chain Mainnet release candidate at `eip155:4663`. Its Router and backend routes are deployed. CLI `3.3.9` remains the installable live Ethereum V3 release; package `4.0.0` is an unpublished source candidate. This release snapshot is `pending-public-discovery-promotion`, with `publicWrites: false`, `publicAuthorization: false` and `releaseReady: false`; deployed runtime is not activated discovery. A V4 client must poll with `programmable-launch status REQUEST_UUID --api-version 4 --chain-id 4663 --watch --until authorized`, stop for separate wallet review, signature and broadcast, then poll the same command with `--until finalized`. The CLI never signs or broadcasts. The V4 states are `received`, `validating`, `action_required`, `authorized`, `awaiting_wallet_signature`, `wallet_action_required`, `submitted`, `sequencer_soft_confirmed`, `ethereum_posted`, `finalized` and `failed`. `action_required` is remediation, not a wallet action. Source verification starts after finality and stays independent from indexing, trading and publication.
+Start from [discovery](https://developers.programmable.family/.well-known/programmable.json) and select the chain.
+The `/api/v2/manifest` compatibility alias refers to Ethereum.
+
+| Resource | Endpoint |
+| --- | --- |
+| Chain manifest | `/api/v2/manifests/{chainId}` |
+| Chain status | `/api/v2/status?chainId={chainId}` |
+| Launch feed | `/api/v2/launches?chainId={chainId}` |
+| Token list | `/api/v2/token-list?chainId={chainId}` |
+
+- [HTTP reference](https://github.com/programmablehq/Developers/blob/main/docs/reference/http-api.md)
+- [OpenAPI](https://developers.programmable.family/openapi/programmable-v2.yaml)
+- [JSON Schemas](https://github.com/programmablehq/Developers/tree/main/schemas/v2)
+- [ABIs](https://github.com/programmablehq/Developers/tree/main/abis)
+- [Deployment evidence](https://github.com/programmablehq/Developers/tree/main/deployments)
+
+## Custom Launch API
+
+Use the [Custom Launch API guide](custom-launch.md) for API keys, partner credentials, preflight, requests and wallet
+handoff. Select the API version and verified CLI release from [live launch discovery](https://programmable.market/.well-known/programmable.json).
+For Robinhood, require `publicWrites`, `publicAuthorization` and `releaseReady` in the chain-specific discovery entries
+before authenticated preflight or submission. A published schema does not establish activation. The API and CLI never
+sign or broadcast.
+
+| Contract | Scope |
+| --- | --- |
+| [V3 OpenAPI](https://programmable.market/openapi/custom-launch-v3.json) | Ethereum Custom launches |
+| [V4 OpenAPI](https://programmable.market/openapi/custom-launch-v4.json) | Robinhood Custom launches |
+| [V4 pack-config schema](https://programmable.market/schemas/custom-launch/v4/pack-config.json) | Local request packaging |
+| [V4 source-verification schema](https://programmable.market/schemas/custom-launch/v4/source-verification-status.json) | Independent source-verification results |
+| [V1 OpenAPI](https://programmable.market/openapi/custom-launch-v1.json), [V2 OpenAPI](https://programmable.market/openapi/custom-launch-v2.json) | Historical reads and schemas; fresh writes closed |
 
 ## Service status
 
@@ -34,4 +65,5 @@ The [V4 OpenAPI](https://programmable.market/openapi/custom-launch-v4.json), [V4
 [programmable-v2.yaml](../.gitbook/assets/programmable-v2.yaml)
 {% endopenapi %}
 
-The canonical OpenAPI source is maintained in the [Developers repository](https://github.com/programmablehq/Developers/blob/main/openapi/programmable-v2.yaml). This copy is included so GitBook can render the interactive reference together with the official product documentation.
+The interactive reference uses the pinned OpenAPI mirror maintained from the
+[Developers repository](https://github.com/programmablehq/Developers/blob/main/openapi/programmable-v2.yaml).

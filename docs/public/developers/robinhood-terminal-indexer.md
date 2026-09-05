@@ -1,204 +1,97 @@
 ---
-description: Verify and index Programmable Custom launch provenance on Robinhood Chain
+description: Verify and index stamped Custom launches by any developer on Robinhood Chain
 ---
 
-# Index Programmable Custom on Robinhood
+# Robinhood terminal integration
 
-Use the chain-bound finalized feed and Launch Stamp Router V1 to identify Programmable Custom launches on Robinhood
-Chain Mainnet. This page is a verification recipe, not a status snapshot. It does not claim that public writes are
-active or that the feed currently contains a launch. Resolve those facts from the live authorities before every
-create or ingestion session.
+Identify Programmable Custom tokens on Robinhood Chain Mainnet (`4663`, `eip155:4663`) using the canonical Router's finalized launch stamps. This reference covers token classification and continuous indexing.
 
-{% hint style="warning" %}
-Do not publish the **Programmable Custom** label from a project name, token symbol, hook, factory, deployment
-transaction, Router log or fixture alone. Require the complete feed, finality, Router and exact-source binding below.
-{% endhint %}
+Read the [chain manifest (JSON)](https://developers.programmable.family/api/v2/manifests/4663) for current direct-chain availability and deployment evidence. Hosted-feed availability and public V4 write activation have separate release states.
 
-## Start with the live authorities
+## Verify a token
 
-| Authority                     | URL                                                                                                                                    | Use                                                                                                                                         |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Discovery                     | [`.well-known/programmable.json`](https://programmable.market/.well-known/programmable.json)                                           | Resolve V4 paths, write gates, machine-contract links and the external-indexing guarantee field.                                            |
-| Robinhood deployment manifest | [`GET /v4/chains/4663/capabilities`](https://api.programmable.market/v4/chains/4663/capabilities)                                      | Read `chainDeployment` and `chainDeploymentDescriptorDigest`, including contracts, runtime hashes, deployment evidence and finality policy. |
-| Release readiness             | [`GET /v4/chains/4663/readiness`](https://api.programmable.market/v4/chains/4663/readiness)                                            | Verify the matching source commit, source tree, policy and deployment release identity.                                                     |
-| Finalized feed                | [`GET /v4/chains/4663/finalized-custom-launches`](https://api.programmable.market/v4/chains/4663/finalized-custom-launches)            | Discover only schema-valid, terminal, Ethereum-finalized candidates.                                                                        |
-| OpenAPI                       | [`custom-launch-v4.json`](https://programmable.market/openapi/custom-launch-v4.json)                                                   | Hash the exact response bytes, require equality with readiness `openApiSha256`, then generate types and validate the complete schemas.      |
-| Integration fixture           | [`robinhood-terminal-indexer-v1.json`](https://programmable.market/fixtures/robinhood-terminal-indexer-v1.json)                        | Test exact constants, event topics, pagination, finality and fail-closed result states. It is not production data.                          |
-| Router ABI                    | [`ProgrammableLaunchStampRouterV1.abi.json`](https://programmable.market/contracts/robinhood/ProgrammableLaunchStampRouterV1.abi.json) | Decode logs and perform the canonical registry reads.                                                                                       |
-| Router explorer               | [`0x3496...C98a`](https://robinhoodchain.blockscout.com/address/0x34965F2A2ee9254522232C32F02056E92BE0C98a)                            | Inspect the address as supporting evidence. Explorer availability is not a release or source-verification authority.                        |
+Requirements: Node.js 20 or later and a Robinhood RPC that supports finalized, historical block-hash reads. No Programmable API key or package installation is required. The public RPC below works for the example; use your own provider for production indexing.
 
-The top-level `manifestUrl` in discovery belongs to the Ethereum V2 developer surface. It is not the Robinhood V4
-manifest. For chain 4663, use the `chainDeployment` object and its descriptor digest from the capabilities response,
-then require the same binding in readiness and in each finalized item. Download the V4 OpenAPI as exact bytes, compute
-`sha256:<lowercase hex>` and require equality with the top-level `openApiSha256` in the ready response before generating
-types or validating a feed. A missing or mismatched digest is `UNAVAILABLE`; do not silently trust either side.
+Clone the repository and verify the existing launch referenced by the manifest:
 
-Resolve write activation independently from indexing. Report `ACTIVE` only when
-`customLaunchApi.versions.v4.publicWrites`, `publicAuthorization` and `releaseReady` are all exactly `true` in live
-discovery and readiness returns the matching ready release. Any explicit false gate is `INACTIVE`. A missing,
-unreachable or malformed authority is `UNAVAILABLE`. A deployed Router, a reachable route or HTTP `200` does not
-activate writes.
+```sh
+git clone https://github.com/programmablehq/Developers.git
+cd Developers
+PROGRAMMABLE_RPC_URL=https://rpc-robinhood.blockmachine.io \
+  node examples/verify-robinhood-release.mjs
+```
 
-## Bind the exact identity
+To verify another token, replace `<token-address>` with its address:
 
-The expected chain and stamp identity is fixed. Fail closed if the live manifest disagrees.
+```sh
+PROGRAMMABLE_CHAIN_ID=4663 \
+PROGRAMMABLE_RPC_URL=https://rpc-robinhood.blockmachine.io \
+  node examples/verify-launch-stamp.mjs token '<token-address>'
+```
 
-| Field               | Required value                                          |
-| ------------------- | ------------------------------------------------------- |
-| Chain               | Robinhood Chain Mainnet                                 |
-| `chainId`           | `4663`                                                  |
-| `caip2`             | `eip155:4663`                                           |
-| `chainDeploymentId` | `robinhood-mainnet-custom-launch-v1`                    |
-| `platformId`        | `programmable`                                          |
-| `category`          | `custom`                                                |
-| Display label       | `Programmable Custom`                                   |
-| Stamp generation    | `programmable-launch-stamp-router-v1`                   |
-| Router launch kind  | `LaunchKindV1.CustomGraph = 1`                          |
-| Durable key         | `(eip155:4663, onchain.router, onchain.routerLaunchId)` |
+The verifier returns JSON. A verified token has `state: "stamped"`, `category: "custom"` and `publicLabel: "Programmable Custom"`. An RPC failure returns `indeterminate`; it does not mean the token is absent.
 
-Keep the API request UUID in `launchId` separate from `onchain.routerLaunchId`. Treat `projectMetadata.token` as name
-and symbol metadata only. Resolve the token address from `launchStamp(onchain.routerLaunchId)` at the verified L2
-receipt block. Never merge an address with the same bytes on another chain.
+## Classification
 
-### Verify the Router binding
+Apply these fields only after the checks below succeed:
 
-Start provenance scans at block `50469365`. At the item's verified `onchain.l2Inclusion.blockNumber`, require these
-addresses and runtime hashes to match the live deployment manifest and independent provider reads.
+| Field | Value |
+| --- | --- |
+| `chainId` | `4663` |
+| `platformId` | `programmable` |
+| `category` | `custom` |
+| `publicLabel` | `Programmable Custom` |
+| Launch kind | `CustomGraph = 1` |
 
-| Component              | Address                                                                                                                                  | Runtime Keccak-256                                                   |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Launch Stamp Router V1 | [`0x34965F2A2ee9254522232C32F02056E92BE0C98a`](https://robinhoodchain.blockscout.com/address/0x34965F2A2ee9254522232C32F02056E92BE0C98a) | `0x1dbbdaaad901ea3c6134dca0d4872a4789b3c071bf8ccfb44edd65d26d817388` |
-| Graph Factory          | [`0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd`](https://robinhoodchain.blockscout.com/address/0x0B6b3F40f84Df25D3bd69238f937096177DD09Bd) | `0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8` |
-| Permit authority       | [`0xeD617CE7f82e2AB589aDeFFD319D1D872Bc8De06`](https://robinhoodchain.blockscout.com/address/0xeD617CE7f82e2AB589aDeFFD319D1D872Bc8De06) | `0xd7d408ebcd99b2b70be43e20253d6d92a8ea8fab29bd3be7f55b10032331fb4c` |
-| PoolManager            | [`0x8366a39CC670B4001A1121B8F6A443A643e40951`](https://robinhoodchain.blockscout.com/address/0x8366a39CC670B4001A1121B8F6A443A643e40951) | `0xbd3881180b547f5fe817545743cfb4343e96b1bc6640dcd70c106b0066e95626` |
+The same rule applies to existing and future stamped launches by any developer. Hook code, permissions and token behavior may differ. No per-token, creator or hook allowlist is needed for classification.
 
-Hash the exact hosted ABI bytes before decoding. Their SHA-256 is
-`bb4e728e9f9c850eb01f928e8a798ac206a82e241a8d93b3b3c686635c88ed86`. The profile-normalized ABI SHA-256 is
-`ab25262ce1cb907eba1cb820492754c0cd5d7278eb5fd6a024ba24c767323ac0`, calculated from one `jq -cS`
-serialization plus a trailing LF. These hashes cover different byte representations and are not interchangeable.
+A token name, hook address, pool, provider label or API response alone is insufficient. A deployment without a valid canonical Router stamp does not qualify.
 
-Also verify the Router's `CHAIN_ID`, Graph Factory, permit authority and PoolManager getters. Then verify
-`launchIdByToken`, `launchIdByPool`, `launchIdByComponent`, `launchStamp`, `stampProof` and
-`componentRuntimeCodeHash` at the same canonical L2 block. Robinhood provenance uses this Router-embedded registry.
-There is no separate authoritative Custom Registry for this generation.
+## Index launches
 
-## Decode the Router events
+1. Fetch [platform discovery](https://developers.programmable.family/.well-known/programmable.json). Select `chains[]` where `chainId` is `4663`, then fetch that entry's `manifestUrl`.
+2. Validate the manifest against the [V2 manifest schema](https://developers.programmable.family/schemas/v2/manifest.schema.json). Require `chainId: 4663`, `caip2: "eip155:4663"`, `directChainIntegration.status: "live"` and `launchStampRouter.status: "live"`. Resolve the Router address, `startBlock`, ABI, runtime hash, bindings and finality policy from this manifest. Do not hardcode deployment addresses.
+3. Fetch the Router's `abiUrl` and check its bytes against `abiSha256`. Verify the Router runtime and immutable bindings through your RPC. Check its finalized deployment evidence and the existing finalized launch referenced by the manifest. The [Router reference](https://github.com/programmablehq/Developers/blob/main/docs/reference/launch-stamp.md) specifies these checks.
+4. Read `eth_getLogs` in bounded ranges from `startBlock` through the canonical finalized block. Filter by the exact Router address and the manifest's published event topics. The same topic emitted by another address is not a Programmable stamp.
+5. For each launch, read the token or pool lookup and `launchStamp` at the same canonical finalized block. Require a nonzero launch ID and `CustomGraph = 1`. For a token or component address, also verify `stampProof`. Match the launch ID, token, hook, PoolManager, pool ID and stamp hash across the event and getter records. Verify the route and component runtime bindings described in the Router reference.
+6. Deduplicate logs by chain ID, block hash, transaction hash and log index. Save a range checkpoint only after the whole range verifies. Reduce the range and retry when a provider limits a query; do not skip the failed range.
+7. Continue from the saved checkpoint and refresh the manifest. Honor each Router's start and end block. On a canonical block-hash mismatch, rewind affected records and reprocess them. Keep recognized tokens visible even if metadata, charts or trading support are unavailable.
 
-Accept logs only from the exact Router at or after block `50469365`. The signatures are defined by the
-[hosted ABI](https://programmable.market/contracts/robinhood/ProgrammableLaunchStampRouterV1.abi.json).
+Use the RPC `finalized` boundary and pin the block hash for all reads. An explicit block must be a canonical ancestor at or below that boundary. A number of head confirmations or a `latest` read is not a substitute. If the provider cannot serve the required state, leave verification indeterminate and retry with a suitable provider.
 
-| Event and full signature                                                       | `topic0`                                                             | Indexed inputs                         | Role                |
-| ------------------------------------------------------------------------------ | -------------------------------------------------------------------- | -------------------------------------- | ------------------- |
-| `ProgrammableLaunchStampedV1(bytes32,address,address,address,bytes32,bytes32)` | `0x6cf479a102f1eebc9244f48f8d68f6aa52b4c5a4516318df58ba46614a5b14f2` | `launchId`, `token`, `hook`            | Discovery candidate |
-| `ProgrammableLaunchRouteStampedV1(bytes32,uint8,bytes32,bytes32,bytes32)`      | `0x45e7cc355b63ca67d6278a0d8d23470ce2a0741a9c60283d7dee712df7a877a5` | `launchId`, `kind`, `routePayloadHash` | Discovery candidate |
-| `ProgrammableComponentStampedV1(bytes32,address,uint8,bytes32)`                | `0x8147265e7396d6400cee8d049456a1f7438fdfbe2a7c81c976d51ba67e52ff4b` | `launchId`, `component`, `kind`        | Discovery candidate |
-| `EIP712DomainChanged()`                                                        | `0x0a6387c9ea3628b88a633bb4f3b151770f70085117a15f9bf3787cda53f13d31` | None                                   | Not a launch signal |
+The Router launch ID is `bytes32`. An API request UUID is a separate identifier; do not join records by treating them as interchangeable.
 
-Correlate the Component, Route and Launch events by indexed launch ID in the same successful receipt. Require the
-route-event log index to precede the launch-event log index. Then replay the registry getters at that receipt block and
-require launch kind `1`, the exact token, hook, PoolManager, pool ID, route launcher, component proofs, runtime hashes
-and stamp commitments. Graph Factory logs are execution diagnostics and cannot replace the Router stamp.
+## Verification results
 
-## Traverse and validate the finalized feed
+| Result | Meaning and action |
+| --- | --- |
+| `stamped` | The canonical Router record and required proofs agree. Apply the classification above. |
+| `not-stamped` | A successful canonical lookup returned a zero launch ID. Do not assign the Programmable label from this Router lookup. |
+| `indeterminate` | A required read or check could not be completed. Retry; do not interpret the result as absence. |
+| `unavailable` | The manifest does not provide usable Router release roots. Wait for a supported release state. |
 
-The feed is public and keyless. Authentication-protected request history is not a terminal discovery feed.
+Empty or unavailable hosted feeds are not proof that no launches exist. Index the canonical chain records for this integration.
 
-1. Hash the exact hosted [V4 OpenAPI](https://programmable.market/openapi/custom-launch-v4.json) bytes and require the
-   digest to equal readiness `openApiSha256`. Then validate the full response against `CustomLaunchFinalizedListV4` and
-   every item against `CustomLaunchFinalizedMetadataV4` in that bound schema.
-2. Request `limit` from `1` to `25`. The default is `10`.
-3. Process the page, then pass each non-null `nextCursor` back unchanged as `cursor`. Never decode, construct or
-   normalize a cursor. Track all non-null cursors and return `INDETERMINATE` if one repeats.
-4. Traversal is complete only when `nextCursor` is `null` and every page remains schema-valid with
-   `quality.status: ready`.
-5. Treat `sourceRowCount`, `publishedRowCount` and `quarantinedRowCount` as global dataset totals, not page lengths.
-   A successful response requires source equal to published, quarantined equal to zero, and the current page length no
-   greater than published. A malformed eligible candidate must fail the endpoint. Do not accept partial output or
-   row-wise quarantine.
-6. On an HTTP, schema or quality failure, report feed availability as `UNAVAILABLE`. Do not infer a result from cached
-   metadata or the fixture.
+## Reference files
 
-For every item, require `platformId: programmable`, `category: custom`, `chainId: "4663"`, `caip2: "eip155:4663"`,
-the expected Router and `onchain.schemaVersion: programmable.custom-launch-onchain-evidence.v3`. Deduplicate by the
-durable key, not the API request UUID.
+For metadata from the separate API feed, use the [Robinhood finalized feed reference](reference/robinhood-finalized-feed.md).
+It specifies that feed's OpenAPI, pagination, finality and source-verification requirements.
 
-If you also index Router logs directly, retain an overlap window, compare canonical block hashes and rewind to the last
-common finalized checkpoint after a reorganization. Direct Router provenance indexing is independent of write
-activation, but a log alone is not eligible for the public finalized label.
+| Resource | Location |
+| --- | --- |
+| Discovery | [/.well-known/programmable.json](https://developers.programmable.family/.well-known/programmable.json) |
+| Robinhood manifest (JSON) | [/api/v2/manifests/4663](https://developers.programmable.family/api/v2/manifests/4663) |
+| Chain status | [/api/v2/status?chainId=4663](https://developers.programmable.family/api/v2/status?chainId=4663) |
+| Router ABI | [/abis/programmable-launch-stamp-router-v1.json](https://developers.programmable.family/abis/programmable-launch-stamp-router-v1.json) |
+| Finalized deployment and launch evidence | [/deployments/robinhood-direct-chain-evidence-v1.json](https://developers.programmable.family/deployments/robinhood-direct-chain-evidence-v1.json) |
+| Read API OpenAPI | [/openapi/programmable-v2.yaml](https://developers.programmable.family/openapi/programmable-v2.yaml) |
+| Direct-chain schema | [/schemas/v2/direct-chain-integration.schema.json](https://developers.programmable.family/schemas/v2/direct-chain-integration.schema.json) |
+| Router verification specification | [docs/reference/launch-stamp.md](https://github.com/programmablehq/Developers/blob/main/docs/reference/launch-stamp.md) |
+| Terminal data contract | [docs/guides/terminals-and-scanners.md](https://github.com/programmablehq/Developers/blob/main/docs/guides/terminals-and-scanners.md) |
+| Verifier source | [examples/verify-launch-stamp.mjs](https://github.com/programmablehq/Developers/blob/main/examples/verify-launch-stamp.mjs) |
 
-## Verify finality and source
+## Scope
 
-Request lifecycle states such as `sequencer_soft_confirmed` and `ethereum_posted` are not finality. A public candidate
-must have `onchain.terminal: true`, `onchain.checkpointType: ethereum_finalized` and all three non-null V3 evidence
-objects:
+The stamp establishes launch provenance. It does not establish an audit, safety, liquidity, sellability, trading support, current pool state or a particular fee. A terminal must assess execution support for each market separately.
 
-1. `onchain.l2Inclusion` identifies the successful Robinhood transaction, block hash and exact Route and Launch event
-   positions. Require `onchain.transactionHash` to equal its nested transaction hash. Replay this receipt before all
-   Router reads.
-2. `onchain.l1Posting` identifies the distinct Ethereum batch-posting transaction and event. Require chain
-   `eip155:1`, rollup `0x23A19d23e89166adedbDcB432518AB01e4272D94` and SequencerInbox
-   `0xBd0D173EEb87D57A09521c24388a12789F33ba96`.
-3. `onchain.l1FinalizedCheckpoint` identifies the common Ethereum checkpoint with tag `finalized`. Require its ordered
-   provider readbacks to be `drpc` / `drpc.org`, then `quicknode` / `quicknode.com`, bound to the same provider
-   identities in the deployment manifest. Both block number and hash pairs must match the common checkpoint.
-
-The flat `onchain.blockNumber`, `blockHash` and `logIndex` fields are a deprecated stage projection, not a transaction
-locator. At the finalized stage, the block fields project the L1 finalized checkpoint while the log index belongs to
-the earlier L1 posting event. Never combine this trio with the L2 transaction hash. Historical V2 evidence is private
-history and is not a public-feed candidate unless a separate canonical V3 projection is fully revalidated.
-
-Require `sourceVerification.status: exact_match` and `exact_match` on every component, keeping each component keyed by
-both `targetId` and address. The authoritative binding includes protected source closure, reproducible hosted build,
-compiler and settings, finalized creation transaction, and exact creation and runtime bytecode. A provider-only
-Sourcify observation is not publication authority. Robinhood Blockscout is optional and cannot satisfy or block exact
-source authority or revise finality. Exact source verification is still not an audit or safety endorsement.
-
-## Return independent result axes
-
-Do not let one result fill in or erase another.
-
-| Axis                | Values and rule                                                                                                                                                                                                                    |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Provenance          | `STAMPED` only after every Router binding, canonical read and event correlation succeeds at the verified L2 block. `NOT_STAMPED` only after a canonical identity lookup succeeds and returns zero. Otherwise `INDETERMINATE`.      |
-| Feed availability   | `AVAILABLE` only for a complete schema-valid page with ready quality. Endpoint, schema or quality failure is `UNAVAILABLE`.                                                                                                        |
-| Finality            | `FINALIZED` only after all required V3 L2 inclusion, L1 posting and L1 finalized-checkpoint evidence agrees. Otherwise `INDETERMINATE`.                                                                                            |
-| Source verification | Publication requires aggregate and component `exact_match`. Any missing or conflicting authoritative binding is `INDETERMINATE` for publication.                                                                                   |
-| Write activation    | `ACTIVE` only when all three live discovery gates are true and readiness matches. An explicit false gate is `INACTIVE`; an unreadable authority is `UNAVAILABLE`.                                                                  |
-| Fee behavior        | Report `UNAVAILABLE` unless basis, currency, accounting, rounding, accrual, claim mechanics and canonical onchain enforcement are separately proven. Per-launch applicability is `UNVERIFIED` without an explicit backend binding. |
-| Security            | `UNVERIFIED`. A stamp and exact source prove identity, not safety.                                                                                                                                                                 |
-| Market support      | `UNVERIFIED`. A stamp does not prove price, liquidity, routability, venue support or trading compatibility.                                                                                                                        |
-
-An independently finalized `STAMPED` launch remains indexable when writes are inactive or unavailable. That statement
-does not assert that such an item currently exists. Only the live feed can establish item presence.
-
-## Fee policy is a separate fact
-
-Do not hardcode a rate or recipient from this guide or the fixture. Resolve the current global requirement from
-`customLaunchApi.versions.v4.platformFeePolicy` in live discovery and preserve its `rateBps`, `ratePpm`, `ratePercent`,
-`recipient`, scope and enforcement fields together. A global API requirement does not change older launches and is not,
-by itself, proof of immutable onchain enforcement, a charged fee or platform revenue. Do not copy it onto a terminal
-row. Report fee behavior only when the live record explicitly proves the applicable rate, basis, currency, recipient,
-accounting and claim path for that exact launch.
-
-## Third-party indexing is not guaranteed
-
-No third-party terminal, exchange, explorer, data provider or indexer is guaranteed to ingest, display or support a
-Programmable launch. The live discovery field `customLaunchApi.versions.v4.externalIndexingGuaranteed` is the machine
-authority for any advertised guarantee. If no explicit guarantee is available, report third-party indexing as
-`UNVERIFIED`. Never turn Router indexability into a claim about a named third party, price coverage, liquidity or an
-executable trade route.
-
-## Integration sequence
-
-1. Fetch discovery, capabilities and readiness. Resolve live state and require one matching chain-deployment binding.
-2. Download the OpenAPI, hash its exact bytes and require equality with readiness `openApiSha256`. Fail closed on a
-   missing or mismatched digest.
-3. Download and hash the ABI. Verify chain, Router, dependencies, runtime hashes and immutable getters.
-4. Fetch and OpenAPI-validate every finalized-feed page through a null cursor.
-5. Verify each item's nested finality coordinates, receipt, Router events, registry reads and exact-source components.
-6. Emit the **Programmable Custom** label only after provenance, finality and source verification pass. Preserve all
-   other result axes independently.
-7. Record the endpoint, UTC observation time, response status, manifest digest, Router, V3 coordinates and provider
-   identities for reproducibility. Never include an API key, signed transaction or private request body.
-
-For non-sensitive integration failures, [open a GitHub issue](https://github.com/programmablehq/PROGRAMMABLE/issues).
+This integration reads chain data. It does not submit or sign launches, and it does not depend on the hosted indexer or public V4 submission API. Machine clients can read the [canonical guide as Markdown](https://developers.programmable.family/robinhood-terminal-indexer.md).

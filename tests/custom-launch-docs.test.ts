@@ -85,8 +85,6 @@ describe("Custom Launch API documentation", () => {
       cliGuide,
       developerDocsMarkdown,
       machineReadableGuide,
-      read("docs/public/developers/machine-readable.md"),
-      read("docs/public/developers/README.md"),
       read("docs/public/status.md"),
     ];
 
@@ -103,6 +101,20 @@ describe("Custom Launch API documentation", () => {
       expect(source).toMatch(/action_required[\s\S]{0,360}(?:not a wallet|remediation)/iu);
       expect(source).toMatch(/never\s+sign(?:s)?\s+or\s+broadcasts?/iu);
       expect(source).toMatch(/source verification[\s\S]{0,260}(?:after finality|after `finalized`|starts after|starts only after)/iu);
+    }
+
+    for (const path of [
+      "docs/public/developers/README.md",
+      "docs/public/developers/machine-readable.md",
+    ]) {
+      const entry = read(path);
+      expect(entry).toContain("(custom-launch.md)");
+      expect(entry).toContain("https://developers.programmable.family` is read only");
+      expect(entry).toContain("https://programmable.market/.well-known/programmable.json");
+      for (const gate of ["publicWrites", "publicAuthorization", "releaseReady"]) {
+        expect(entry).toContain(gate);
+      }
+      expect(entry).toMatch(/(?:does not|never)\s+sign(?:s)?\s+or\s+broadcasts?/iu);
     }
 
     const statuses = [
