@@ -220,7 +220,7 @@
     "perf:read-model:post-promotion": "node scripts/perf/read-model-post-promotion.mjs",
     "contracts:late-migration:test": "cd contracts && FOUNDRY_PROFILE=late-migration forge test -vv",
     "test:browser:late-migration": "playwright test --config playwright.late-migration.config.ts",
-    "contracts:late-migration:deployment:test": "node --test contracts/scripts/test/late-migration-deployment-preflight.test.mjs contracts/scripts/test/late-migration-deployment-stages.test.mjs"
+    "contracts:late-migration:deployment:test": "node --test contracts/scripts/test/late-migration-deployment-preflight.test.mjs contracts/scripts/test/late-migration-deployment-stages.test.mjs contracts/scripts/test/late-migration-activation-envelope.test.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "0.5.4",
