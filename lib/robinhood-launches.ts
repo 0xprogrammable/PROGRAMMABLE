@@ -1,12 +1,21 @@
 export type RobinhoodLaunch = Readonly<{
-  routerAddress: string;
+  routerAddress: string | null;
   launchId: string;
   tokenAddress: string;
   hookAddress: string;
   creator: string;
   poolManager: string;
   poolId: string;
-  stampHash: string;
+  stampHash: string | null;
+  sourceKind?: "module-native-v1";
+  sourceAddress?: string;
+  sourceReleaseDigest?: string;
+  recipeHash?: string;
+  runtime?: string;
+  launchKey?: string;
+  verificationDigest?: string;
+  modulePackageIds?: readonly string[];
+  moduleFamilyIds?: readonly string[];
   transactionHash: string;
   blockNumber: string;
   blockHash: string;
@@ -33,4 +42,19 @@ export type RobinhoodLaunchList = Readonly<{
 
 export type RobinhoodProfileLaunchList = RobinhoodLaunchList & Readonly<{
   account: string;
+}>;
+
+/** Module Mode is a separate canonical source; it never receives a fabricated Router stamp. */
+export type RobinhoodModuleLaunch = RobinhoodLaunch & Readonly<{
+  sourceKind: "module-native-v1";
+  routerAddress: null;
+  stampHash: null;
+  sourceAddress: string;
+  sourceReleaseDigest: string;
+  recipeHash: string;
+  runtime: string;
+  launchKey: string;
+  verificationDigest: string;
+  modulePackageIds: readonly string[];
+  moduleFamilyIds: readonly string[];
 }>;
