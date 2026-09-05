@@ -65,6 +65,7 @@ test('reproduces a source-bound CLI and runs the copied file without npm or node
   assert.ok(manifest.source.files.some((item) => item.path === 'scripts/build-module-cli.mjs'));
   assert.ok(manifest.source.files.some((item) => item.path === 'package-lock.json'));
   assert.ok(manifest.source.files.every((item) => !path.isAbsolute(item.path)));
+  assert.ok(!manifest.dependencies.some((item) => ['ws', 'bufferutil', 'node-gyp-build'].includes(item.name)));
   assert.ok(!JSON.stringify(manifest).includes(git(root, ['rev-parse', 'HEAD'])));
   assert.ok(!artifact.includes(Buffer.from(root)));
   const isolated = await fs.mkdtemp(path.join(os.tmpdir(), 'programmable-module-cli-standalone-'));
@@ -145,6 +146,27 @@ test('rejects an installed build tool that disagrees with the lock', async (t) =
   git(root, ['add', '--', relative]);
   git(root, ['commit', '--quiet', '-m', 'Mismatched fixture lock']);
   await assert.rejects(buildModuleCli({ root, write: true }), { code: 'BUILDER_LOCK' });
+});
+
+test('requires the SDK dependency declarations to match the bundled lock versions', async (t) => {
+  const root = await fixture(t);
+  const relative = 'packages/classic-modules/package.json';
+  const metadata = JSON.parse(await fs.readFile(path.join(root, relative), 'utf8'));
+  metadata.dependencies.ajv = '8.17.1';
+  await fs.writeFile(path.join(root, relative), `${JSON.stringify(metadata)}\n`);
+  git(root, ['add', '--', relative]);
+  git(root, ['commit', '--quiet', '-m', 'Mismatched SDK dependency declaration']);
+  await assert.rejects(buildModuleCli({ root, write: true }), { code: 'SDK_DEPENDENCY_LOCK' });
+});
+
+test('refuses distribution output through a directory symlink', async (t) => {
+  const root = await fixture(t);
+  const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'programmable-module-cli-outside-'));
+  t.after(() => fs.rm(outside, { recursive: true, force: true }));
+  await fs.mkdir(path.join(root, 'public/developers'), { recursive: true });
+  await fs.symlink(outside, path.join(root, MODULE_CLI_RELEASE_ROOT));
+  await assert.rejects(buildModuleCli({ root, write: true }), { code: 'OUTPUT_PATH' });
+  assert.deepEqual(await fs.readdir(outside), []);
 });
 
 test('the copied standalone file submits pinned source and reads it through a real local HTTP fixture', async (t) => {

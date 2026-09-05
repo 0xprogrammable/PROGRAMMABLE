@@ -103,6 +103,10 @@ function requireOnlyBuiltins(metafile) {
   }
   return [...new Set(['node:module', ...imports.map((item) => item.path)])].sort();
 }
+function emittedInputs(metafile) {
+  return [...new Set(Object.values(metafile.outputs).flatMap((output) => Object.entries(output.inputs)
+    .filter(([, input]) => input.bytesInOutput > 0).map(([file]) => file)))].sort();
+}
 function requireInputPaths(inputs) {
   for (const relative of inputs) {
     if (!relative.startsWith('node_modules/') && !relative.startsWith('packages/classic-modules/')) {
@@ -134,11 +138,11 @@ function assertVersionBinding(root, manifestPath, manifest) {
     fail('VERSION_ALREADY_BOUND', 'This committed CLI version already binds different source or bytes. Bump the SDK package version and create a new version directory.');
   }
 }
-async function ensureOutputParent(root, relative) {
+async function ensureOutputParent(root, relative, create) {
   let current = root;
   for (const part of relative.split('/').slice(0, -1)) {
     current = path.join(current, part);
-    await fs.mkdir(current).catch((error) => { if (error.code !== 'EEXIST') throw error; });
+    if (create) await fs.mkdir(current).catch((error) => { if (error.code !== 'EEXIST') throw error; });
     const stat = await fs.lstat(current);
     if (!stat.isDirectory() || stat.isSymbolicLink()) fail('OUTPUT_PATH', 'Output parent must be a real directory.');
   }
@@ -146,12 +150,14 @@ async function ensureOutputParent(root, relative) {
 async function checkOrWrite(root, files, write) {
   for (const [relative, expected] of files) {
     let actual;
-    try { actual = await regularFile(root, relative); }
+    try {
+      await ensureOutputParent(root, relative, write);
+      actual = await regularFile(root, relative);
+    }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
     if (actual?.equals(expected)) continue;
     if (!write) fail('DISTRIBUTION_DRIFT', `Distribution is missing or differs from the committed source: ${relative}`);
     if (actual) fail('OUTPUT_EXISTS', `Refusing to overwrite different distribution bytes: ${relative}`);
-    await ensureOutputParent(root, relative);
     await fs.writeFile(path.join(root, relative), expected, { flag: 'wx', mode: 0o644 });
   }
 }
@@ -174,10 +180,15 @@ export async function buildModuleCli({ root = path.resolve(path.dirname(fileURLT
   const options = { ...BUILD_OPTIONS, absWorkingDir: root, entryPoints: [ENTRY], outfile: fileName,
     write: false, metafile: true, logLevel: 'silent' };
   const discovery = await build(options);
-  const inputs = Object.keys(discovery.metafile.inputs).sort();
-  requireInputPaths(inputs);
+  const inputs = emittedInputs(discovery.metafile);
+  requireInputPaths(Object.keys(discovery.metafile.inputs));
   requireOnlyBuiltins(discovery.metafile);
   const dependency = await dependencyEvidence(root, inputs, lock);
+  for (const [name, expectedVersion] of Object.entries(metadata.dependencies ?? {})) {
+    if (!dependency.dependencies.some((item) => item.name === name && item.version === expectedVersion)) {
+      fail('SDK_DEPENDENCY_LOCK', `SDK dependency must use its declared exact version: ${name}`);
+    }
+  }
   const sourceFiles = await inputHashes(root, [...inputs, ...dependency.sourcePaths,
     'packages/classic-modules/package.json', 'package-lock.json', 'scripts/build-module-cli.mjs']);
   assertCommittedInputBytes(root, sourceFiles);
@@ -193,7 +204,7 @@ export async function buildModuleCli({ root = path.resolve(path.dirname(fileURLT
   ].join('\n');
   const built = await build({ ...options, banner: { js: banner } });
   const runtimeBuiltins = requireOnlyBuiltins(built.metafile);
-  if (JSON.stringify(Object.keys(built.metafile.inputs).sort()) !== JSON.stringify(inputs)) fail('SOURCE_CHANGED', 'Build inputs changed during release generation.');
+  if (JSON.stringify(emittedInputs(built.metafile)) !== JSON.stringify(inputs)) fail('SOURCE_CHANGED', 'Build inputs changed during release generation.');
   const artifact = Buffer.from(built.outputFiles[0].contents);
   if (built.outputFiles.length !== 1 || artifact.length > MAXIMUM_BUNDLE_BYTES) fail('BUNDLE_SIZE', 'Expected one standalone CLI file under 1 MiB.');
   assertModuleCliSourceClean(root);

@@ -68,7 +68,7 @@ with Git blobs, so an index hint such as `assume-unchanged` cannot hide drift.
 Unrelated website edits do not enter this source digest; the integration owner
 still requires a clean final release checkout.
 
-The source digest includes the precise compiler inputs, dependency metadata and
+The source digest includes the source inputs retained in the bundle, dependency metadata and
 license texts, package version, build settings, lock bytes and builder source.
 It contains no Git HEAD, generation timestamp, local absolute path or secret.
 Committing the generated artifact therefore does not create a source-hash cycle.
