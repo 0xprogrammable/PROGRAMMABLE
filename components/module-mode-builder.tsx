@@ -6,18 +6,24 @@ import { ArrowLeft, ArrowRight, Check, ChevronDown, Download, Plus, X } from "lu
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { ModuleSchemaField } from "@/components/module-mode-fields";
+import { ModuleModeImagePicker, moduleModeImageSource, type ModuleModeImageResource } from "@/components/module-mode-image";
 import { useViewChain } from "@/components/view-chain";
 import styles from "@/components/module-mode-builder.module.css";
 import {
   createModuleModeState,
   configurationSummary,
   feeBreakdown,
+  formatNativeWei,
+  nativeValueBreakdown,
+  NATIVE_ENGINE_PROFILE,
   PREVIEW_MODULE_CATALOG,
   setModuleSelected,
   validateModuleModeDraft,
   type BuilderIssue,
   type ModuleModeCatalogEntry,
   type ModuleModeDraft,
+  type ModuleModeEngineProfile,
+  type ModuleModeImage,
   type ModuleModeState,
   type OpenConfigContext,
 } from "@/lib/module-mode/builder";
@@ -36,10 +42,10 @@ function downloadDraft(draft: ModuleModeDraft) {
 export interface ModuleModeLaunchAction {
   label: string;
   description: string;
-  onContinue: (draft: ModuleModeDraft) => Promise<void>;
+  onContinue: (draft: ModuleModeDraft, attachments: { tokenImage?: Blob }) => Promise<void>;
 }
 
-export function ModuleModeBuilder({ catalog = PREVIEW_MODULE_CATALOG, configurationContext = {}, launchAction }: Readonly<{ catalog?: readonly ModuleModeCatalogEntry[]; configurationContext?: OpenConfigContext; launchAction?: ModuleModeLaunchAction }>) {
+export function ModuleModeBuilder({ catalog = PREVIEW_MODULE_CATALOG, engine = NATIVE_ENGINE_PROFILE, configurationContext = {}, launchAction }: Readonly<{ catalog?: readonly ModuleModeCatalogEntry[]; engine?: ModuleModeEngineProfile; configurationContext?: OpenConfigContext; launchAction?: ModuleModeLaunchAction }>) {
   const { hydrated, viewChainId, setViewChainId } = useViewChain();
   useEffect(() => {
     if (!hydrated || viewChainId === 4663) return;
@@ -55,15 +61,31 @@ export function ModuleModeBuilder({ catalog = PREVIEW_MODULE_CATALOG, configurat
   const [announcement, setAnnouncement] = useState("");
   const [continuing, setContinuing] = useState(false);
   const [launchError, setLaunchError] = useState("");
+  const [imageResource, setImageResource] = useState<ModuleModeImageResource | null>(null);
+  const [previousImage, setPreviousImage] = useState<{ image: ModuleModeImage; resource: ModuleModeImageResource | null } | null>(null);
+  const [imageBusy, setImageBusy] = useState(false);
+  const imageUrls = useRef(new Set<string>());
+  useEffect(() => {
+    const urls = imageUrls.current;
+    return () => { for (const url of urls) URL.revokeObjectURL(url); };
+  }, []);
   const form = useRef<HTMLFormElement>(null);
   const reviewHeading = useRef<HTMLHeadingElement>(null);
-  const result = useMemo(() => checked ? validateModuleModeDraft(state, catalog, configurationContext) : null, [checked, state, catalog, configurationContext]);
+  const result = useMemo(() => checked ? validateModuleModeDraft(state, catalog, configurationContext, engine) : null, [checked, state, catalog, configurationContext, engine]);
   const issues = result && !result.ok ? result.issues : [];
   const fees = feeBreakdown(state.buyFeePercent, state.sellFeePercent);
   const selected = catalog.filter((entry) => state.selectedModules.includes(entry.id));
+  const amounts = nativeValueBreakdown(state, catalog);
+  const hasFunding = selected.some((entry) => Boolean(entry.funding));
+  const tokenImageSource = moduleModeImageSource(state.tokenImage, imageResource);
 
   function update<K extends keyof ModuleModeState>(key: K, value: ModuleModeState[K]) { setState((current) => ({ ...current, [key]: value })); }
   function fieldIssue(key: string) { return issues.find((issue) => issue.path === `/${key}`); }
+  function changeImage(image: ModuleModeImage, resource: ModuleModeImageResource | null, checkpoint: boolean) {
+    if (checkpoint) setPreviousImage({ image: state.tokenImage, resource: imageResource });
+    if (resource) imageUrls.current.add(resource.objectUrl);
+    setImageResource(resource); update("tokenImage", image);
+  }
   function add(entry: ModuleModeCatalogEntry) {
     setState((current) => setModuleSelected(current, entry, true)); setRemoved(null);
     setAnnouncement(`${entry.title} added. Configure it below.`);
@@ -73,11 +95,11 @@ export function ModuleModeBuilder({ catalog = PREVIEW_MODULE_CATALOG, configurat
     setAnnouncement(`${entry.title} removed. Your settings are kept.`);
   }
   function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setChecked(true);
-    const next = validateModuleModeDraft(state, catalog, configurationContext);
+    event.preventDefault(); if (imageBusy) return; setChecked(true);
+    const next = validateModuleModeDraft(state, catalog, configurationContext, engine);
     if (!next.ok) {
-      if (next.issues.some((issue) => issue.path.startsWith("/modules"))) setAdvanced(true);
-      requestAnimationFrame(() => { const target = form.current?.querySelector<HTMLElement>('[aria-invalid="true"]') ?? form.current?.querySelector<HTMLElement>("[data-error-summary]"); target?.focus(); });
+      if (next.issues.some((issue) => issue.path.startsWith("/modules") || issue.path.startsWith("/funding"))) setAdvanced(true);
+      requestAnimationFrame(() => { const target = form.current?.querySelector<HTMLElement>('[aria-invalid="true"], [data-invalid="true"]') ?? form.current?.querySelector<HTMLElement>("[data-error-summary]"); target?.focus(); });
       return;
     }
     setReview(next.draft);
@@ -87,7 +109,10 @@ export function ModuleModeBuilder({ catalog = PREVIEW_MODULE_CATALOG, configurat
   async function continueLaunch() {
     if (!review || !launchAction || continuing || !hydrated || viewChainId !== 4663) return;
     setContinuing(true); setLaunchError("");
-    try { await launchAction.onContinue(review); }
+    try {
+      if (review.token.image.kind === "local" && !imageResource) throw new Error("Choose the token image again before continuing. The draft only contains its file fingerprint.");
+      await launchAction.onContinue(review, { tokenImage: imageResource?.blob });
+    }
     catch (error) { setLaunchError(error instanceof Error ? error.message : "The wallet step could not open. Your draft is kept."); }
     finally { setContinuing(false); }
   }
@@ -107,20 +132,24 @@ export function ModuleModeBuilder({ catalog = PREVIEW_MODULE_CATALOG, configurat
               <div><dt>Token</dt><dd>{review.token.name} <span>${review.token.symbol}</span></dd></div>
               <div><dt>Market</dt><dd>Bonding curve <span>ETH pair</span></dd></div>
               <div><dt>Initial buy</dt><dd>{state.initialBuyEth.trim()} ETH <span>Network gas is separate</span></dd></div>
+              {hasFunding ? <><div><dt>Additional program budgets</dt><dd>{formatNativeWei(review.totalProgramFundingWei)} ETH <span>Separate from your initial buy and fees</span></dd></div><div><dt>Total ETH value</dt><dd>{formatNativeWei(review.totalNativeValueWei)} ETH <span>Plus network gas</span></dd></div></> : null}
               <div><dt>Creator fees at launch</dt><dd>{state.buyFeePercent}% buy / {state.sellFeePercent}% sell</dd></div>
               <div><dt>Programmable fee</dt><dd>+ 0.20% on every swap</dd></div>
               <div><dt>Total at launch</dt><dd>{fees.buy} buy / {fees.sell} sell <span>Fees are collected in ETH</span></dd></div>
               <div><dt>Modules</dt><dd>{selected.length ? selected.map((entry) => entry.title).join(", ") : "None · just your coin"}</dd></div>
             </dl>
-            {selected.map((entry) => <div className={styles.reviewModule} key={entry.id}><h3>{entry.title}</h3><p>{entry.detail}</p><dl>{configurationSummary(entry.schema, state.moduleValues[entry.id], entry.fields).map((item, index) => <div key={`${item.label}-${index}`}><dt>{item.label}</dt><dd>{item.value}</dd></div>)}</dl></div>)}
+            {selected.map((entry) => <div className={styles.reviewModule} key={entry.id}><h3>{entry.title}</h3><p>{entry.detail}</p><dl>{configurationSummary(entry.schema, state.moduleValues[entry.id], entry.fields, undefined, "", review.modules.find((item) => item.id === entry.id)?.bindings).map((item, index) => <div key={`${item.label}-${index}`}><dt>{item.label}</dt><dd>{item.value}</dd></div>)}{entry.funding ? <div><dt>{entry.funding.label}</dt><dd>{state.moduleFundingEth[entry.id] || "0"} ETH additional</dd></div> : null}</dl></div>)}
+            {review.token.image.kind === "local" ? <p className={styles.help}>Your image stays on this device. The exported draft records its fingerprint; save the prepared image with it.</p> : null}
             <div className={styles.previewNotice}><strong>{launchAction ? "Continue with your wallet." : "This is a configuration preview."}</strong><p>{launchAction?.description ?? "The wallet launch is not available yet. Export your draft to keep these settings; no token has been created."}</p></div>
             {launchError ? <p className={styles.fieldError} role="alert">{launchError}</p> : null}
             <div className={styles.reviewActions}><button type="button" className={styles.secondaryButton} disabled={continuing} onClick={backToEdit}><ArrowLeft size={16} aria-hidden="true" /> Edit draft</button><button type="button" className={launchAction ? styles.secondaryButton : styles.primaryButton} onClick={() => { downloadDraft(review); setAnnouncement("Your validated draft was exported."); }}><Download size={17} aria-hidden="true" /> Export draft</button>{launchAction ? <button type="button" className={styles.primaryButton} disabled={continuing || !hydrated || viewChainId !== 4663} aria-busy={continuing} onClick={() => void continueLaunch()}>{launchAction.label}<ArrowRight size={17} aria-hidden="true" /></button> : null}</div>
+            {imageResource && review.token.image.kind === "local" ? <a className={styles.textButton} href={imageResource.objectUrl} download={`${review.token.symbol.toLowerCase()}-token-image.webp`}><Download size={14} aria-hidden="true" /> Save prepared image</a> : null}
           </section>
         ) : (
           <form ref={form} onSubmit={submit} noValidate className={styles.formPanel}>
             <section className={styles.formSection} aria-labelledby="module-token-title">
               <div className={styles.sectionHeading}><span className={styles.sectionMarker}>1</span><div><h2 id="module-token-title">Your token</h2><p>A meme coin with a bonding curve, paired with ETH.</p></div></div>
+              <ModuleModeImagePicker image={state.tokenImage} resource={imageResource} onChange={changeImage} onBusyChange={setImageBusy} error={fieldIssue("tokenImage")?.message} onUndo={previousImage ? () => { const previous = previousImage; setPreviousImage(null); changeImage(previous.image, previous.resource, false); } : undefined} />
               <div className={styles.tokenFields}>
                 <TextField label="Name" name="name" value={state.name} placeholder="Give your coin a name" required issue={fieldIssue("name")} onChange={(value) => update("name", value)} />
                 <TextField label="Symbol" name="symbol" value={state.symbol} placeholder="COIN" required issue={fieldIssue("symbol")} onChange={(value) => update("symbol", value)} />
@@ -140,17 +169,18 @@ export function ModuleModeBuilder({ catalog = PREVIEW_MODULE_CATALOG, configurat
                 <p className={styles.catalogNotice}>{catalog.length ? "Choose the modules you want to configure." : "No modules are available in this catalog yet."}</p>
                 <div className={styles.moduleCatalog}>{catalog.map((entry) => { const isSelected = state.selectedModules.includes(entry.id); return <div key={entry.id} className={styles.catalogRow} data-selected={isSelected}><div><h3>{entry.title}{entry.status === "preview" ? <span className={styles.catalogPreview}>Preview</span> : null}</h3><p>{entry.summary}</p></div><button type="button" className={isSelected ? styles.addedButton : styles.addButton} aria-label={isSelected ? `Remove ${entry.title}` : `Add ${entry.title}`} onClick={() => isSelected ? remove(entry) : add(entry)}>{isSelected ? <Check size={16} aria-hidden="true" /> : <Plus size={16} aria-hidden="true" />}{isSelected ? "Added" : "Add"}</button></div>; })}</div>
                 {removed ? <div className={styles.undo}><span>{removed.title} removed.</span><button type="button" onClick={() => add(removed)}>Undo</button></div> : null}
-                {selected.map((entry) => { const moduleIssues = issues.filter((issue) => issue.path.startsWith(`/modules/${entry.id}`)); return <section className={styles.moduleConfiguration} key={entry.id} aria-labelledby={`module-${entry.id}-title`}><div className={styles.moduleConfigurationHeading}><h3 id={`module-${entry.id}-title`}>{entry.title}</h3><button className={styles.iconButton} type="button" aria-label={`Remove ${entry.title} configuration`} onClick={() => remove(entry)}><X size={18} aria-hidden="true" /></button></div><p className={styles.moduleDetail}>{entry.detail}</p><ModuleSchemaField schema={entry.schema} value={state.moduleValues[entry.id] ?? entry.defaults} onChange={(value) => setState((current) => ({ ...current, moduleValues: { ...current.moduleValues, [entry.id]: value } }))} path={`/modules/${entry.id}`} fields={entry.fields} issues={moduleIssues} context={configurationContext} />{moduleIssues.filter((issue) => issue.path === `/modules/${entry.id}`).map((issue, index) => <p className={styles.fieldError} key={index}>{issue.message}</p>)}</section>; })}
+                {selected.map((entry) => { const moduleIssues = issues.filter((issue) => issue.path.startsWith(`/modules/${entry.id}`)); return <section className={styles.moduleConfiguration} key={entry.id} aria-labelledby={`module-${entry.id}-title`}><div className={styles.moduleConfigurationHeading}><h3 id={`module-${entry.id}-title`}>{entry.title}</h3><button className={styles.iconButton} type="button" aria-label={`Remove ${entry.title} configuration`} onClick={() => remove(entry)}><X size={18} aria-hidden="true" /></button></div><p className={styles.moduleDetail}>{entry.detail}</p><ModuleSchemaField schema={entry.schema} value={state.moduleValues[entry.id] ?? entry.defaults} onChange={(value) => setState((current) => ({ ...current, moduleValues: { ...current.moduleValues, [entry.id]: value } }))} path={`/modules/${entry.id}`} fields={entry.fields} issues={moduleIssues} context={configurationContext} />{entry.funding ? <div className={styles.programFunding}><TextField label={entry.funding.label} name={`funding-${entry.id}`} value={state.moduleFundingEth[entry.id] ?? ""} suffix="ETH" inputMode="decimal" help={entry.funding.help} issue={issues.find((issue) => issue.path === `/funding/${entry.id}`)} onChange={(value) => setState((current) => ({ ...current, moduleFundingEth: { ...current.moduleFundingEth, [entry.id]: value } }))} /><p className={styles.help}>This ETH is additional. It does not come from your initial buy or creator fees.</p></div> : null}{moduleIssues.filter((issue) => issue.path === `/modules/${entry.id}`).map((issue, index) => <p className={styles.fieldError} key={index}>{issue.message}</p>)}</section>; })}
               </div>
             </section>
             {issues.length ? <div className={styles.errorSummary} tabIndex={-1} data-error-summary><strong>Check your draft</strong><ul>{issues.map((issue, index) => <li key={`${issue.path}-${index}`}>{issue.message}</li>)}</ul></div> : null}
-            <div className={styles.formFooter}><p>Preview your setup before exporting it.</p><button type="submit" className={styles.primaryButton}>Review draft <ArrowRight size={18} aria-hidden="true" /></button></div>
+            <div className={styles.formFooter}><p>Preview your setup before exporting it.</p><button type="submit" className={styles.primaryButton} disabled={imageBusy}>Review draft <ArrowRight size={18} aria-hidden="true" /></button></div>
           </form>
         )}
         <aside className={styles.previewPanel} aria-labelledby="module-preview-title">
-          <div className={styles.tokenPreview}><div className={styles.tokenArtwork}><Image src="/brand/create/classic-botanical-v4.webp" alt="" fill sizes="(max-width: 760px) 80px, 320px" /><span className={styles.tokenMonogram}>{state.symbol.trim().slice(0, 3) || "✳"}</span></div><div className={styles.tokenPreviewHeading}><span id="module-preview-title" className={styles.eyebrow}>Your coin</span><h2>{state.name.trim() || "A new beginning"}</h2><p>{state.symbol.trim() ? `$${state.symbol.trim()}` : "Your symbol goes here"}</p></div></div>
+          <div className={styles.tokenPreview}><div className={styles.tokenArtwork} data-custom={Boolean(tokenImageSource)}><Image src={tokenImageSource ?? "/brand/create/classic-botanical-v4.webp"} alt={tokenImageSource ? "Your selected token image" : ""} fill sizes="(max-width: 760px) 80px, 320px" unoptimized={Boolean(tokenImageSource)} />{tokenImageSource ? null : <span className={styles.tokenMonogram}>{state.symbol.trim().slice(0, 3) || "✳"}</span>}</div><div className={styles.tokenPreviewHeading}><span id="module-preview-title" className={styles.eyebrow}>Your coin</span><h2>{state.name.trim() || "A new beginning"}</h2><p>{state.symbol.trim() ? `$${state.symbol.trim()}` : "Your symbol goes here"}</p></div></div>
           <div className={styles.previewFacts}><div><span>Market</span><strong>ETH bonding curve</strong></div><div><span>Modules</span><strong>{selected.length === 0 ? "None" : selected.length}</strong></div></div>
           <div className={styles.totalFees}><h3>Total fees at launch</h3><div><span>Buy</span><strong>{fees.buy}</strong></div><div><span>Sell</span><strong>{fees.sell}</strong></div><p>Creator fee + 0.20% Programmable fee.<br />Collected in ETH. Gas is separate.</p></div>
+          {hasFunding ? <div className={styles.nativeValueSummary}><h3>ETH to provide</h3><div><span>Initial buy</span><strong>{amounts.initialBuy} ETH</strong></div><div><span>Program budgets</span><strong>+ {amounts.funding} ETH</strong></div><div><span>Total, before gas</span><strong>{amounts.total} ETH</strong></div></div> : null}
           {selected.length ? <div className={styles.activeModules}>{selected.map((entry) => <span key={entry.id}><Check size={14} aria-hidden="true" />{entry.title}</span>)}</div> : <p className={styles.plainCoin}>Just a coin is a great place to start.<br />Modules are optional.</p>}
           <p className={styles.availabilityNote}>{launchAction ? "Review the exact transaction in your wallet before signing." : "Preview only. Wallet launching is not available yet."}</p>
         </aside>

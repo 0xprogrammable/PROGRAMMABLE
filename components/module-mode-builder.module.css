@@ -41,6 +41,15 @@
 .sectionHeading h2 { color: var(--mm-ink); font-size: 20px; font-weight: 500; letter-spacing: -0.02em; line-height: 28px; margin: 0; }
 .sectionHeading p { color: var(--mm-muted); font-size: 14px; line-height: 20px; margin: 4px 0 0; }
 .tokenFields { display: grid; gap: 16px; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
+.imageField { margin-bottom: 24px; min-width: 0; }
+.imageFieldLabel { color: #eee; display: block; font-size: 14px; line-height: 20px; margin-bottom: 8px; }
+.imagePicker { align-items: center; display: flex; gap: 16px; margin-bottom: 8px; }
+.imageThumbnail { align-items: center; background: #242424; border: 1px solid #484848; border-radius: 8px; color: var(--mm-muted); display: flex; flex: 0 0 80px; height: 80px; justify-content: center; overflow: hidden; position: relative; }
+.imageThumbnail img { object-fit: cover; }
+.imagePickerContent { display: grid; gap: 4px; min-width: 0; }
+.imagePickerActions { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
+.imagePickerActions .secondaryButton { font-size: 14px; min-height: 44px; padding: 8px 12px; }
+.imageField > .textButton { font-size: 12px; }
 .twoFields { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .field { display: grid; gap: 8px; margin-bottom: 16px; min-width: 0; }
 .field label { align-items: baseline; color: #eee; display: flex; font-size: 14px; gap: 8px; line-height: 20px; }
@@ -109,6 +118,9 @@
 .moduleConfigurationHeading h3 { font-size: 16px; font-weight: 500; line-height: 24px; margin: 0; }
 .iconButton { background: transparent; border: 0; color: var(--mm-muted); flex: 0 0 44px; height: 44px; padding: 12px; width: 44px; }
 .moduleDetail { color: var(--mm-muted); font-size: 12px; line-height: 20px; margin: 0 0 16px; }
+.programFunding { border-top: 1px solid #484848; margin-top: 24px; padding-top: 24px; }
+.programFunding > .field { margin-bottom: 4px; }
+.durationInput { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr) 112px; }
 .recordFields { display: grid; gap: 16px; }
 .recordField { min-width: 0; }
 .recordField > .field { margin-bottom: 0; }
@@ -134,6 +146,8 @@
 .previewPanel { min-width: 0; position: sticky; top: calc(var(--header-height, 88px) + 24px); }
 .tokenArtwork { aspect-ratio: 1.8; background: #312b32; border-radius: 12px; isolation: isolate; overflow: hidden; position: relative; }
 .tokenArtwork img { object-fit: cover; object-position: center 56%; }
+.tokenArtwork[data-custom="true"] { background: #181818; border: 1px solid var(--mm-line); }
+.tokenArtwork[data-custom="true"] img { object-fit: contain; object-position: center; }
 .tokenMonogram { align-items: center; background: rgb(17 17 17 / 0.74); border: 1px solid rgb(255 255 255 / 0.3); border-radius: 50%; color: #fff; display: flex; font-size: 24px; font-weight: 500; height: 64px; inset: 50% auto auto 50%; justify-content: center; letter-spacing: -0.04em; position: absolute; transform: translate(-50%, -50%); width: 64px; }
 .tokenPreviewHeading { padding-top: 24px; }
 .eyebrow { color: var(--mm-muted); font-size: 12px; line-height: 20px; }
@@ -153,6 +167,11 @@
 .activeModules { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 24px; }
 .activeModules span { align-items: center; color: #dadbd3; display: inline-flex; font-size: 12px; gap: 4px; line-height: 20px; }
 .availabilityNote { color: var(--mm-muted); font-size: 12px; line-height: 20px; margin: 24px 0 0; }
+.nativeValueSummary { display: grid; gap: 8px; margin-top: 24px; }
+.nativeValueSummary h3 { font-size: 14px; font-weight: 500; line-height: 20px; margin: 0 0 4px; }
+.nativeValueSummary > div { display: flex; gap: 16px; justify-content: space-between; }
+.nativeValueSummary span { color: var(--mm-muted); font-size: 12px; line-height: 20px; }
+.nativeValueSummary strong { font-size: 12px; font-weight: 500; line-height: 20px; overflow-wrap: anywhere; text-align: right; }
 .reviewRows { display: grid; gap: 24px; margin: 0; }
 .reviewRows > div { display: grid; gap: 8px; grid-template-columns: 1fr 1.4fr; }
 .reviewRows dt { color: var(--mm-muted); font-size: 14px; line-height: 24px; }
@@ -230,6 +249,8 @@
   .twoFields { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .catalogRow { align-items: flex-start; }
   .moduleConfiguration { padding: 12px; }
+  .imagePicker { align-items: flex-start; gap: 12px; }
+  .imageThumbnail { flex-basis: 64px; height: 64px; }
   .reviewRows > div { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .reviewRows dd { text-align: left; }
 }
