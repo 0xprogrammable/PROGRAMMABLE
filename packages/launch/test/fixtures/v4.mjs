@@ -531,7 +531,7 @@ export function v4RequestBytes(request = validV4Request()) {
 }
 
 export function validV4Capabilities(overrides = {}) {
-  return {
+  const capabilities = {
     schemaVersion: "programmable.custom-launch-capabilities.v2",
     apiVersion: "v4",
     serverTime: "2026-08-29T12:00:00.000Z",
@@ -597,6 +597,12 @@ export function validV4Capabilities(overrides = {}) {
     },
     ...overrides,
   };
+  if (overrides.profile?.profileVersion === "4.1.0") {
+    if (overrides.routes === undefined) capabilities.routes.initialBuyQuote = "/v4/chains/4663/initial-buy-quote";
+    if (overrides.authentication === undefined) capabilities.authentication.initialBuyQuote = "none";
+    if (overrides.funding === undefined) capabilities.funding.modes = ["wallet-transaction-value"];
+  }
+  return capabilities;
 }
 
 export function validV4Preflight(request = validV4Request(), rawBytes = v4RequestBytes(request)) {

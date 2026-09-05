@@ -23,11 +23,13 @@ export async function buildRobinhoodNative20ExampleV41({ projectRoot, capabiliti
     throw new TypeError(`ROBINHOOD_PROFILE_NOT_AVAILABLE: this example requires the current capabilities profile ${ROBINHOOD_PROFILE_V41.profileVersion} with its complete immutable tuple; do not substitute a historical profile`);
   }
   const chainDeployment = normalizeV4ChainDeployment(capabilities.chainDeployment);
-  const funding = { schemaVersion: "programmable.custom-launch-funding-intent.v2", mode: "none", valueWei: "0" };
+  const initialBuyWei = input.fundingPlan?.nativeAllocations?.initialBuyWei;
+  const funding = { schemaVersion: "programmable.custom-launch-funding-intent.v2", mode: initialBuyWei === "0" ? "none" : "wallet-transaction-value", valueWei: initialBuyWei };
   const fundingPlan = normalizeRobinhoodFundingPlanV1(input.fundingPlan, funding);
   if (fundingPlan.capitalSource !== "buyer-funded" || fundingPlan.pricingModel !== "concentrated-liquidity") {
-    throw new TypeError("This example seeds locked token inventory with buyer-funded concentrated liquidity. Select a matching plan or implement a different reviewed project; no native principal or initial buy is performed here.");
+    throw new TypeError("This example seeds locked token inventory with buyer-funded concentrated liquidity. Select a matching plan or implement a different reviewed project; the entire native launch value is the atomic first buy, with no native seed principal.");
   }
+  if (typeof input.minimumTokensOut !== "string" || !/^[1-9][0-9]{0,77}$/u.test(input.minimumTokensOut) || BigInt(input.minimumTokensOut) >= (1n << 256n)) throw new TypeError("minimumTokensOut must be a user-reviewed positive uint256 decimal string; do not infer slippage consent");
   if (solc.version() !== reviewed.compilerVersion) throw new TypeError(`exact solc ${reviewed.compilerVersion} is required`);
   const dependencies = JSON.parse(await readFile(new URL("../contracts/robinhood-native-fee-v1/native20-dependencies.json", import.meta.url), "utf8"));
   const kernelInput = structuredClone(reviewed.standardJsonInput);
@@ -84,7 +86,8 @@ export async function buildRobinhoodNative20ExampleV41({ projectRoot, capabiliti
     targets: [
       { ...common, targetId: "initializer", compilationUnitId: "native20", artifact: "out/initializer.json",
         applicantSalt: `0x${"01".repeat(32)}`, constructorArguments: [manager, factory],
-        initializer: { function: "initialize", arguments: [{ target: "token" }, { target: "hook" }] },
+        initializer: { function: "initialize", arguments: [{ target: "token" }, { target: "hook" }, input.launchWallet, input.minimumTokensOut] },
+        initializerValueWei: initialBuyWei,
         componentKind: "other", runtimeImmutables: initializerImmutables },
       { ...common, targetId: "token", compilationUnitId: "native20", artifact: "out/token.json",
         applicantSalt: `0x${"02".repeat(32)}`, constructorArguments: [{ target: "initializer" }],

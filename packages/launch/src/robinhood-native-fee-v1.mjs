@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { canonicalizeJson } from "./canonical-json.mjs";
 import { assertExactKeys, sha256Digest } from "./io.mjs";
 
-export const ROBINHOOD_NATIVE_FEE_ARTIFACT_SHA256_V1 = "sha256:917c03d59c7b6c051d6aa238cd0b2a91aa02c8993ccbfce6421d5c6341d5380e";
+import { ROBINHOOD_NATIVE_FEE_ARTIFACT_SHA256_V1 } from "./fee-policy-v1.mjs";
+export { ROBINHOOD_NATIVE_FEE_ARTIFACT_SHA256_V1 } from "./fee-policy-v1.mjs";
 export const ROBINHOOD_NATIVE_FEE_ARTIFACT_V1 = deepFreeze(JSON.parse(readFileSync(
   new URL("../contracts/robinhood-native-fee-v1/artifact.json", import.meta.url), "utf8",
 )));

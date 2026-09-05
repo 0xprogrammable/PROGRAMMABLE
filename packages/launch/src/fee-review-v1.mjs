@@ -1,7 +1,7 @@
-import { getAddress, getContractAddress } from "viem";
+import { getAddress, getContractAddress, keccak256 } from "viem";
 import { canonicalizeJson } from "./canonical-json.mjs";
 import { assertExactKeys, sha256Digest } from "./io.mjs";
-import { ROBINHOOD_NATIVE_FEE_ARTIFACT_SHA256_V1, ROBINHOOD_NATIVE_FEE_ARTIFACT_V1 } from "./robinhood-native-fee-v1.mjs";
+import { ROBINHOOD_NATIVE_FEE_ARTIFACT_SHA256_V1, ROBINHOOD_NATIVE_FEE_KERNEL_CREATION_BYTES_V1, ROBINHOOD_NATIVE_FEE_KERNEL_CREATION_KECCAK_V1 } from "./fee-policy-v1.mjs";
 
 const sha = { type: "string", pattern: "^sha256:[0-9a-f]{64}$" };
 const hex = { type: "string", pattern: "^0x[0-9a-f]{64}$" };
@@ -35,7 +35,7 @@ export const ROBINHOOD_FEE_REVIEW_SCHEMA_V1 = closed({
 
 /** Validate server-issued proof bindings, not a fresh onchain state or a safety guarantee. */
 export function assertRobinhoodFeeReviewV1(proof, resource) {
-  validateShape(proof, ROBINHOOD_FEE_REVIEW_SCHEMA_V1, "feeReview");
+  validateEvidenceShapeV41(proof, ROBINHOOD_FEE_REVIEW_SCHEMA_V1, "feeReview");
   const { evidenceDigest, ...unsigned } = proof;
   const digest = sha256Digest(Buffer.concat([Buffer.from(proof.schemaVersion), Buffer.from([0]),
     Buffer.from(canonicalizeJson(unsigned))]));
@@ -55,7 +55,7 @@ export function assertRobinhoodFeeReviewV1(proof, resource) {
       || proof.graphSha256 !== (artifact.unboundGraphBundleHash ?? artifact.graphBundleHash)
       || target?.predictedAddress !== proof.kernelAddress
       || target?.expectedRuntimeCodeHash !== proof.kernelRuntimeCodeHash
-      || !target.initCode.startsWith(ROBINHOOD_NATIVE_FEE_ARTIFACT_V1.kernel.creationBytecode)
+      || keccak256(target.initCode.slice(0, 2 + ROBINHOOD_NATIVE_FEE_KERNEL_CREATION_BYTES_V1 * 2)) !== ROBINHOOD_NATIVE_FEE_KERNEL_CREATION_KECCAK_V1
       || canonicalizeJson(proof.poolKey) !== canonicalizeJson(artifact.stampRequest.poolKey)) {
       throw new TypeError("feeReview prepared artifact or kernel binding differs");
     }
@@ -63,18 +63,18 @@ export function assertRobinhoodFeeReviewV1(proof, resource) {
   return proof;
 }
 
-function validateShape(value, schema, label) {
+export function validateEvidenceShapeV41(value, schema, label) {
   if (schema.anyOf) {
     if (value === null && schema.anyOf.some((entry) => entry.type === "null")) return;
-    return validateShape(value, schema.anyOf[0], label);
+    return validateEvidenceShapeV41(value, schema.anyOf[0], label);
   }
   if (Object.hasOwn(schema, "const")) {
-    if (value !== schema.const) throw new TypeError(`${label} differs from the reviewed fee policy`);
+    if (canonicalizeJson(value) !== canonicalizeJson(schema.const)) throw new TypeError(`${label} differs from the reviewed fee policy`);
   } else if (schema.enum) {
     if (!schema.enum.includes(value)) throw new TypeError(`${label} is unsupported`);
   } else if (schema.type === "object") {
     assertExactKeys(value, schema.required, label);
-    for (const [key, child] of Object.entries(schema.properties)) validateShape(value[key], child, `${label}.${key}`);
+    for (const [key, child] of Object.entries(schema.properties)) validateEvidenceShapeV41(value[key], child, `${label}.${key}`);
   } else if (schema.type === "integer") {
     if (!Number.isSafeInteger(value) || value < schema.minimum || value > schema.maximum) throw new TypeError(`${label} is out of bounds`);
   } else if (schema.type === "string") {

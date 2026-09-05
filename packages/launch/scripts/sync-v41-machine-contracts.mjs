@@ -4,6 +4,8 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ROBINHOOD_PROFILE_V41 } from "../src/profile-v41.mjs";
+import { ROBINHOOD_INITIAL_BUY_REVIEW_SCHEMA_V1 } from "../src/initial-buy-review-v1.mjs";
+import { ROBINHOOD_INITIAL_BUY_QUOTE_SCHEMA_V1 } from "../src/initial-buy-quote-v1.mjs";
 import { ROBINHOOD_FEE_REVIEW_SCHEMA_V1 } from "../src/fee-review-v1.mjs";
 import { ROBINHOOD_FUNDING_PLAN_SCHEMA_V1 } from "../src/funding-plan-v1.mjs";
 
@@ -27,7 +29,7 @@ const fundingPlan = closed({
 });
 fundingPlan.description = "Declared native capital allocation and reviewed budgets; not proof of balances, reserves, solvency, liquidity or gas availability. Allocation sum must equal funding.valueWei without uint256 overflow and must not exceed maxLaunchValueWei. Build-only permits local pack/preflight only; fresh create must reject before persistence or signing.";
 fundingPlan.allOf = [{ if: { properties: { launchMode: { const: "fund-and-launch" } }, required: ["launchMode"] },
-  then: { properties: { maxGasCostWei: { ...uint, pattern: "^[1-9][0-9]*$" } } } }];
+  then: { properties: { maxGasCostWei: { ...uint, pattern: "^[1-9][0-9]*$" }, nativeAllocations: { properties: { initialBuyWei: { ...uint, pattern: "^[1-9][0-9]*$" } } } } } }];
 
 function successor(value) {
   if (typeof value === "string") return value
@@ -49,11 +51,24 @@ function successor(value) {
     result.required = [...result.required, "fundingPlan"];
   }
   const version = result.properties?.schemaVersion?.const;
-  if (version === "programmable.custom-launch.v4") result.properties.feeReview = structuredClone(ROBINHOOD_FEE_REVIEW_SCHEMA_V1);
+  if (version === "programmable.custom-launch.v4") {
+    result.properties.feeReview = structuredClone(ROBINHOOD_FEE_REVIEW_SCHEMA_V1);
+    result.properties.initialBuyReview = { oneOf: [structuredClone(ROBINHOOD_INITIAL_BUY_REVIEW_SCHEMA_V1), { type: "null" }] };
+    result.required = [...result.required, "initialBuyReview"];
+  }
+  if (version === "programmable.custom-launch-capabilities.v2") {
+    result.properties.routes.properties.initialBuyQuote = { const: "/v4/chains/4663/initial-buy-quote" };
+    result.properties.authentication.properties.initialBuyQuote = { const: "none" };
+    result.properties.funding.properties.modes = { oneOf: [{ const: ["none", "wallet-transaction-value"] }, { const: ["wallet-transaction-value"] }] };
+    result.allOf = [...(result.allOf ?? []), { if: { properties: { profile: { type: "object" } }, required: ["profile"] },
+      then: { properties: { routes: { required: ["initialBuyQuote"] }, authentication: { required: ["initialBuyQuote"] }, funding: { properties: { modes: { const: ["wallet-transaction-value"] } } } } },
+      else: { properties: { routes: { not: { required: ["initialBuyQuote"] } }, authentication: { not: { required: ["initialBuyQuote"] } }, funding: { properties: { modes: { const: ["none", "wallet-transaction-value"] } } } } } }];
+  }
   if (version === "programmable.custom-launch-admission-receipt.v4") {
     result.properties.feeReviewDigest = { anyOf: [{ type: "string", pattern: "^sha256:[0-9a-f]{64}$" }, { type: "null" }] };
-    result.required = [...result.required, "feeReviewDigest"];
-    result.allOf = [...(result.allOf ?? []), { if: { properties: { disposition: { enum: ["supported", "supported_with_warnings"] } }, required: ["disposition"] }, then: { properties: { feeReviewDigest: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" } } } }];
+    result.properties.initialBuyReviewDigest = structuredClone(result.properties.feeReviewDigest);
+    result.required = [...result.required, "feeReviewDigest", "initialBuyReviewDigest"];
+    result.allOf = [...(result.allOf ?? []), { if: { properties: { disposition: { enum: ["supported", "supported_with_warnings"] } }, required: ["disposition"] }, then: { properties: { feeReviewDigest: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" }, initialBuyReviewDigest: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" } } } }];
   }
   if (result["x-programmable-contract"]?.cliReleaseVersion) result["x-programmable-contract"].cliReleaseVersion = "4.1.0";
   return result;
@@ -89,5 +104,15 @@ openapi.info.title = "Programmable Custom Launch API V4 profile 4.1";
 openapi.info.description += " Profile 4.1.0/revision 2 requires the hash-bound fundingPlan. Build-only requests are pack/preflight only. Budgets do not prove available native funds; exact wallet gas/balance checks occur later. Historical profile 4.0 requests and resources retain their frozen 4.0 contracts.";
 openapi.components.schemas.RobinhoodFundingPlanV1 = structuredClone(fundingPlan);
 openapi.components.schemas.RobinhoodNativeFeeKernelProofV1 = structuredClone(ROBINHOOD_FEE_REVIEW_SCHEMA_V1);
+openapi.components.schemas.RobinhoodInitialBuyReviewV1 = structuredClone(ROBINHOOD_INITIAL_BUY_REVIEW_SCHEMA_V1);
+openapi.components.schemas.RobinhoodInitialBuyUsdQuoteV1 = structuredClone(ROBINHOOD_INITIAL_BUY_QUOTE_SCHEMA_V1);
+const quoteGet = structuredClone(openapi.paths["/v4/chains/{chainId}/capabilities"].get);
+quoteGet.operationId = "getRobinhoodInitialBuyUsdQuoteV1";
+quoteGet.summary = "Read the server-owned USD 1 initial-buy reference";
+quoteGet.description = "Unauthenticated reference only; no transaction or budget change. The service rechecks fresh independent provider evidence before permit authorization. This does not guarantee the USD value at execution.";
+quoteGet.responses["200"] = { description: "Fresh native ETH/USD reference", content: { "application/json": { schema: { $ref: "#/components/schemas/RobinhoodInitialBuyUsdQuoteV1" } } } };
+openapi.paths["/v4/chains/{chainId}/initial-buy-quote"] = { get: quoteGet };
+await emit(path.join(newRoot, "initial-buy-quote.json"), { $schema: "https://json-schema.org/draft/2020-12/schema", $id: "https://programmable.market/schemas/custom-launch/v4.1/initial-buy-quote.json", ...structuredClone(ROBINHOOD_INITIAL_BUY_QUOTE_SCHEMA_V1) });
+await emit(path.join(newRoot, "initial-buy-review.json"), { $schema: "https://json-schema.org/draft/2020-12/schema", $id: "https://programmable.market/schemas/custom-launch/v4.1/initial-buy-review.json", ...structuredClone(ROBINHOOD_INITIAL_BUY_REVIEW_SCHEMA_V1) });
 await emit(path.join(repositoryRoot, "public/openapi/custom-launch-v4.1.json"), openapi);
 console.log(check ? "V4.1 machine contracts match additive generation" : "Generated additive V4.1 machine contracts");

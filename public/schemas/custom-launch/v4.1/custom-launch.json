@@ -37,7 +37,8 @@
     "failure",
     "createdAt",
     "updatedAt",
-    "fundingPlan"
+    "fundingPlan",
+    "initialBuyReview"
   ],
   "properties": {
     "schemaVersion": {
@@ -3047,16 +3048,16 @@
           "const": "robinhood-production-launch"
         },
         "admissionDescriptorDigest": {
-          "const": "sha256:a2ed199d421634ac1ee821769ac4526cae46cc3a1357a374a87aa49ee5c649d6"
+          "const": "sha256:b09611360e284641873fdb2914b4282e0545e32ea587b278fcd11f4db9a4e7f5"
         },
         "admissionPolicyDigest": {
-          "const": "sha256:4307368bef409e6c7609a1a775f88f45f94f34cfefe8b1d2316589d5244661e8"
+          "const": "sha256:47801f57e2365f89eb7397a2df10d697bd1f756ec01536b9b34755e89809da04"
         },
         "admissionBindingDigest": {
-          "const": "sha256:4553def3ee66dba41dd0296a3ae12fd5989c34a3b595d657226fa25239f17ea2"
+          "const": "sha256:5b2486f35fcd44bd476cafd5bfb5a12decf05a756ba237ca191928f5414c721e"
         },
         "admissionSchemaDigest": {
-          "const": "sha256:55ec992f3f93d4ed57c09bd41ef257e65e492bf3e9a12b2a780d01252a9ccf89"
+          "const": "sha256:6a8194a3b5d8b6432a95ec04da3cd86091ad64c93c0531125caf00ecb919c8cf"
         },
         "profileRevision": {
           "const": 2
@@ -3065,7 +3066,7 @@
           "const": "4.1.0"
         },
         "profileDigest": {
-          "const": "sha256:5bd194ce769e825231d94e16c7e874f36935931224bca86a4003a9a3691b87bc"
+          "const": "sha256:b0fca91264a49d358ed1a9eec2a679b59a48d716b71475bef583c2545e1ee502"
         }
       }
     },
@@ -6678,16 +6679,16 @@
                   "const": "robinhood-production-launch"
                 },
                 "admissionDescriptorDigest": {
-                  "const": "sha256:a2ed199d421634ac1ee821769ac4526cae46cc3a1357a374a87aa49ee5c649d6"
+                  "const": "sha256:b09611360e284641873fdb2914b4282e0545e32ea587b278fcd11f4db9a4e7f5"
                 },
                 "admissionPolicyDigest": {
-                  "const": "sha256:4307368bef409e6c7609a1a775f88f45f94f34cfefe8b1d2316589d5244661e8"
+                  "const": "sha256:47801f57e2365f89eb7397a2df10d697bd1f756ec01536b9b34755e89809da04"
                 },
                 "admissionBindingDigest": {
-                  "const": "sha256:4553def3ee66dba41dd0296a3ae12fd5989c34a3b595d657226fa25239f17ea2"
+                  "const": "sha256:5b2486f35fcd44bd476cafd5bfb5a12decf05a756ba237ca191928f5414c721e"
                 },
                 "admissionSchemaDigest": {
-                  "const": "sha256:55ec992f3f93d4ed57c09bd41ef257e65e492bf3e9a12b2a780d01252a9ccf89"
+                  "const": "sha256:6a8194a3b5d8b6432a95ec04da3cd86091ad64c93c0531125caf00ecb919c8cf"
                 },
                 "profileRevision": {
                   "const": 2
@@ -6696,7 +6697,7 @@
                   "const": "4.1.0"
                 },
                 "profileDigest": {
-                  "const": "sha256:5bd194ce769e825231d94e16c7e874f36935931224bca86a4003a9a3691b87bc"
+                  "const": "sha256:b0fca91264a49d358ed1a9eec2a679b59a48d716b71475bef583c2545e1ee502"
                 }
               }
             },
@@ -7597,7 +7598,8 @@
             "warningFindingCodes",
             "issuedAt",
             "receiptDigest",
-            "feeReviewDigest"
+            "feeReviewDigest",
+            "initialBuyReviewDigest"
           ],
           "properties": {
             "schemaVersion": {
@@ -7723,6 +7725,17 @@
                   "type": "null"
                 }
               ]
+            },
+            "initialBuyReviewDigest": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "allOf": [
@@ -7743,6 +7756,10 @@
               "then": {
                 "properties": {
                   "feeReviewDigest": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "initialBuyReviewDigest": {
                     "type": "string",
                     "pattern": "^sha256:[0-9a-f]{64}$"
                   }
@@ -7946,16 +7963,16 @@
                   "const": "robinhood-production-launch"
                 },
                 "admissionDescriptorDigest": {
-                  "const": "sha256:a2ed199d421634ac1ee821769ac4526cae46cc3a1357a374a87aa49ee5c649d6"
+                  "const": "sha256:b09611360e284641873fdb2914b4282e0545e32ea587b278fcd11f4db9a4e7f5"
                 },
                 "admissionPolicyDigest": {
-                  "const": "sha256:4307368bef409e6c7609a1a775f88f45f94f34cfefe8b1d2316589d5244661e8"
+                  "const": "sha256:47801f57e2365f89eb7397a2df10d697bd1f756ec01536b9b34755e89809da04"
                 },
                 "admissionBindingDigest": {
-                  "const": "sha256:4553def3ee66dba41dd0296a3ae12fd5989c34a3b595d657226fa25239f17ea2"
+                  "const": "sha256:5b2486f35fcd44bd476cafd5bfb5a12decf05a756ba237ca191928f5414c721e"
                 },
                 "admissionSchemaDigest": {
-                  "const": "sha256:55ec992f3f93d4ed57c09bd41ef257e65e492bf3e9a12b2a780d01252a9ccf89"
+                  "const": "sha256:6a8194a3b5d8b6432a95ec04da3cd86091ad64c93c0531125caf00ecb919c8cf"
                 },
                 "profileRevision": {
                   "const": 2
@@ -7964,7 +7981,7 @@
                   "const": "4.1.0"
                 },
                 "profileDigest": {
-                  "const": "sha256:5bd194ce769e825231d94e16c7e874f36935931224bca86a4003a9a3691b87bc"
+                  "const": "sha256:b0fca91264a49d358ed1a9eec2a679b59a48d716b71475bef583c2545e1ee502"
                 }
               }
             },
@@ -13035,16 +13052,16 @@
                       "const": "robinhood-production-launch"
                     },
                     "admissionDescriptorDigest": {
-                      "const": "sha256:a2ed199d421634ac1ee821769ac4526cae46cc3a1357a374a87aa49ee5c649d6"
+                      "const": "sha256:b09611360e284641873fdb2914b4282e0545e32ea587b278fcd11f4db9a4e7f5"
                     },
                     "admissionPolicyDigest": {
-                      "const": "sha256:4307368bef409e6c7609a1a775f88f45f94f34cfefe8b1d2316589d5244661e8"
+                      "const": "sha256:47801f57e2365f89eb7397a2df10d697bd1f756ec01536b9b34755e89809da04"
                     },
                     "admissionBindingDigest": {
-                      "const": "sha256:4553def3ee66dba41dd0296a3ae12fd5989c34a3b595d657226fa25239f17ea2"
+                      "const": "sha256:5b2486f35fcd44bd476cafd5bfb5a12decf05a756ba237ca191928f5414c721e"
                     },
                     "admissionSchemaDigest": {
-                      "const": "sha256:55ec992f3f93d4ed57c09bd41ef257e65e492bf3e9a12b2a780d01252a9ccf89"
+                      "const": "sha256:6a8194a3b5d8b6432a95ec04da3cd86091ad64c93c0531125caf00ecb919c8cf"
                     },
                     "profileRevision": {
                       "const": 2
@@ -13053,7 +13070,7 @@
                       "const": "4.1.0"
                     },
                     "profileDigest": {
-                      "const": "sha256:5bd194ce769e825231d94e16c7e874f36935931224bca86a4003a9a3691b87bc"
+                      "const": "sha256:b0fca91264a49d358ed1a9eec2a679b59a48d716b71475bef583c2545e1ee502"
                     }
                   }
                 },
@@ -16201,16 +16218,16 @@
                       "const": "robinhood-production-launch"
                     },
                     "admissionDescriptorDigest": {
-                      "const": "sha256:a2ed199d421634ac1ee821769ac4526cae46cc3a1357a374a87aa49ee5c649d6"
+                      "const": "sha256:b09611360e284641873fdb2914b4282e0545e32ea587b278fcd11f4db9a4e7f5"
                     },
                     "admissionPolicyDigest": {
-                      "const": "sha256:4307368bef409e6c7609a1a775f88f45f94f34cfefe8b1d2316589d5244661e8"
+                      "const": "sha256:47801f57e2365f89eb7397a2df10d697bd1f756ec01536b9b34755e89809da04"
                     },
                     "admissionBindingDigest": {
-                      "const": "sha256:4553def3ee66dba41dd0296a3ae12fd5989c34a3b595d657226fa25239f17ea2"
+                      "const": "sha256:5b2486f35fcd44bd476cafd5bfb5a12decf05a756ba237ca191928f5414c721e"
                     },
                     "admissionSchemaDigest": {
-                      "const": "sha256:55ec992f3f93d4ed57c09bd41ef257e65e492bf3e9a12b2a780d01252a9ccf89"
+                      "const": "sha256:6a8194a3b5d8b6432a95ec04da3cd86091ad64c93c0531125caf00ecb919c8cf"
                     },
                     "profileRevision": {
                       "const": 2
@@ -16219,7 +16236,7 @@
                       "const": "4.1.0"
                     },
                     "profileDigest": {
-                      "const": "sha256:5bd194ce769e825231d94e16c7e874f36935931224bca86a4003a9a3691b87bc"
+                      "const": "sha256:b0fca91264a49d358ed1a9eec2a679b59a48d716b71475bef583c2545e1ee502"
                     }
                   }
                 },
@@ -17037,6 +17054,15 @@
                 "type": "string",
                 "pattern": "^[1-9][0-9]*$",
                 "maxLength": 78
+              },
+              "nativeAllocations": {
+                "properties": {
+                  "initialBuyWei": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]*$",
+                    "maxLength": 78
+                  }
+                }
               }
             }
           }
@@ -17236,6 +17262,262 @@
           "pattern": "^sha256:[0-9a-f]{64}$"
         }
       }
+    },
+    "initialBuyReview": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schemaVersion",
+            "execution",
+            "quote",
+            "assessmentTime",
+            "evidenceDigest"
+          ],
+          "properties": {
+            "schemaVersion": {
+              "const": "programmable.robinhood-initial-buy-review.v1"
+            },
+            "execution": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "schemaVersion",
+                "artifactReleaseSha256",
+                "graphSha256",
+                "verificationBundleSha256",
+                "preparedArtifactHash",
+                "kernelEvidenceDigest",
+                "tokenTargetId",
+                "tokenAddress",
+                "initializerTargetId",
+                "initializerAddress",
+                "initialSqrtPriceX96",
+                "initialTokenInventoryRaw",
+                "nativeSeedWei",
+                "initialBuyWei",
+                "buyer",
+                "minimumTokensOut",
+                "initialBuyExecution",
+                "tickLower",
+                "tickUpper",
+                "positionOwner",
+                "principalPolicy",
+                "evidenceDigest"
+              ],
+              "properties": {
+                "schemaVersion": {
+                  "const": "programmable.robinhood-native20-seed-proof.v1"
+                },
+                "artifactReleaseSha256": {
+                  "const": "sha256:5a3136f3d89b648f016162e6a65bff40432e8e869919beae48eb3b2cd2be1fcc"
+                },
+                "graphSha256": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "verificationBundleSha256": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "preparedArtifactHash": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "kernelEvidenceDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "tokenTargetId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+                },
+                "tokenAddress": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{40}$"
+                },
+                "initializerTargetId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+                },
+                "initializerAddress": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{40}$"
+                },
+                "initialSqrtPriceX96": {
+                  "const": "1747735933952748037356115466503453"
+                },
+                "initialTokenInventoryRaw": {
+                  "const": "1000000000000000000000000000"
+                },
+                "nativeSeedWei": {
+                  "const": "0"
+                },
+                "initialBuyWei": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,77}$"
+                },
+                "buyer": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{40}$"
+                },
+                "minimumTokensOut": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,77}$"
+                },
+                "initialBuyExecution": {
+                  "const": "atomic-full-native-input-and-minimum-token-output"
+                },
+                "tickLower": {
+                  "const": 160020
+                },
+                "tickUpper": {
+                  "const": 200040
+                },
+                "positionOwner": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-fA-F]{40}$"
+                },
+                "principalPolicy": {
+                  "const": "no-remove-approve-or-execute-entrypoint"
+                },
+                "evidenceDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              }
+            },
+            "quote": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "schemaVersion",
+                "executionChainId",
+                "referenceChainId",
+                "nativeCurrency",
+                "quoteCurrency",
+                "assessmentBase",
+                "feedAddress",
+                "feedDecimals",
+                "blockNumber",
+                "blockHash",
+                "blockTimestamp",
+                "roundId",
+                "answeredInRound",
+                "answer",
+                "startedAt",
+                "updatedAt",
+                "minimumUsdWad",
+                "minimumInitialBuyWei",
+                "observedAt",
+                "expiresAt",
+                "providers",
+                "evidenceDigest"
+              ],
+              "properties": {
+                "schemaVersion": {
+                  "const": "programmable.robinhood-initial-buy-usd-quote.v1"
+                },
+                "executionChainId": {
+                  "const": "4663"
+                },
+                "referenceChainId": {
+                  "const": "1"
+                },
+                "nativeCurrency": {
+                  "const": "ETH"
+                },
+                "quoteCurrency": {
+                  "const": "USD"
+                },
+                "assessmentBase": {
+                  "const": "gross-native-initial-buy-at-admission"
+                },
+                "feedAddress": {
+                  "const": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419"
+                },
+                "feedDecimals": {
+                  "const": 8
+                },
+                "blockNumber": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,77}$"
+                },
+                "blockHash": {
+                  "type": "string",
+                  "pattern": "^0x(?!0{64}$)[0-9a-f]{64}$"
+                },
+                "blockTimestamp": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,77}$"
+                },
+                "roundId": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,77}$"
+                },
+                "answeredInRound": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,77}$"
+                },
+                "answer": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,77}$"
+                },
+                "startedAt": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,77}$"
+                },
+                "updatedAt": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,77}$"
+                },
+                "minimumUsdWad": {
+                  "const": "1000000000000000000"
+                },
+                "minimumInitialBuyWei": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]{0,77}$"
+                },
+                "observedAt": {
+                  "type": "string",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                },
+                "expiresAt": {
+                  "type": "string",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                },
+                "providers": {
+                  "const": [
+                    {
+                      "providerId": "drpc",
+                      "trustDomain": "drpc.org"
+                    },
+                    {
+                      "providerId": "quicknode",
+                      "trustDomain": "quicknode.com"
+                    }
+                  ]
+                },
+                "evidenceDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              }
+            },
+            "assessmentTime": {
+              "const": "permit-authorization"
+            },
+            "evidenceDigest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "allOf": [
@@ -17333,16 +17615,16 @@
                     "const": "robinhood-production-launch"
                   },
                   "admissionDescriptorDigest": {
-                    "const": "sha256:a2ed199d421634ac1ee821769ac4526cae46cc3a1357a374a87aa49ee5c649d6"
+                    "const": "sha256:b09611360e284641873fdb2914b4282e0545e32ea587b278fcd11f4db9a4e7f5"
                   },
                   "admissionPolicyDigest": {
-                    "const": "sha256:4307368bef409e6c7609a1a775f88f45f94f34cfefe8b1d2316589d5244661e8"
+                    "const": "sha256:47801f57e2365f89eb7397a2df10d697bd1f756ec01536b9b34755e89809da04"
                   },
                   "admissionBindingDigest": {
-                    "const": "sha256:4553def3ee66dba41dd0296a3ae12fd5989c34a3b595d657226fa25239f17ea2"
+                    "const": "sha256:5b2486f35fcd44bd476cafd5bfb5a12decf05a756ba237ca191928f5414c721e"
                   },
                   "admissionSchemaDigest": {
-                    "const": "sha256:55ec992f3f93d4ed57c09bd41ef257e65e492bf3e9a12b2a780d01252a9ccf89"
+                    "const": "sha256:6a8194a3b5d8b6432a95ec04da3cd86091ad64c93c0531125caf00ecb919c8cf"
                   },
                   "profileRevision": {
                     "const": 2
@@ -17351,7 +17633,7 @@
                     "const": "4.1.0"
                   },
                   "profileDigest": {
-                    "const": "sha256:5bd194ce769e825231d94e16c7e874f36935931224bca86a4003a9a3691b87bc"
+                    "const": "sha256:b0fca91264a49d358ed1a9eec2a679b59a48d716b71475bef583c2545e1ee502"
                   }
                 }
               },

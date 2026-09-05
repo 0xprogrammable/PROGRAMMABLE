@@ -1,0 +1,251 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://programmable.market/schemas/custom-launch/v4.1/initial-buy-review.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "execution",
+    "quote",
+    "assessmentTime",
+    "evidenceDigest"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "programmable.robinhood-initial-buy-review.v1"
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "artifactReleaseSha256",
+        "graphSha256",
+        "verificationBundleSha256",
+        "preparedArtifactHash",
+        "kernelEvidenceDigest",
+        "tokenTargetId",
+        "tokenAddress",
+        "initializerTargetId",
+        "initializerAddress",
+        "initialSqrtPriceX96",
+        "initialTokenInventoryRaw",
+        "nativeSeedWei",
+        "initialBuyWei",
+        "buyer",
+        "minimumTokensOut",
+        "initialBuyExecution",
+        "tickLower",
+        "tickUpper",
+        "positionOwner",
+        "principalPolicy",
+        "evidenceDigest"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.robinhood-native20-seed-proof.v1"
+        },
+        "artifactReleaseSha256": {
+          "const": "sha256:5a3136f3d89b648f016162e6a65bff40432e8e869919beae48eb3b2cd2be1fcc"
+        },
+        "graphSha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "verificationBundleSha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "preparedArtifactHash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "kernelEvidenceDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "tokenTargetId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+        },
+        "tokenAddress": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{40}$"
+        },
+        "initializerTargetId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+        },
+        "initializerAddress": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{40}$"
+        },
+        "initialSqrtPriceX96": {
+          "const": "1747735933952748037356115466503453"
+        },
+        "initialTokenInventoryRaw": {
+          "const": "1000000000000000000000000000"
+        },
+        "nativeSeedWei": {
+          "const": "0"
+        },
+        "initialBuyWei": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,77}$"
+        },
+        "buyer": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{40}$"
+        },
+        "minimumTokensOut": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,77}$"
+        },
+        "initialBuyExecution": {
+          "const": "atomic-full-native-input-and-minimum-token-output"
+        },
+        "tickLower": {
+          "const": 160020
+        },
+        "tickUpper": {
+          "const": 200040
+        },
+        "positionOwner": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{40}$"
+        },
+        "principalPolicy": {
+          "const": "no-remove-approve-or-execute-entrypoint"
+        },
+        "evidenceDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "quote": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "executionChainId",
+        "referenceChainId",
+        "nativeCurrency",
+        "quoteCurrency",
+        "assessmentBase",
+        "feedAddress",
+        "feedDecimals",
+        "blockNumber",
+        "blockHash",
+        "blockTimestamp",
+        "roundId",
+        "answeredInRound",
+        "answer",
+        "startedAt",
+        "updatedAt",
+        "minimumUsdWad",
+        "minimumInitialBuyWei",
+        "observedAt",
+        "expiresAt",
+        "providers",
+        "evidenceDigest"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.robinhood-initial-buy-usd-quote.v1"
+        },
+        "executionChainId": {
+          "const": "4663"
+        },
+        "referenceChainId": {
+          "const": "1"
+        },
+        "nativeCurrency": {
+          "const": "ETH"
+        },
+        "quoteCurrency": {
+          "const": "USD"
+        },
+        "assessmentBase": {
+          "const": "gross-native-initial-buy-at-admission"
+        },
+        "feedAddress": {
+          "const": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419"
+        },
+        "feedDecimals": {
+          "const": 8
+        },
+        "blockNumber": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,77}$"
+        },
+        "blockHash": {
+          "type": "string",
+          "pattern": "^0x(?!0{64}$)[0-9a-f]{64}$"
+        },
+        "blockTimestamp": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,77}$"
+        },
+        "roundId": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,77}$"
+        },
+        "answeredInRound": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,77}$"
+        },
+        "answer": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,77}$"
+        },
+        "startedAt": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,77}$"
+        },
+        "updatedAt": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,77}$"
+        },
+        "minimumUsdWad": {
+          "const": "1000000000000000000"
+        },
+        "minimumInitialBuyWei": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,77}$"
+        },
+        "observedAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "expiresAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "providers": {
+          "const": [
+            {
+              "providerId": "drpc",
+              "trustDomain": "drpc.org"
+            },
+            {
+              "providerId": "quicknode",
+              "trustDomain": "quicknode.com"
+            }
+          ]
+        },
+        "evidenceDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "assessmentTime": {
+      "const": "permit-authorization"
+    },
+    "evidenceDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

@@ -1,3 +1,4 @@
+import { assertRobinhoodInitialBuyReviewV1 } from "./initial-buy-review-v1.mjs";
 import { assertRobinhoodFeeReviewV1 } from "./fee-review-v1.mjs";
 import { isRobinhoodProfileV41 } from "./profile-v41.mjs";
 import { normalizeRobinhoodFundingPlanV1, assertRobinhoodFundingPlanDeployableV1 } from "./funding-plan-v1.mjs";
@@ -983,6 +984,7 @@ function assertCapabilitiesResponseV4(value, { chainId }) {
     );
     normalizeV4ProfileRef(value.profile);
   }
+  const successorProfile = rootsReady && isRobinhoodProfileV41(value.profile);
   const base = v4Path(CREATE_PATH_TEMPLATE_V4, chainId);
   assertCapabilitiesV4Field(isPlainObject(value.routes), "routes");
   assertV4ExactKeys(value.routes, [
@@ -992,6 +994,7 @@ function assertCapabilitiesResponseV4(value, { chainId }) {
     "list",
     "status",
     "finalizedMetadata",
+    ...(successorProfile ? ["initialBuyQuote"] : []),
   ], "capabilities.routes");
   for (const [field, expected] of Object.entries({
     capabilities: v4Path(CAPABILITIES_PATH_TEMPLATE_V4, chainId),
@@ -1000,6 +1003,7 @@ function assertCapabilitiesResponseV4(value, { chainId }) {
     list: base,
     status: `${base}/{launchId}`,
     finalizedMetadata: `/v4/chains/${chainId}/finalized-custom-launches`,
+    ...(successorProfile ? { initialBuyQuote: `/v4/chains/${chainId}/initial-buy-quote` } : {}),
   })) {
     assertCapabilitiesV4Field(value.routes?.[field] === expected, `routes.${field}`);
   }
@@ -1010,6 +1014,7 @@ function assertCapabilitiesResponseV4(value, { chainId }) {
     "status",
     "finalizedMetadata",
     "capabilities",
+    ...(successorProfile ? ["initialBuyQuote"] : []),
     "requiredScopes",
     "apiKeyIsWallet",
   ], "capabilities.authentication");
@@ -1026,6 +1031,7 @@ function assertCapabilitiesResponseV4(value, { chainId }) {
       `authentication.${field}`,
     );
   }
+  if (successorProfile) assertCapabilitiesV4Field(value.authentication.initialBuyQuote === "none", "authentication.initialBuyQuote");
   assertCapabilitiesV4Field(
     canonicalizeJson(value.authentication?.requiredScopes)
       === canonicalizeJson(["custom-launch:create", "custom-launch:read"]),
@@ -1046,7 +1052,7 @@ function assertCapabilitiesResponseV4(value, { chainId }) {
   assertV4ExactKeys(value.funding, ["modes"], "capabilities.funding");
   assertCapabilitiesV4Field(
     canonicalizeJson(value.funding?.modes)
-      === canonicalizeJson(["none", "wallet-transaction-value"]),
+      === canonicalizeJson(successorProfile ? ["wallet-transaction-value"] : ["none", "wallet-transaction-value"]),
     "funding.modes",
   );
   assertV4ExactKeys(value.metadataImage, [
@@ -1208,7 +1214,7 @@ function assertV4LaunchResource(value, {
     "commitments",
     "projectMetadata",
     "funding",
-    ...(isRobinhoodProfileV41(resourceProfile) ? ["fundingPlan"] : []),
+    ...(isRobinhoodProfileV41(resourceProfile) ? ["fundingPlan", "initialBuyReview"] : []),
     "liquidityModel",
     "walletTransaction",
     "preparedArtifact",
@@ -1441,6 +1447,9 @@ function assertV4LaunchResource(value, {
     });
   }
   assertV4ReceiptPhase(value, { request, capabilities });
+  if (isRobinhoodProfileV41(resourceProfile) && value.initialBuyReview !== null) {
+    assertRobinhoodInitialBuyReviewV1(value.initialBuyReview, value);
+  }
   if (isRobinhoodProfileV41(resourceProfile) && value.feeReview !== undefined) {
     assertRobinhoodFeeReviewV1(value.feeReview, value);
   }
@@ -1888,7 +1897,7 @@ function assertV4AdmissionReceipt(value, resource, capabilities) {
     "schemaVersion", "apiVersion", "chainId", "requestHash", "rawRequestSha256",
     "chainDeploymentDescriptorDigest", "profileDigest", "commitments",
     "staticAnalysisDigest", "externalContractEvidenceDigest", "disposition",
-    ...(isRobinhoodProfileV41(resource.profile) ? ["feeReviewDigest"] : []),
+    ...(isRobinhoodProfileV41(resource.profile) ? ["feeReviewDigest", "initialBuyReviewDigest"] : []),
     "evidenceTier", "hardBlockFindingCodes", "needsEvidenceFindingCodes",
     "warningFindingCodes", "issuedAt", "receiptDigest",
   ], "resource.admissionReceipt");
@@ -1896,7 +1905,10 @@ function assertV4AdmissionReceipt(value, resource, capabilities) {
   const feeReviewValid = !isRobinhoodProfileV41(resource.profile) || (value.feeReviewDigest === null
     ? ["unsupported", "needs_evidence"].includes(value.disposition) && resource.feeReview === undefined
     : SHA256.test(value.feeReviewDigest ?? "") && resource.feeReview?.evidenceDigest === value.feeReviewDigest);
-  if (!feeReviewValid || value.schemaVersion !== "programmable.custom-launch-admission-receipt.v4"
+  const initialBuyReviewValid = !isRobinhoodProfileV41(resource.profile) || (value.initialBuyReviewDigest === null
+    ? ["unsupported", "needs_evidence"].includes(value.disposition) && resource.initialBuyReview === null
+    : SHA256.test(value.initialBuyReviewDigest ?? "") && resource.initialBuyReview?.evidenceDigest === value.initialBuyReviewDigest);
+  if (!feeReviewValid || !initialBuyReviewValid || value.schemaVersion !== "programmable.custom-launch-admission-receipt.v4"
     || value.apiVersion !== "v4" || value.chainId !== ROBINHOOD_CHAIN_ID
     || value.requestHash !== resource.requestHash
     || value.rawRequestSha256 !== resource.rawRequestSha256

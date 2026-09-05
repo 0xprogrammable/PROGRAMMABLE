@@ -15,9 +15,9 @@ import { validV4Capabilities, v4Profile, v4ChainDeployment } from "./fixtures/v4
 
 export const testFundingPlan = Object.freeze({ schemaVersion: "programmable.robinhood-funding-plan.v1",
   capitalSource: "buyer-funded", pricingModel: "concentrated-liquidity", nativeAllocations: {
-    initialLiquidityWei: "0", initialBuyWei: "0", reserveWei: "0", otherLaunchValueWei: "0" },
-  maxLaunchValueWei: "0", maxGasCostWei: "1000000000000000", launchMode: "fund-and-launch" });
-const funding = { schemaVersion: "programmable.custom-launch-funding-intent.v2", mode: "none", valueWei: "0" };
+    initialLiquidityWei: "0", initialBuyWei: "1000000000000000", reserveWei: "0", otherLaunchValueWei: "0" },
+  maxLaunchValueWei: "1000000000000000", maxGasCostWei: "1000000000000000", launchMode: "fund-and-launch" });
+const funding = { schemaVersion: "programmable.custom-launch-funding-intent.v2", mode: "wallet-transaction-value", valueWei: "1000000000000000" };
 
 test("4.1 funding plans require exact canonical allocations and reviewed native budgets", () => {
   assert.deepEqual(normalizeRobinhoodFundingPlanV1(testFundingPlan, funding), testFundingPlan);
@@ -37,7 +37,7 @@ test("4.1 funding plans require exact canonical allocations and reviewed native 
 });
 
 test("4.1 exact successor profile preserves the immutable 4.0 foundation", async () => {
-  assert.equal(ROBINHOOD_PROFILE_V41.profileDigest, "sha256:5bd194ce769e825231d94e16c7e874f36935931224bca86a4003a9a3691b87bc");
+  assert.equal(ROBINHOOD_PROFILE_V41.profileDigest, "sha256:b0fca91264a49d358ed1a9eec2a679b59a48d716b71475bef583c2545e1ee502");
   assert.deepEqual(normalizeV4ProfileRef(v4Profile), v4Profile);
   assert.deepEqual(normalizeV4ProfileRef(ROBINHOOD_PROFILE_V41), ROBINHOOD_PROFILE_V41);
   assert.throws(() => normalizeV4ProfileRef({ ...ROBINHOOD_PROFILE_V41, profileRevision: 1 }));
@@ -57,7 +57,7 @@ test("native20 exact two-unit source kit packs, derives the child vault and bind
     await writeFile(path.join(root, "assets/token.png"), Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64"));
     const input = { launchWallet: "0x1111111111111111111111111111111111111111", nonce: `0x${"44".repeat(32)}`,
       publicOrigin: { url: "https://github.com/programmablehq/PROGRAMMABLE", revision: "11".repeat(20) },
-      checkedAt: "2026-09-05T12:00:00.000Z", fundingPlan: testFundingPlan,
+      checkedAt: "2026-09-05T12:00:00.000Z", fundingPlan: testFundingPlan, minimumTokensOut: "1",
       projectMetadata: { schemaVersion: "programmable.project-metadata-input.v1",
         token: { name: "Robinhood Native20 Example", symbol: "RHN20" }, presentation: {
           description: "Locked token inventory example with native ETH platform fee and explicit gas budget.",

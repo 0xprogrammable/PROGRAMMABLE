@@ -38,6 +38,9 @@ export function normalizeRobinhoodFundingPlanV1(value, funding) {
   if (total > BigInt(maxLaunchValueWei)) {
     throw new TypeError("funding.valueWei exceeds the reviewed fundingPlan.maxLaunchValueWei");
   }
+  if (value.launchMode === "fund-and-launch" && nativeAllocations.initialBuyWei === "0") {
+    throw new TypeError("fund-and-launch requires a positive initialBuyWei; the server verifies the one-dollar reference and atomic first buy");
+  }
   if (value.launchMode === "fund-and-launch" && maxGasCostWei === "0") {
     throw new TypeError("fund-and-launch requires a positive maxGasCostWei; zero native launch value does not mean zero gas");
   }

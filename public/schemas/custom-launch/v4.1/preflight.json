@@ -83,16 +83,16 @@
           "const": "robinhood-production-launch"
         },
         "admissionDescriptorDigest": {
-          "const": "sha256:a2ed199d421634ac1ee821769ac4526cae46cc3a1357a374a87aa49ee5c649d6"
+          "const": "sha256:b09611360e284641873fdb2914b4282e0545e32ea587b278fcd11f4db9a4e7f5"
         },
         "admissionPolicyDigest": {
-          "const": "sha256:4307368bef409e6c7609a1a775f88f45f94f34cfefe8b1d2316589d5244661e8"
+          "const": "sha256:47801f57e2365f89eb7397a2df10d697bd1f756ec01536b9b34755e89809da04"
         },
         "admissionBindingDigest": {
-          "const": "sha256:4553def3ee66dba41dd0296a3ae12fd5989c34a3b595d657226fa25239f17ea2"
+          "const": "sha256:5b2486f35fcd44bd476cafd5bfb5a12decf05a756ba237ca191928f5414c721e"
         },
         "admissionSchemaDigest": {
-          "const": "sha256:55ec992f3f93d4ed57c09bd41ef257e65e492bf3e9a12b2a780d01252a9ccf89"
+          "const": "sha256:6a8194a3b5d8b6432a95ec04da3cd86091ad64c93c0531125caf00ecb919c8cf"
         },
         "profileRevision": {
           "const": 2
@@ -101,7 +101,7 @@
           "const": "4.1.0"
         },
         "profileDigest": {
-          "const": "sha256:5bd194ce769e825231d94e16c7e874f36935931224bca86a4003a9a3691b87bc"
+          "const": "sha256:b0fca91264a49d358ed1a9eec2a679b59a48d716b71475bef583c2545e1ee502"
         }
       }
     },

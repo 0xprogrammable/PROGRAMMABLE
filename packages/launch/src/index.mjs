@@ -155,3 +155,6 @@ export { ROBINHOOD_FUNDING_PLAN_SCHEMA_V1, normalizeRobinhoodFundingPlanV1, asse
 export { ROBINHOOD_NATIVE_FEE_ARTIFACT_V1, ROBINHOOD_NATIVE_FEE_ARTIFACT_SHA256_V1, ROBINHOOD_NATIVE_FEE_PERMISSIONS_V1, createRobinhoodNativeFeeRuntimeImmutablesV1 } from "./robinhood-native-fee-v1.mjs";
 
 export { buildRobinhoodNative20ExampleV41, NATIVE20_INITIAL_SQRT_PRICE_X96 } from "./native20-example-v41.mjs";
+
+export { getRobinhoodInitialBuyQuoteV1, assertRobinhoodInitialBuyUsdQuoteV1, assertInitialBuyWithinServerReferenceV1, ROBINHOOD_INITIAL_BUY_QUOTE_URL_V1 } from "./initial-buy-quote-v1.mjs";
+export { assertRobinhoodInitialBuyReviewV1 } from "./initial-buy-review-v1.mjs";

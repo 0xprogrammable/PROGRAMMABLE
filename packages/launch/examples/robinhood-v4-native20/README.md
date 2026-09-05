@@ -71,6 +71,7 @@ Create `native20-input.json` after reviewing these fields with the user:
   "nonce": "<fresh nonzero 32-byte lowercase hex>",
   "publicOrigin": { "url": "<HTTPS source repository>", "revision": "<exact 40-character commit>" },
   "checkedAt": "<current ISO UTC timestamp with milliseconds>",
+  "minimumTokensOut": "<user-reviewed positive raw token minimum>",
   "projectMetadata": {
     "schemaVersion": "programmable.project-metadata-input.v1",
     "token": { "name": "Robinhood Native20 Example", "symbol": "RHN20" },
@@ -84,8 +85,8 @@ Create `native20-input.json` after reviewing these fields with the user:
     "schemaVersion": "programmable.robinhood-funding-plan.v1",
     "capitalSource": "buyer-funded",
     "pricingModel": "concentrated-liquidity",
-    "nativeAllocations": { "initialLiquidityWei": "0", "initialBuyWei": "0", "reserveWei": "0", "otherLaunchValueWei": "0" },
-    "maxLaunchValueWei": "0",
+    "nativeAllocations": { "initialLiquidityWei": "0", "initialBuyWei": "<user-approved positive first-buy wei>", "reserveWei": "0", "otherLaunchValueWei": "0" },
+    "maxLaunchValueWei": "<user-approved cap covering the first buy>",
     "maxGasCostWei": "<user-reviewed positive wei budget>",
     "launchMode": "fund-and-launch"
   }
@@ -100,7 +101,7 @@ programmable-launch pack --config programmable-launch.config.json --out launch.j
 programmable-launch validate launch.json --config programmable-launch.config.json
 ```
 
-The unauthenticated builder fetches current 4663 capabilities and a finalized checkpoint, requires the complete successor profile tuple, and refuses API keys. It emits two complete compiler inputs, artifacts, build evidence and the config. The canonical fee unit stays unchanged; the token and initializer compile together. A second deterministic pack pass materializes the first-CREATE vault address without changing the hook deployment address. Local reproduction does not replace backend admission, live balance/gas checks, wallet confirmation or finalized evidence.
+The unauthenticated builder first fetches the server's USD 1 native-ETH quote, current 4663 capabilities and a finalized checkpoint, requires the complete successor profile tuple, and refuses API keys. It compares the requested first buy to that server reference and stops if it is too small; it never raises the amount or budgets automatically. The server independently refreshes the quote before authorizing a permit. It emits two complete compiler inputs, artifacts, build evidence and the config. The canonical fee unit stays unchanged; the token and initializer compile together. A second deterministic pack pass materializes the first-CREATE vault address without changing the hook deployment address. Local reproduction does not replace backend admission, live balance/gas checks, wallet confirmation or finalized evidence.
 
 ## Local verification and limits
 
