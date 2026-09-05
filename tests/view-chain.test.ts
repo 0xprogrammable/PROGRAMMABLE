@@ -119,7 +119,7 @@ describe("view chain", () => {
     expect(routeBoundary).toContain("<ViewChainPending />");
     expect(routeBoundary).toContain("resolvedViewChainId === 4663");
     expect(read("app/profile/layout.tsx"))
-      .toContain("ResolvedViewChainLayout as default");
+      .not.toContain("ResolvedViewChainLayout");
     expect(existsSync("app/launch/layout.tsx")).toBe(false);
     expect(read("app/launch/page.tsx"))
       .toContain("requestCookies.get(VIEW_CHAIN_COOKIE_NAME)?.value");
