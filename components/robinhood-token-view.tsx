@@ -88,7 +88,7 @@ export function RobinhoodTokenView({ address, token, status }: {
                 </dd>
               </div>
             </dl>
-            <RobinhoodChart poolId={token.poolId} name={name} available={Boolean(market)} loading={presentation.loading} />
+            <RobinhoodChart poolId={token.poolId} name={name} />
           </section>
       </> : <section className={styles.empty}>
         <h1>Token details</h1>
@@ -99,12 +99,12 @@ export function RobinhoodTokenView({ address, token, status }: {
   );
 }
 
-function RobinhoodChart({ poolId, name, available, loading }: { poolId: string; name: string; available: boolean; loading: boolean }) {
+function RobinhoodChart({ poolId, name }: { poolId: string; name: string }) {
   const [loadedPool, setLoadedPool] = useState<string | null>(null);
   const safePool = /^0x[0-9a-f]{64}$/i.test(poolId);
-  const showChart = available && safePool;
+  // The embedded chart fetches its own data; metric refreshes must not remove it.
   return <div className={styles.chart}>
-    {showChart ? <>
+    {safePool ? <>
       {loadedPool !== poolId ? <div className={styles.chartState} role="status">Loading chart…</div> : null}
       <iframe
         key={poolId}
@@ -114,7 +114,7 @@ function RobinhoodChart({ poolId, name, available, loading }: { poolId: string; 
         referrerPolicy="no-referrer"
         sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
       />
-    </> : <div className={styles.chartState} role="status"><strong>{loading ? "Loading market data…" : "No chart data yet"}</strong>{loading ? null : <p>The chart will appear when market data is available for this pool.</p>}</div>}
+    </> : <div className={styles.chartState} role="status">Chart unavailable.</div>}
   </div>;
 }
 
