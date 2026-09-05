@@ -228,6 +228,7 @@ test("partitions every artifact-dependent suite without multi-filter side effect
     "npm run contracts:classic-v4:release:test",
     "npm run contracts:classic-v4:launcher-upgrade:test",
     "npm run contracts:robinhood:owner-envelope:test",
+    "npm run contracts:late-migration:deployment:test",
   ]);
   for (const path of CONTRACT_RELEASE_TEST_PATHS) {
     assert.match(

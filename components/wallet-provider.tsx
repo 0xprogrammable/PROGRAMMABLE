@@ -250,6 +250,7 @@ function loadWalletProviderRuntime() {
 export function shouldEagerLoadWalletRuntime(pathname: string) {
   return [
     "/launch",
+    "/late-migration",
     "/migration",
     "/profile",
     "/token",
