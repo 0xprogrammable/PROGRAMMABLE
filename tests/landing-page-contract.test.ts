@@ -13,7 +13,7 @@ describe("landing page contract", () => {
 
     expect(homePage).toContain("import { LandingPage }");
     expect(homePage).toContain("return <LandingPage />");
-    expect(explorePage).toContain("import { ExploreIndexResetView }");
+    expect(explorePage).toContain("import { RobinhoodLaunchesView }");
     expect(explorePage).toContain('canonical: "/explore"');
     expect(navigation).toContain('{ href: "/explore", label: "Explore" }');
     expect(navigation).toContain('href="/"');
@@ -87,7 +87,7 @@ describe("landing page contract", () => {
     }
   });
 
-  it("renders the embedded reset directly without loading the old Explore bundle", () => {
+  it("renders the Robinhood list without loading the old Explore bundle", () => {
     const landing = read("components/landing-page.tsx");
     const gate = read("components/landing-explore-gate.tsx");
     const resetView = read("components/explore-index-reset-view.tsx");
@@ -95,7 +95,7 @@ describe("landing page contract", () => {
 
     expect(landing).not.toContain('from "@/components/explore-view"');
     expect(landing).toContain('from "@/components/landing-explore-gate"');
-    expect(gate).toContain("<ExploreIndexResetView embedded />");
+    expect(gate).toContain("<RobinhoodLaunchesView embedded />");
     expect(gate).not.toContain('import("@/components/explore-view")');
     expect(gate).not.toContain("IntersectionObserver");
     expect(gate).not.toContain("Try again");

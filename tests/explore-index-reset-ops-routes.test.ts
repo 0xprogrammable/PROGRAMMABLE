@@ -144,7 +144,7 @@ describe("displayed-coin indexing reset operations", () => {
     expect(network).not.toHaveBeenCalled();
   });
 
-  it("keeps only the unrelated production cron routes", async () => {
+  it("allows the isolated Robinhood stamp index alongside the independent production jobs", async () => {
     const config = JSON.parse(await readFile("vercel.json", "utf8")) as {
       crons?: ReadonlyArray<{ path: string; schedule: string }>;
     };
@@ -156,6 +156,10 @@ describe("displayed-coin indexing reset operations", () => {
       },
       {
         path: "/api/ops/custom-launch/generic-v2-projector",
+        schedule: "* * * * *",
+      },
+      {
+        path: "/api/ops/robinhood-index",
         schedule: "* * * * *",
       },
     ]);
