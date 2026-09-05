@@ -1,6 +1,6 @@
 # Open Classic module architecture: implementation requirements
 
-Status: architecture specification, 5 September 2026. The general stateful module lifecycle below is **not implemented** by `IClassicModuleV1`. The new common identity reader is implemented separately in `IProgrammableClassicLaunchV1`. Existing launch/fee tests do not establish the proposed lifecycle's correctness.
+Status: architecture specification, 5 September 2026. The general stateful module lifecycle below is **not implemented** by `IClassicModuleV1`. The new common identity reader is implemented separately in `IProgrammableClassicLaunchV1`. Existing launch/fee tests do not establish the proposed lifecycle's correctness. The current two-effect ABI is a limited prototype and must not be frozen as the public open-module foundation.
 
 ## Product contract
 
@@ -8,11 +8,40 @@ A Classic launch has one canonical token and primary bonding-curve pool. Its lau
 
 The contributor supplies ordinary program logic. The platform must not add business-feature discriminators such as `NEXT_BUYER_REWARD` to recognize each new idea. A versioned lifecycle exposes initialization, trade preparation, trade completion, and module-specific actions. Each instance owns its own state. A common, bounded protected-action interface controls effects on funds and core state.
 
-New protected actions or fundamentally different settlement models can require a separately reviewed adapter/engine revision. Existing recipes must bind that revision immutably. Compatibility is not permission to reach arbitrary shared storage, execute `delegatecall` in the core, spend another module's balance, withdraw the base LP or bypass fees.
+New protected actions or fundamentally different settlement models can require a separately reviewed adapter/engine revision. Contributors may supply that adapter or engine as part of a package through the same intake and catalogue; this is a first-class extension path. Existing recipes must bind that revision immutably. Compatibility is not permission to reach arbitrary shared storage, execute `delegatecall` in the core, spend another module's balance, withdraw the base LP or bypass fees.
+
+## Open program packages, small protected core
+
+Openness is a requirement on executable contributions, not the number of names accepted in metadata. A package can contain ordinary program logic, per-launch state machines, multiple contracts, callable actions, dependencies and external services. It may contribute market construction and execution as well as behavior within an existing engine. The supported business ideas are not a kernel enum, and new logic must not need a kernel branch solely because its semantics were unforeseen.
+
+Separate these responsibilities:
+
+- **Protected core:** authentic origin, immutable launch bindings, authenticated rights, protected asset movements and enforceable platform/author/creator accounting. It does not interpret business-feature names.
+- **Composition standard:** versioned inputs, outputs, units, events/actions, dependency edges, resource ownership, initialization and configuration, resolved into an exact launch recipe.
+- **Contributed components:** the actual market/application logic and integrations. A component can use other components through explicit interfaces. A package may include the immutable engine or hook implementation needed to coordinate them.
+
+The first native implementation targets Robinhood and a primary V4 bonding-curve market. Native ETH quoting, the existing engine's callback subset and its price algorithm are not permanent requirements of the package model. New launches can select different admitted engine implementations while sharing origin and accounting requirements. This does not change the source or hook of an existing launch, nor claim that one EVM implementation executes another chain's runtime.
+
+Required contract-level specifications, to be implemented before public standardization:
+
+| Boundary | Required contents and enforcement |
+| --- | --- |
+| Package descriptor | Exact code/build/dependency revisions, author family, configuration schema, provided/required versioned interfaces, assets and units, entrypoints, deployment components, failure model and review envelope. Describing a capability does not implement or grant it. |
+| Execution context | Authenticated launch, recipe, component, action/phase, execution ID, actor/payer/recipient, authorizations, actual amounts and routing assumptions. Modules cannot forge core facts. |
+| Capability grant | The specific component, resources, assets, amounts, operation scope and expiry/lifecycle restrictions it may exercise. Protected operations authenticate the grant and actual backing; a contributor cannot self-grant authority through its manifest. |
+| Resolved launch recipe | Exact admitted implementations, initialization, interface connections, operation order, fund allocation, trigger/failure rules and common identity. It binds engine/hook permissions before pool creation. |
+
+These are design boundaries, not implemented ABI declarations. The composition resolver must produce a deterministic commitment which the onchain launch path validates. Its offchain judgement must not be the sole authority for financial grants or allowed code. Interfaces between components include type/unit checks and explicit ownership of shared resources; semantic and economic interactions additionally require review.
+
+A component may call its own contracts and external protocols within its declared and reviewed authority. It never runs arbitrary code in the protected core's storage context or inherits a reusable allowance over another component's funds. A protected resource needs a specific operation boundary; arbitrary calldata is not a new protected capability. New business logic using existing rights is an ordinary package contribution. A genuinely new protected primitive needs an audited, version-bound adapter or engine extension for future launches.
+
+The common standard and proven protected invariants can remain stable while contributed code varies. A requirement for one identical universal hook bytecode across every future launch would contradict this extension path. Existing token, base-LP, fee and post-launch immutability commitments remain constraints of the Classic profile; the request for experimental logic does not silently repeal them.
 
 ## Required execution context
 
 The lifecycle starts with market construction. A package may supply a launch variant that chooses the quote asset, curve configuration, initial acquisition path and supporting components before the primary pool is created. Existing trade callbacks alone are not the open architecture. See [launch variants, assets and services](classic-launch-variants.md) for the required asset-independent construction and accounting boundaries.
+
+The action model also accommodates declared liquidity actions, explicit user actions, component-to-component calls and authenticated external messages. The resolver binds supported triggers to the selected execution implementation and its reviewed permissions. Scheduled work requires an actual caller and funding; contracts do not execute themselves. External work uses explicit request/confirmation/retry transitions and cannot be described as atomically reversible with a completed swap.
 
 The engine authenticates and binds an execution ID, chain, source, pool, recipe, module instance, lifecycle phase, direction, actor, payer, token recipient, payment authorization and slippage/deadline limits. The completed context contains measured executed amounts. The module does not establish these facts by returning an arbitrary address or amount.
 
@@ -61,6 +90,10 @@ Custom launches retain their own original stamp/source proof. A shared offchain 
 ## Contributor integration acceptance
 
 A new contributor package supplies source/build/dependency bindings, immutable revision, wallet ownership, config schema, declared lifecycle needs, rights, budget/funding, dependency/conflict constraints and tests. Authenticated public intake and isolated review workers remain to be implemented.
+
+Before describing the foundation as open and stable, freeze a candidate core/interface revision and give an independent contributor only the published standard, tooling and constraints. That contributor must build an unforeseen stateful behavior using existing execution rights, compose it with an existing package and take it through intake, configuration, review and execution without changing the protected core, existing engine, token, common identity schema or bespoke product infrastructure. Preselected reference examples alone do not satisfy this test. The proof covers the demonstrated extension, not every future program.
+
+A second acceptance case must contribute a new market engine or protected adapter through the documented package path. This case may add a new immutable implementation and a source release binding; it must preserve the common origin, agreed fee enforcement and already launched recipes. Its runtime permissions and accounting are separately proved. Novelty is not a reason to divert the contribution into a separately built launchpad or silently mutate the old kernel. If a prototype requires a new business-name branch in the core for either case, revise the standard before freezing it.
 
 The acceptance demonstration must add the next-buyer behavior through the same package mechanism as another stateful module while leaving core source and common identity schema unchanged. It must also construct both native-quoted and ERC-20-quoted primary pools through the common market-building contract; a stock symbol is configuration and verified asset identity, not a new business-feature branch in the kernel. The builder derives normal controls from config metadata; the collector records the module commitment without importing contributor code. Novel complex UI can be isolated separately, never executed as privileged code inside the product.
 

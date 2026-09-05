@@ -8,6 +8,8 @@ Programmable is intended to be shared launch infrastructure on which developers 
 
 The user still launches one canonical token with one primary bonding-curve market and one immutable recipe. Supporting contracts and external integrations belong to that launch. The common identity interface must remain independent of the chosen quote asset and module behavior.
 
+The examples in this document are acceptance cases, not an allowed-feature taxonomy. The primary design is the [open program package and protected-core model](classic-open-module-contract-v2.md#open-program-packages-small-protected-core): contributors can supply the actual execution engine, stateful programs and their supporting components. Replacing an ETH selector with a longer list of assets alone does not satisfy that architecture. A new idea must be integrable through code and explicit interface/authority declarations, without a business-feature branch in the common core.
+
 ## Why the current trade-only model is insufficient
 
 Current Classic Modules is native-quote-only throughout `ClassicModuleLaunchV1`, `ClassicModuleHookV1`, `ClassicModuleFeeLedgerV1` and `lib/classic-modules/provenance.ts`. In particular, native quote is currency0, the launched token is currency1, fees are native claims, the initial buy uses `msg.value`, and the initial tick is fixed for the native setup. Adding a stock address to the frontend does not change these constraints.
@@ -63,6 +65,8 @@ These examples identify different integration needs; they are not an exhaustive 
 A reusable launch variant has an author, exact revisions, searchable description, generated configuration, visible dependencies and a shareable launch preset. Presets bind module selections; wrapping existing packages does not automatically create additional paid families. Author pages and observable use/earnings make building on Programmable more attractive. Authors should be able to build with their own tooling and automate submissions without depending on the optional chat.
 
 The technical acceptance matrix now includes native Classic, an ERC-20/stock-quoted Classic with the same base identity, a stateful funded reward, a data-dependent behavior and a service entitlement. Market construction plus stateful execution are the first source implementation priorities. Data/service examples may begin as explicitly local conformance fixtures; production availability requires real dependency and delivery evidence.
+
+These planned examples are supplemented by the open-module standard's independent unforeseen-contribution test and the separate contributor-supplied engine/adapter test. Both must be completed before calling the public foundation proven extensible. Passing known examples must not conceal special-case code for each example in the protected core.
 
 For the stock path, a second eligible quote asset must be selectable by the same package and configuration mechanism without core edits. The local suite must cover quote sorting, units, initial buy, buy/sell, asset-separated 10/10 author accounting, claims, immutable provenance and composition with a stateful module. An actual stock integration additionally needs the authentic deployed asset and usable route; a mock proves only interface/accounting behavior.
 
