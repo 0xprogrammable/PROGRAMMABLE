@@ -94,7 +94,7 @@ async function dependencyEvidence(root, inputs, lock) {
     dependencies.push({ name: metadata.name, version: metadata.version,
       lockPath: packageRoot, integrity: locked.integrity, licenses });
   }
-  return { dependencies, sourcePaths, notices: Buffer.from(`${notices.join('\n')}\n`) };
+  return { dependencies, sourcePaths, notices: Buffer.from(notices.join('\n')) };
 }
 function requireOnlyBuiltins(metafile) {
   const imports = Object.values(metafile.outputs).flatMap((output) => output.imports);
