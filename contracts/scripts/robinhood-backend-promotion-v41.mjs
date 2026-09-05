@@ -4,11 +4,11 @@ import { createRobinhoodBackendPromotionTools } from "./robinhood-backend-promot
 
 // Filled only from the final backend source artifacts, never from predecessor evidence.
 export const ROBINHOOD_V41_BACKEND_RELEASE_PINS = Object.freeze({
-  migrationSha256: null,
-  apiContractSha256: null,
+  migrationSha256: "sha256:68dc928cbfd27ca0a0172747c47d7f6de3e523334a3246e2be74ec855226b6f4",
+  apiContractSha256: "sha256:b7eb27465ffd11baf97223069bba4db1fdaa1b6b13190841b0e402e8563af7d5",
   providerProfileDigest: "sha256:ea5b5884b2b09775da760f65ba998c4ab68319e8567fa1d05072943c4bf8eb16",
-  captureWorkflow: null,
-  captureWorkflowName: null,
+  captureWorkflow: ".github/workflows/capture-programmable-robinhood-v41-promotion.yml",
+  captureWorkflowName: "Capture Programmable Robinhood v4.1 backend promotion",
 });
 
 export function requireRobinhoodV41BackendReleasePins(pins = ROBINHOOD_V41_BACKEND_RELEASE_PINS) {
