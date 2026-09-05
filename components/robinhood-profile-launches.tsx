@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
+import { ProfileProjectsSection, ProfileProjectsSkeleton } from "@/components/profile-projects";
 import { AnimatedMarketCap } from "@/components/animated-market-cap";
 import { RobinhoodCoinArtwork } from "@/components/robinhood-coin-artwork";
 import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
@@ -62,16 +62,18 @@ export function RobinhoodProfileLaunches({ account }: { account: string }) {
     return () => { disposed = true; window.clearTimeout(timeout); controller.abort(); };
   }, [account, page, refresh, retry]);
 
-  return <section className={styles.panel} aria-labelledby="robinhood-profile-launches-title">
-    <header className={styles.heading}>
-      <h2 id="robinhood-profile-launches-title">Launches</h2>
-      <span className="sr-only">Robinhood</span>
-    </header>
+  return <ProfileProjectsSection
+    refreshInProgress={loading}
+    onRefresh={() => setRetry((value) => value + 1)}
+    currentPage={shownPage}
+    totalPages={scoped?.page.totalPages ?? 1}
+    onPageChange={setPage}
+  >
     {items.length ? <ul className={styles.list} aria-busy={loading}>
       {items.map((launch) => {
         const detail = details.get(launch.tokenAddress.toLowerCase());
         return <li key={launch.launchId}>
-          <Link className={styles.row} href={`/token/${launch.tokenAddress}?chain=4663`} prefetch={false}>
+          <Link className={styles.row} href={`/token/${launch.tokenAddress}`} prefetch={false}>
             <RobinhoodCoinArtwork className={styles.artwork} imageUrl={detail?.imageUrl} loading={presentation.loading && !detail} />
             <span className={styles.identity}><strong>{launch.name?.trim() || "Unnamed token"}</strong><small>{coinTicker(launch.symbol)}</small></span>
             <span className={styles.metrics}>
@@ -81,13 +83,8 @@ export function RobinhoodProfileLaunches({ account }: { account: string }) {
           </Link>
         </li>;
       })}
-    </ul> : loading && !scoped ? <div className={styles.loading} role="status" aria-label="Loading launches"><span aria-hidden="true" /></div>
+    </ul> : loading && !scoped ? <ProfileProjectsSkeleton />
       : failed || scoped?.status === "stale" ? <div className={styles.empty}><p>Couldn’t load launches.</p><button type="button" onClick={() => setRetry((value) => value + 1)}>Try again</button></div>
-      : <div className={styles.empty}><p>{scoped?.status === "syncing" ? "Checking launches…" : "No launches yet."}</p><Link href="/launch">Create a token</Link></div>}
-    {scoped && scoped.page.totalPages > 1 ? <nav className={styles.pagination} aria-label="Profile launch pages">
-      <button type="button" aria-label="Previous page" disabled={loading || shownPage <= 1} onClick={() => setPage(shownPage - 1)}><ChevronLeft size={18} aria-hidden="true" /></button>
-      <span>{shownPage} / {scoped.page.totalPages}</span>
-      <button type="button" aria-label="Next page" disabled={loading || !scoped.page.hasMore} onClick={() => setPage(shownPage + 1)}><ChevronRight size={18} aria-hidden="true" /></button>
-    </nav> : null}
-  </section>;
+      : <div className={styles.empty}><p>{scoped?.status === "syncing" ? "Checking launches…" : "No launches yet."}</p><Link href="/launch">Launch a token</Link></div>}
+  </ProfileProjectsSection>;
 }

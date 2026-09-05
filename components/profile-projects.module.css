@@ -1,7 +1,7 @@
 .section {
   /* Reserve the identity, optional metadata and actions in every list state. */
   --project-row-min-height: 120px;
-  --project-list-min-height: calc(5 * var(--project-row-min-height) + 4 * 3px);
+  --project-list-min-height: var(--project-row-min-height);
   background: var(--webde-surface, var(--profile-panel, #111));
   border: 1px solid var(--webde-line, var(--profile-line, rgb(255 255 255 / 10%)));
   border-radius: var(--webde-radius-card, 17px);

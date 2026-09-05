@@ -330,7 +330,7 @@ describe("My projects editor opening", () => {
     expect(profileSource).toContain("refreshing={profileRefreshing}");
   });
 
-  it("reserves a complete first page while keeping warm launch actions visible", () => {
+  it("uses one unknown launch placeholder while keeping warm launch actions visible", () => {
     const source = readFileSync(
       join(process.cwd(), "components/profile-projects.tsx"),
       "utf8",
@@ -340,9 +340,10 @@ describe("My projects editor opening", () => {
       "utf8",
     );
 
-    expect(source).toContain(
+    expect(source).not.toContain(
       "Array.from({ length: creatorProjectPageSize }, (_, item)",
     );
+    expect(styles).toContain("--project-list-min-height: var(--project-row-min-height)");
     expect(styles).toMatch(
       /\.skeletonList\s*\{[^}]*min-height:\s*var\(--project-list-min-height\);/s,
     );

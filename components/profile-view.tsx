@@ -83,6 +83,7 @@ import { PROGRAMMABLE_MAIN_TOKEN_ADDRESS } from
   "@/lib/creator-article/programmable-example-v1";
 import {
   getProfileStorageKey,
+  profileDraftBelongsToAccount,
   getProfileUsernameError,
   normalizeProfileUsername,
   parseLocalProfile,
@@ -1401,7 +1402,7 @@ export function formatBannerPositionStatus(position: {
   )}, ${formatBannerPositionValue("vertical", position.y)}.`;
 }
 
-export function ProfileView({ onchainData, viewChainId = 1, onChangeChain }: ProfileViewProps = {}) {
+export function ProfileView({ onchainData, viewChainId = 4663, onChangeChain }: ProfileViewProps = {}) {
   const ethereumView = viewChainId === 1;
   const {
     wallet,
@@ -1413,6 +1414,7 @@ export function ProfileView({ onchainData, viewChainId = 1, onChangeChain }: Pro
   const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
+  const profileImageRequestRef = useRef(0);
   const bannerDragRef = useRef<{
     pointerId: number;
     startClientX: number;
@@ -2035,6 +2037,8 @@ export function ProfileView({ onchainData, viewChainId = 1, onChangeChain }: Pro
 
   function beginEditingProfile() {
     populateProfileDrafts(latestProfileForEditor());
+    profileImageRequestRef.current += 1;
+    setPreparingImage(false);
     setUsernameError("");
     setAvatarError("");
     setBannerError("");
@@ -2044,6 +2048,8 @@ export function ProfileView({ onchainData, viewChainId = 1, onChangeChain }: Pro
 
   function cancelEditingProfile() {
     populateProfileDrafts(latestProfileForEditor());
+    profileImageRequestRef.current += 1;
+    setPreparingImage(false);
     setUsernameError("");
     setAvatarError("");
     setBannerError("");
@@ -2053,7 +2059,7 @@ export function ProfileView({ onchainData, viewChainId = 1, onChangeChain }: Pro
 
   function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!account || preparingImage) return;
+    if (!account || preparingImage || !profileDraftBelongsToAccount(editingAccount, account)) return;
 
     const nextUsername = normalizeProfileUsername(usernameDraft);
     const nextUsernameError = getProfileUsernameError(nextUsername);
@@ -2102,40 +2108,51 @@ export function ProfileView({ onchainData, viewChainId = 1, onChangeChain }: Pro
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
+    const editingWallet = editingAccount;
+    const requestId = ++profileImageRequestRef.current;
+    const currentRequest = () => requestId === profileImageRequestRef.current
+      && profileDraftBelongsToAccount(editingWallet, activeAccountRef.current ?? "");
 
     setPreparingImage(true);
     setAvatarError("");
     setSaveError("");
 
     try {
-      setAvatarDraft(await prepareAvatarImage(file));
+      const image = await prepareAvatarImage(file);
+      if (currentRequest()) setAvatarDraft(image);
     } catch (caught) {
-      setAvatarError(
+      if (currentRequest()) setAvatarError(
         caught instanceof Error
           ? caught.message
           : "The image could not be prepared",
       );
     } finally {
-      setPreparingImage(false);
+      if (requestId === profileImageRequestRef.current) setPreparingImage(false);
     }
   }
 
   async function prepareBanner(file: File | undefined) {
     if (!file) return;
+    const editingWallet = editingAccount;
+    const requestId = ++profileImageRequestRef.current;
+    const currentRequest = () => requestId === profileImageRequestRef.current
+      && profileDraftBelongsToAccount(editingWallet, activeAccountRef.current ?? "");
     setPreparingImage(true);
     setBannerError("");
     setSaveError("");
     try {
-      setBannerDraft(await prepareProfileBannerImage(file));
+      const image = await prepareProfileBannerImage(file);
+      if (!currentRequest()) return;
+      setBannerDraft(image);
       setBannerPositionDraft({ x: 50, y: 50 });
     } catch (caught) {
-      setBannerError(
+      if (currentRequest()) setBannerError(
         caught instanceof Error
           ? caught.message
           : "The banner could not be prepared",
       );
     } finally {
-      setPreparingImage(false);
+      if (requestId === profileImageRequestRef.current) setPreparingImage(false);
     }
   }
 
@@ -3431,6 +3448,7 @@ export function ProfileView({ onchainData, viewChainId = 1, onChangeChain }: Pro
     return (
       <PublicCreatorProfile
         account={publicProfileAccount}
+        connectedAccount={account}
         onConnect={openWallet}
         viewChainId={viewChainId}
         onChangeChain={onChangeChain}
@@ -3563,6 +3581,9 @@ export function ProfileView({ onchainData, viewChainId = 1, onChangeChain }: Pro
               </button>
             ) : null}
           </div>
+          <p className={styles.address} aria-label={`Profile wallet ${account}`}>
+            {account}
+          </p>
           {!editingProfile && savedProfile.bio ? (
             <p className={styles.profileBio}>{savedProfile.bio}</p>
           ) : null}
@@ -3846,7 +3867,10 @@ export function ProfileView({ onchainData, viewChainId = 1, onChangeChain }: Pro
         refreshStatusMessage={profileRefreshStatusMessage}
         terminalErrorReady={terminalErrorReady}
       />
-      </> : <RobinhoodProfileLaunches key={account.toLowerCase()} account={account} />}
+      </> : <>
+        <RobinhoodProfileLaunches key={account.toLowerCase()} account={account} />
+        <RobinhoodProfileRewards />
+      </>}
     </div>
   );
 }
@@ -4692,13 +4716,15 @@ export function ProfileRouterLaunches({
   );
 }
 
-function PublicCreatorProfile({
+export function PublicCreatorProfile({
   account,
+  connectedAccount,
   onConnect,
   viewChainId,
   onChangeChain,
 }: {
   account: string;
+  connectedAccount?: string;
   onConnect: () => void;
   viewChainId: ViewChainId;
   onChangeChain?: (chain: ViewChainId) => void;
@@ -4735,9 +4761,10 @@ function PublicCreatorProfile({
     return () => controller.abort();
   }, [account, refreshKey, viewChainId]);
 
-  const entries = data.status === "ready"
+  const scopedData = isProfileDataForAccount(data, account) ? data : loadingProfileData(account);
+  const entries = scopedData.status === "ready"
     ? profileRouterLaunchEntries(
-        buildProfilePortfolio(data.tokens, [], []),
+        buildProfilePortfolio(scopedData.tokens, [], []),
       )
     : [];
 
@@ -4750,33 +4777,25 @@ function PublicCreatorProfile({
         <div className={styles.heroCopy}>
           <div className={`${styles.nameRow} ${styles.publicProfileNameRow}`}>
             <h1 id="public-profile-title">Creator profile</h1>
-            <button
+            {connectedAccount ? <Link className={styles.editButton} href="/profile">My profile</Link> : <button
               className={styles.editButton}
               type="button"
               onClick={onConnect}
             >
               Connect wallet
-            </button>
+            </button>}
           </div>
-          <p className={styles.address}>{account}</p>
+          <p className={styles.address} aria-label={`Profile wallet ${account}`}>{account}</p>
           <p className={styles.publicProfileNote}>
-            Finalized launches are public. If this is your wallet, connect it
-            to manage the profile and rewards.
+            {connectedAccount ? "You’re viewing another wallet’s launches." : "Connect this wallet to manage its profile."}
           </p>
         </div>
       </section>
 
       <ProfileChainSelector value={viewChainId} onChange={onChangeChain} />
-      {viewChainId === 4663 ? <RobinhoodProfileLaunches key={account.toLowerCase()} account={account} /> : data.status === "loading" ? (
-        <section
-          className={`${styles.launchesPanel} ${styles.publicProfileState}`}
-          aria-busy="true"
-          aria-live="polite"
-        >
-          <h2>Loading launches</h2>
-          <p>Reading finalized Router launches.</p>
-        </section>
-      ) : data.status === "error" ? (
+      {viewChainId === 4663 ? <RobinhoodProfileLaunches key={account.toLowerCase()} account={account} /> : scopedData.status === "loading" ? (
+        <ProfileProjectsLoadingState />
+      ) : scopedData.status === "error" ? (
         <section
           className={`${styles.launchesPanel} ${styles.publicProfileState}`}
           aria-live="polite"
@@ -4803,6 +4822,23 @@ function PublicCreatorProfile({
       )}
     </div>
   );
+}
+
+export function RobinhoodProfileRewards() {
+  return <section className={styles.portfolio} aria-label="Profile overview">
+    <div className={`${styles.profileWorkspace} liquid-glass-surface`}>
+      <FeeEarningsPanel nativeEarned={null} nativeClaimable={null} nativeClaimed={null} />
+      <section className={styles.claimablePanel} aria-labelledby="profile-claimable-title">
+        <header className={styles.panelHeader}>
+          <h2 id="profile-claimable-title">Claim rewards</h2>
+        </header>
+        <div className={styles.claimEmpty}>
+          <strong>Rewards depend on the hook</strong>
+          <p>Custom hooks manage their own fees and claims.</p>
+        </div>
+      </section>
+    </div>
+  </section>;
 }
 
 export function ProfileAccountWorkspace({
@@ -5178,7 +5214,7 @@ function FeeEarningsPanel({
 
       <div className={styles.feeSummary}>
         <span className={styles.feeSummaryLabel}>Total earned</span>
-        {nativeEarned === null ? null : <strong>{formatWei(nativeEarned)}</strong>}
+        <strong>{nativeEarned === null ? <span aria-label="Not available">—</span> : formatWei(nativeEarned)}</strong>
         <div className={styles.feeBreakdown}>
           <span>
             Available <b>{nativeClaimable === null ? "—" : formatWei(nativeClaimable)}</b>

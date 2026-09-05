@@ -7,6 +7,7 @@ import {
   getProfileUsernameError,
   isSafeAvatarDataUrl,
   parseLocalProfile,
+  profileDraftBelongsToAccount,
   PROFILE_UPDATED_EVENT,
   writeLocalProfile,
 } from "../lib/profile/local-profile";
@@ -38,8 +39,16 @@ describe("wallet-scoped local profile", () => {
     );
     expect(PROFILE_UPDATED_EVENT).toBe("programmable:profile-updated");
     expect(() => getProfileStorageKey("not-an-address")).toThrow(
-      "valid Ethereum wallet address",
+      "valid wallet address",
     );
+  });
+
+  it("only saves a draft for the wallet that opened the profile editor", () => {
+    expect(profileDraftBelongsToAccount(wallet.toLowerCase(), wallet)).toBe(true);
+    expect(profileDraftBelongsToAccount(wallet, wallet.toLowerCase())).toBe(true);
+    expect(profileDraftBelongsToAccount(wallet, `0x${"b".repeat(40)}`)).toBe(false);
+    expect(profileDraftBelongsToAccount("", wallet)).toBe(false);
+    expect(profileDraftBelongsToAccount("invalid", "invalid")).toBe(false);
   });
 
   it("accepts only optional 3 to 12 character ASCII alphanumeric usernames", () => {
