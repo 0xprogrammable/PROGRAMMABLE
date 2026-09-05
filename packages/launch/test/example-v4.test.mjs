@@ -70,12 +70,17 @@ test("Robinhood V4 example materializes a schema-valid funding-none config from 
       },
     },
     checkedAt: "2026-08-29T12:00:00.000Z",
+    hookImmutableId: "7",
   });
 
   assert.equal(validate(config), true, JSON.stringify(validate.errors));
   assert.equal(config.funding.mode, "none");
   assert.equal(config.funding.valueWei, "0");
   assert.equal(config.targets.length, 3);
+  const hook = config.targets.find(target => target.targetId === "hook");
+  assert.deepEqual(hook.runtimeImmutables, [{ immutableId: "7", abiType: "address",
+    literal: capabilities.chainDeployment.contracts.poolManager.address }]);
+  assert.equal(hook.constructorArguments[0], hook.runtimeImmutables[0].literal);
   assert.equal(config.profile.profileRevision, 1);
   assert.equal(config.chainDeployment,
     capabilities.chainDeployment,

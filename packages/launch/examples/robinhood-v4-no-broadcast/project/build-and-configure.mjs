@@ -131,6 +131,11 @@ try {
   throw new TypeError("V4 capabilities response is not JSON");
 }
 const now = Math.floor(Date.now() / 1_000);
+const hookImmutableIds = Object.keys(output.contracts["src/RobinhoodCleanRoomHook.sol"]
+  .RobinhoodCleanRoomHook.evm.deployedBytecode.immutableReferences ?? {});
+if (hookImmutableIds.length !== 1) {
+  throw new TypeError("the hook must contain exactly one immutable PoolManager binding");
+}
 const config = createPackConfigFromCapabilities({
   capabilities,
   launchWallet,
@@ -144,6 +149,7 @@ const config = createPackConfigFromCapabilities({
   tokenSupply,
   projectMetadata,
   checkedAt,
+  hookImmutableId: hookImmutableIds[0],
 });
 const canonicalCapabilitiesBytes = Buffer.from(`${JSON.stringify(capabilities, null, 2)}\n`, "utf8");
 await writeFile(path.join(root, "evidence", "capabilities.json"), canonicalCapabilitiesBytes);
