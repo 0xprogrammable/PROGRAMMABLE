@@ -6,8 +6,16 @@ addresses. At build time it fetches the unauthenticated production V4 capabiliti
 chain-deployment descriptor and integer-revision profile reference into the generated config. It fails closed while
 that route, any required trust root, the finality digest, or the production profile digest is unavailable.
 
-The request declares funding mode `none`, value `0`, an uninitialized empty pool, and no liquidity action. The hook
-authenticates `beforeSwap` calls against the capabilities-bound PoolManager. This fixture does not claim a fee,
+The builder reads the finalized Robinhood block from the official public RPC and includes that checkpoint in the
+permit window. Finalized blocks can trail the current API clock by many minutes. The permit still lasts at most
+one hour, and the build stops unless at least five minutes remain for submission. The backend independently
+checks finality and the exact transaction; the public RPC read does not authorize a launch.
+
+The request declares funding mode `none`, value `0`, an initialized empty pool, and no liquidity action. The
+initializer's constructor initializes the PoolManager pool after the token and hook are deployed; the Router
+requires an initialized pool before issuing its stamp. It adds no liquidity or funds. The hook
+authenticates `beforeSwap` calls against the capabilities-bound immutable PoolManager. The build binds the compiler's
+exact immutable reference to the same address passed to the constructor. This fixture does not claim a fee,
 claiming, liquidity, deployment, or launched-token outcome. A successful local build, pack, or validation is not API
 admission, wallet approval, onchain deployment, or public availability.
 
@@ -29,12 +37,14 @@ pre-release source candidate supports local preparation only.
 stop. This conditional procedure does not assert today's release state; this example still never submits,
 signs or broadcasts.
 
-Set `PACKAGE_ROOT` to that verified package directory, or the reviewed checkout's `packages/launch` directory for
-local preparation, then copy the project and install its exact compiler lock:
+Use the verified CLI with the project from the current reviewed protected checkout. The immutable `4.0.0` release
+contains an older example with a mutable PoolManager; that example is rejected by production admission. The CLI
+itself supports the corrected immutable binding. Set `PROJECT_SOURCE_ROOT` to the reviewed checkout, then copy
+the corrected project and install its exact compiler lock:
 
 ```sh
-PACKAGE_ROOT="/absolute/path/to/package-root"
-cp -R "$PACKAGE_ROOT/examples/robinhood-v4-no-broadcast/project" ./robinhood-v4-clean-room
+PROJECT_SOURCE_ROOT="/absolute/path/to/reviewed-programmable-checkout"
+cp -R "$PROJECT_SOURCE_ROOT/packages/launch/examples/robinhood-v4-no-broadcast/project" ./robinhood-v4-clean-room
 cd ./robinhood-v4-clean-room
 npm ci --ignore-scripts --no-audit --no-fund
 mkdir -p assets
@@ -57,7 +67,7 @@ npm run build
 
 The builder deliberately refuses to run if `PROGRAMMABLE_API_KEY` is present. It makes one credential-free `GET` to
 `https://api.programmable.market/v4/chains/4663/capabilities`, compiles locally, and writes only public build evidence
-plus `programmable-launch.config.json`. It has no wallet provider, signing method, RPC call, broadcast method,
+plus `programmable-launch.config.json`. Its RPC access only reads the finalized checkpoint. It has no wallet provider, signing method, broadcast method,
 submission method, or API-origin override.
 
 ## Pack and validate locally
@@ -72,7 +82,7 @@ programmable-launch validate launch.json \
   --config programmable-launch.config.json
 ```
 
-Run `build` again if the one-hour permit window expires or the public capabilities binding changes. Do not edit the
+Run `build` again if the generated permit expires or the public capabilities binding changes. Do not edit the
 generated chain deployment or profile to bypass that change; generate a new config and pack new bytes.
 
 The four public CLI commands are `pack`, `validate`, `submit`, and `status`. This example stops after local validation.

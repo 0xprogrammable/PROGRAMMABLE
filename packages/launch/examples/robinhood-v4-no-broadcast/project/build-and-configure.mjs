@@ -7,11 +7,12 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import solc from "solc";
 
-import { createPackConfigFromCapabilities } from "./config-from-capabilities.mjs";
+import { createPackConfigFromCapabilities, createPermitWindowFromFinalizedBlock } from "./config-from-capabilities.mjs";
 import { assertExactProjectImageV4 } from "./image-precheck.mjs";
 
 const CAPABILITIES_URL =
   "https://api.programmable.market/v4/chains/4663/capabilities";
+const ROBINHOOD_RPC_URL = "https://rpc.mainnet.chain.robinhood.com";
 const EXPECTED_SOLC = "0.8.26+commit.8a97fa7a.Emscripten.clang";
 const SOURCE_TARGETS = Object.freeze([
   ["src/RobinhoodCleanRoomToken.sol", "RobinhoodCleanRoomToken", "token"],
@@ -130,20 +131,31 @@ try {
 } catch {
   throw new TypeError("V4 capabilities response is not JSON");
 }
-const now = Math.floor(Date.now() / 1_000);
+const [rpcChainId, finalizedBlock] = await Promise.all([
+  rpc("eth_chainId", []),
+  rpc("eth_getBlockByNumber", ["finalized", false]),
+]);
+const permitWindow = createPermitWindowFromFinalizedBlock({
+  rpcChainId,
+  block: finalizedBlock,
+  nowSeconds: Math.floor(Date.parse(capabilities.serverTime) / 1_000),
+});
+const hookImmutableIds = Object.keys(output.contracts["src/RobinhoodCleanRoomHook.sol"]
+  .RobinhoodCleanRoomHook.evm.deployedBytecode.immutableReferences ?? {});
+if (hookImmutableIds.length !== 1) {
+  throw new TypeError("the hook must contain exactly one immutable PoolManager binding");
+}
 const config = createPackConfigFromCapabilities({
   capabilities,
   launchWallet,
   nonce,
-  permitWindow: {
-    validAfter: String(Math.max(0, now - 60)),
-    deadline: String(now + 3_540),
-  },
+  permitWindow,
   sourceRevision,
   sourceOrigin,
   tokenSupply,
   projectMetadata,
   checkedAt,
+  hookImmutableId: hookImmutableIds[0],
 });
 const canonicalCapabilitiesBytes = Buffer.from(`${JSON.stringify(capabilities, null, 2)}\n`, "utf8");
 await writeFile(path.join(root, "evidence", "capabilities.json"), canonicalCapabilitiesBytes);
@@ -154,6 +166,12 @@ await writeFile(path.join(root, "evidence", "build.json"), `${JSON.stringify({
   artifactDigests,
   capabilitiesUrl: CAPABILITIES_URL,
   capabilitiesSha256: sha256(canonicalCapabilitiesBytes),
+  permitWindowCheckpoint: {
+    rpcUrl: ROBINHOOD_RPC_URL,
+    blockNumber: BigInt(finalizedBlock.number).toString(),
+    blockHash: finalizedBlock.hash,
+    timestamp: BigInt(finalizedBlock.timestamp).toString(),
+  },
   fundingMode: "none",
   signing: false,
   broadcast: false,
@@ -165,6 +183,22 @@ await writeFile(
   "utf8",
 );
 process.stdout.write("Wrote capability-bound programmable-launch.config.json; no signing or broadcast performed.\n");
+
+async function rpc(method, params) {
+  const response = await fetch(ROBINHOOD_RPC_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    redirect: "error",
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) throw new TypeError(`Robinhood finalized checkpoint unavailable: HTTP ${response.status}`);
+  const result = await response.json();
+  if (result.jsonrpc !== "2.0" || result.id !== 1 || result.error || result.result == null) {
+    throw new TypeError("Robinhood finalized checkpoint RPC response is invalid");
+  }
+  return result.result;
+}
 
 function required(name) {
   const value = process.env[name];

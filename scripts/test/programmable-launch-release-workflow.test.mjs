@@ -217,6 +217,15 @@ function failures(value) {
   ]) {
     if (!freshLines.has(requiredInput)) missing.push(`fresh apply must receive ${requiredInput}`);
   }
+  const downloadStep = value.split("      - name: Fresh-download and verify the published release")[1]
+    ?.split("      - name:")[0] ?? "";
+  const downloadLines = new Set(downloadStep.split("\n").map(line => line.trim()));
+  for (const requiredInput of [
+    "PROGRAMMABLE_PRODUCTION_VERIFY_PROOF: ${{ runner.temp }}/production-verify-proof/production-verify-proof.json",
+    "PROGRAMMABLE_ROBINHOOD_BACKEND_AUTHORIZATION: ${{ github.workspace }}/release/robinhood-chain-4663/programmable-backend-authorization.json",
+  ]) {
+    if (!downloadLines.has(requiredInput)) missing.push(`download verification must receive ${requiredInput}`);
+  }
   if (value.split("node scripts/verify-immutable-release-owner-preflight.mjs").length - 1 !== 2) {
     missing.push("immutable preflight must be verified exactly twice");
   }
@@ -303,7 +312,10 @@ test("CLI release workflow closes source, test, provenance, and immutability gat
 
 test("release workflow contract mutations fail closed", () => {
   const freshStart = source.indexOf("      - name: Freshly revalidate exact V4 Phase B immediately before mutation");
+  const downloadStart = source.indexOf("      - name: Fresh-download and verify the published release");
   const mutations = [
+    ...["PROGRAMMABLE_PRODUCTION_VERIFY_PROOF", "PROGRAMMABLE_ROBINHOOD_BACKEND_AUTHORIZATION"].map(name =>
+      source.slice(0, downloadStart) + source.slice(downloadStart).replace(new RegExp(`^          ${name}: .*\\n`, "m"), "")),
     ...["PROGRAMMABLE_PRODUCTION_VERIFY_PROOF", "PROGRAMMABLE_ROBINHOOD_BACKEND_AUTHORIZATION"].map(name =>
       source.slice(0, freshStart) + source.slice(freshStart).replace(new RegExp(`^          ${name}: .*\\n`, "m"), "")),
     source.replace("github.ref == 'refs/heads/production'", "true"),

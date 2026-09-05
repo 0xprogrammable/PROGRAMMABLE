@@ -593,7 +593,11 @@ export async function prepareCleanRoom(options) {
     stage: "INSTALLED_CLI_VERSION", requireSilentStderr: true, cwd: workspace,
   })).trim();
   requireValue(installedVersion === RELEASE_VERSION, "INSTALLED_CLI_VERSION_INVALID");
-  await cp(path.join(packageRoot, "examples", "robinhood-v4-no-broadcast", "project"),
+  const projectSourceRevision = (await runCommand("git", ["-C", REPOSITORY_ROOT, "rev-parse", "HEAD"],
+    { stage: "PROJECT_SOURCE_REVISION", requireSilentStderr: true })).trim();
+  requireValue(COMMIT.test(projectSourceRevision) && projectSourceRevision === process.env.GITHUB_SHA,
+    "PROJECT_SOURCE_REVISION_INVALID");
+  await cp(path.join(REPOSITORY_ROOT, "packages", "launch", "examples", "robinhood-v4-no-broadcast", "project"),
     projectDirectory, { recursive: true, errorOnExist: true, force: false, dereference: false });
   const imagePath = path.resolve(options.image);
   await assertRegularFile(imagePath, "PROJECT_IMAGE", MAX_IMAGE_BYTES);
@@ -626,7 +630,7 @@ export async function prepareCleanRoom(options) {
       ).href,
       PROGRAMMABLE_PROJECT_IMAGE_URI: imageUri,
       PROGRAMMABLE_SOURCE_ORIGIN: "https://github.com/programmablehq/PROGRAMMABLE",
-      PROGRAMMABLE_SOURCE_REVISION: release.source.commitSha,
+      PROGRAMMABLE_SOURCE_REVISION: projectSourceRevision,
       PROGRAMMABLE_WEBSITE_URL: websiteUrl,
       PROGRAMMABLE_X_URL: options.xUrl,
     }),
@@ -926,7 +930,7 @@ export function buildCleanRoomEvidence(input) {
   requireValue(request.funding?.mode === "none" && request.funding.valueWei === "0",
     "REQUEST_FUNDING_INVALID");
   requireValue(request.liquidityModel?.model === "none-empty-pool"
-    && request.liquidityModel.declaredLaunchState === "pool-not-initialized"
+    && request.liquidityModel.declaredLaunchState === "pool-initialized-empty"
     && Array.isArray(request.liquidityModel.targetIds)
     && request.liquidityModel.targetIds.length === 0,
   "REQUEST_LIQUIDITY_INVALID");

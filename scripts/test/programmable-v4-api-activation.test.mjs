@@ -3,8 +3,9 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { validCleanRoomTranscript } from "./fixtures/programmable-launch-v4-clean-room.mjs";
 import { buildCleanRoomEvidence, buildCleanRoomRecoveryReceipt, canonicalJsonBytes } from "../programmable-launch-v4-clean-room.mjs";
-import { assertProducerMetadata, assertVerifiedAttestation, createActivationRecord } from "../programmable-v4-api-activation.mjs";
+import { assertActivationJsonEqual, assertProducerMetadata, assertVerifiedAttestation, createActivationRecord } from "../programmable-v4-api-activation.mjs";
 import { ACTIVATION_SCHEMA, CLEAN_ROOM_WORKFLOW, REPOSITORY, bytesDigest, projectV4ApiActivation } from "../../lib/custom-launch/v4-api-activation.mjs";
+import { parseStrictJson } from "../../packages/launch/src/canonical-json.mjs";
 
 const coordinateTemplate = JSON.parse(readFileSync(new URL("../../docs/operations/releases/custom-launch-v4/clean-room-release-coordinate.json", import.meta.url)));
 const digest = letter => `sha256:${letter.repeat(64)}`;
@@ -34,6 +35,21 @@ function fixture() {
   const record = createActivationRecord(bindingBytes, coordinateBytes, evidenceBytes, bundleBytes, artifactRef);
   return { binding, bindingBytes, coordinate, coordinateBytes, evidence, evidenceBytes, bundleBytes, artifactRef, record };
 }
+
+test("activation comparisons accept strict-parser JSON and still reject changed proof and asset values", () => {
+  const f = fixture();
+  const parsed = parseStrictJson(canonicalJsonBytes(f.record).toString("utf8"));
+  assert.equal(Object.getPrototypeOf(parsed), null);
+  assert.doesNotThrow(() => assertActivationJsonEqual(parsed, f.record));
+  const assets = parseStrictJson(f.coordinateBytes.toString("utf8")).assets;
+  assert.doesNotThrow(() => assertActivationJsonEqual(f.coordinate.assets, assets));
+  const changedRecord = structuredClone(parsed);
+  changedRecord.proof.cleanRoom.evidence.producer.sourceSha = "f".repeat(40);
+  assert.throws(() => assertActivationJsonEqual(changedRecord, f.record));
+  const changedAssets = structuredClone(assets);
+  changedAssets[0].sha256 = digest("f");
+  assert.throws(() => assertActivationJsonEqual(f.coordinate.assets, changedAssets));
+});
 
 test("public API discovery is blocked without attested clean-room activation even when release prerequisites are ready", () => {
   const { binding, coordinate } = fixture();

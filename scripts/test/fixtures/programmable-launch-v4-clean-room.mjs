@@ -23,7 +23,7 @@ export function validCleanRoomTranscript() {
     liquidityModel: {
       schemaVersion: "programmable.custom-launch-liquidity-model.v1",
       model: "none-empty-pool",
-      declaredLaunchState: "pool-not-initialized",
+      declaredLaunchState: "pool-initialized-empty",
       targetIds: [],
     },
   });

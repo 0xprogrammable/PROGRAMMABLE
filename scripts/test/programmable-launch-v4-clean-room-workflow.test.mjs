@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import yaml from "js-yaml";
+import { buildCleanRoomEvidence, buildCleanRoomRecoveryReceipt, canonicalJsonBytes } from "../programmable-launch-v4-clean-room.mjs";
+import { validCleanRoomTranscript } from "./fixtures/programmable-launch-v4-clean-room.mjs";
 
 const workflow = readFileSync(new URL(
   "../../.github/workflows/programmable-launch-v4-clean-room.yml",
@@ -132,7 +138,7 @@ function contractFailures(workflowSource = workflow, runnerSource = runner) {
     assert.equal(download.with["run-id"], undefined);
     const validation = success.steps.find(step => step.name === "Reverify canonical successful evidence and exact producer binding").run;
     assert.ok(validation.includes("await verifyEvidenceFile("));
-    assert.ok(validation.includes("assert.deepEqual(evidence.producer,"));
+    assert.ok(validation.includes("assert.deepEqual({ ...evidence.producer },"));
     assert.ok(validation.includes("workflowSha: process.env.GITHUB_WORKFLOW_SHA"));
     assert.ok(validation.includes("EVIDENCE_PRODUCER_BINDING_MISMATCH"));
   } catch (error) { failures.push(`workflow job boundary: ${error.message}`); }
@@ -200,7 +206,7 @@ test("workflow contract mutations fail closed", () => {
     workflow.replace("create-storage-record: true", "create-storage-record: false"),
     workflow.replace("needs.clean-room.result == 'success'", "always()"),
     workflow.replace("digest-mismatch: error", "digest-mismatch: warn"),
-    workflow.replace("assert.deepEqual(evidence.producer,", "assert.ok(true, //"),
+    workflow.replace("assert.deepEqual({ ...evidence.producer },", "assert.ok(true, //"),
     workflow.replace("artifact-ids: ${{ needs.clean-room.outputs.evidence-artifact-id }}", "name: any-evidence"),
   ];
   for (const [index, changed] of mutations.entries()) {
@@ -218,4 +224,32 @@ test("workflow contract mutations fail closed", () => {
   for (const [index, changed] of runnerMutations.entries()) {
     assert.notDeepEqual(contractFailures(workflow, changed), [], `runner mutation ${index} escaped`);
   }
+});
+
+test("the actual provenance step accepts canonical parsed evidence and rejects a different producer source", () => {
+  const step = yaml.load(workflow).jobs["evidence-provenance"].steps.find(
+    item => item.name === "Reverify canonical successful evidence and exact producer binding");
+  const source = step.run.match(/node --input-type=module <<'NODE'\n([\s\S]*?)\nNODE/u)?.[1];
+  assert.ok(source);
+  const input = validCleanRoomTranscript();
+  input.recovery = buildCleanRoomRecoveryReceipt(input);
+  const evidence = buildCleanRoomEvidence(input);
+  const producer = evidence.producer;
+  const temp = mkdtempSync(path.join(os.tmpdir(), "programmable-v4-provenance-step-"));
+  try {
+    const directory = path.join(temp, "programmable-launch-v4-clean-room-evidence");
+    mkdirSync(directory);
+    writeFileSync(path.join(directory, "programmable-launch-v4-clean-room-evidence.json"), canonicalJsonBytes(evidence));
+    const env = { RUNNER_TEMP: temp, GITHUB_REPOSITORY: producer.repository,
+      GITHUB_REPOSITORY_ID: producer.repositoryId, GITHUB_WORKFLOW_REF: producer.workflowRef,
+      GITHUB_SHA: producer.sourceSha, GITHUB_WORKFLOW_SHA: producer.workflowSha,
+      GITHUB_RUN_ID: producer.runId, GITHUB_RUN_ATTEMPT: producer.runAttempt,
+      GITHUB_ACTOR: producer.actor, GITHUB_ACTOR_ID: producer.actorId };
+    const options = { cwd: fileURLToPath(new URL("../../", import.meta.url)), env,
+      stdio: ["ignore", "pipe", "pipe"], timeout: 10_000 };
+    assert.doesNotThrow(() => execFileSync(process.execPath, ["--input-type=module", "-e", source], options));
+    assert.throws(() => execFileSync(process.execPath, ["--input-type=module", "-e", source], {
+      ...options, env: { ...env, GITHUB_SHA: "f".repeat(40) },
+    }), /EVIDENCE_PRODUCER_BINDING_MISMATCH/u);
+  } finally { rmSync(temp, { recursive: true, force: true }); }
 });

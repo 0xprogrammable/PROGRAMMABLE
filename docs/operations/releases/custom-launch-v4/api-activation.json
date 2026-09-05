@@ -1,5 +1,93 @@
 {
   "schemaVersion": "programmable.robinhood-v4-api-activation.v1",
   "scope": "api-until-wallet",
-  "proof": null
+  "proof": {
+    "releaseBinding": {
+      "sha256": "sha256:b642d4bc65ea8e15a5e6f9ad53a94279e9efbc88203b49056681478ef86b7d02",
+      "jsonSha256": "sha256:021536e7e90a4e90befe4a077025e0dfd6a4be51d22ae64dad342b8ca2bce5da"
+    },
+    "cliCoordinate": {
+      "sha256": "sha256:97359cd1cf25e583e036261c21b9433657a5a3e7929fc79cf34785e9f2fe1abb",
+      "jsonSha256": "sha256:7d864d0724be0ec6a45892a7ef21dfb15bfd9b20d61966b0c08b354b98dbe5a6"
+    },
+    "cleanRoom": {
+      "path": "release/robinhood-chain-4663/programmable-launch-v4-clean-room-evidence.json",
+      "sha256": "sha256:3c73c68efbe89c99bca4d7510e2aff75666935c29cce5dc48bed71a25faccb6f",
+      "attestationPath": "release/robinhood-chain-4663/programmable-launch-v4-clean-room-evidence.attestation.json",
+      "attestationSha256": "sha256:60e81fd9fb1ab22de440b6e298cab2777e994a89d6cf808eab916e32a0d10688",
+      "artifact": {
+        "id": "9961514201",
+        "digest": "sha256:ebd147e0d34e53ae398990db2a31e0df3741496c99f9d3858c306e12722756ff"
+      },
+      "evidence": {
+        "evidenceDigest": "sha256:c24abca54d6b827fd25075e713529d759fcde180f1766bbfcf3a96189329be70",
+        "observedAt": "2026-09-05T02:47:21.060Z",
+        "producer": {
+          "actor": "hazarxyz",
+          "actorId": "258789013",
+          "environment": "production",
+          "repository": "programmablehq/PROGRAMMABLE",
+          "repositoryId": "1314365508",
+          "runAttempt": "1",
+          "runId": "33939938029",
+          "schemaVersion": "programmable.launch-v4-clean-room-producer.v1",
+          "sourceSha": "dbf8270cc0f8f1f1f191b0348fb2a492c075a23f",
+          "workflowPath": ".github/workflows/programmable-launch-v4-clean-room.yml",
+          "workflowRef": "programmablehq/PROGRAMMABLE/.github/workflows/programmable-launch-v4-clean-room.yml@refs/heads/production",
+          "workflowSha": "dbf8270cc0f8f1f1f191b0348fb2a492c075a23f"
+        },
+        "recovery": {
+          "recoveryDigest": "sha256:8169cbe4dd858671bd16d203a9c75a65f8f41dcf247caf0ac3b5e5cd00a2c147"
+        },
+        "release": {
+          "attestationsVerified": true,
+          "checksumSha256": "sha256:ba61fc41255028c1a23a7e07cf7f29820bca672dde4b9de2a0774e580760976c",
+          "machineContractBindingSha256": "sha256:b642d4bc65ea8e15a5e6f9ad53a94279e9efbc88203b49056681478ef86b7d02",
+          "manifestSha256": "sha256:d4d5df7ce7d986ecbbed4a0b9052884a76fe00d22725ed1efd51397da2af1568",
+          "repository": "programmablehq/PROGRAMMABLE",
+          "reviewedCoordinateSha256": "sha256:97359cd1cf25e583e036261c21b9433657a5a3e7929fc79cf34785e9f2fe1abb",
+          "sbomSha256": "sha256:83d6653f0b4550b9f4a159166cc6b40beec6dcdd26866e4d5ce5341b2f95cbde",
+          "signerWorkflow": "programmablehq/PROGRAMMABLE/.github/workflows/release-programmable-launch.yml",
+          "sourceCommit": "5e1e0f9fffe6bbdb09fabab2f68814d1c9ef2d36",
+          "sourceTree": "088623a11fcfecfe4754189f6668685c6e6f7838",
+          "tag": "programmable-launch-v4.0.0",
+          "tarballSha256": "sha256:f6b1ff121f147d415a22589dac2dcc50ceb3fc4aa12067584696dc35377d18e6",
+          "version": "4.0.0"
+        },
+        "replay": {
+          "identicalIdempotencyKey": true,
+          "sameLaunchId": true,
+          "sameRequestDigest": true
+        },
+        "request": {
+          "caip2": "eip155:4663",
+          "chainId": "4663",
+          "idempotencyKeySha256": "sha256:d4567b977d1279e465a558b91d458be119895ea82c9b0949e0977dbb5ea77965",
+          "rawRequestSha256": "sha256:ccb620aef31d84a83475efcd935e9357e4522478344d8f29779258e7faf11099",
+          "requestDigest": "sha256:5d96159f6a9b87aca733e1a264a8302020de90d140e664d99606dfbc05f9e363"
+        },
+        "safety": {
+          "apiCredentialRecorded": false,
+          "onchainEvidenceObserved": false,
+          "rawRequestRecorded": false,
+          "rawTransactionRecorded": false,
+          "transactionBroadcastObserved": false,
+          "walletSignatureObserved": false
+        },
+        "schemaVersion": "programmable.launch-v4-clean-room-evidence.v1",
+        "walletHandoff": {
+          "chainDeploymentDescriptorDigest": "0x4bde6e26b6630aa684b4ac2a987d6322755896b249a189843bd3a58fe313694c",
+          "chainDeploymentId": "robinhood-mainnet-custom-launch-v1",
+          "launchId": "49e3c4ef-a450-4457-827d-b9b68defd0e9",
+          "profileDigest": "sha256:484b1dc6e9091804fabc230f2b3a7504940fa00264f8e66e82a66a951e71f1a0",
+          "requestId": "c192ceb6-d413-4e07-866d-d15835f15eb3",
+          "status": "wallet_action_required",
+          "transactionCalldataSha256": "sha256:af6278e662c30b021da2c531a0ce68cf924dacd94f9673fe8ddde80533d90151",
+          "transactionPreimageHash": "sha256:38c98e696d1e8dbe73a31d20511a6e6ae7860d35c9e8cbfab8d5f55908315e6c",
+          "transactionTarget": "0x34965F2A2ee9254522232C32F02056E92BE0C98a",
+          "transactionValueWei": "0"
+        }
+      }
+    }
+  }
 }
