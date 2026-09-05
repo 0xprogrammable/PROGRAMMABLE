@@ -17,21 +17,65 @@ Browser tests and the build remain sequential inside one checkout because they
 use local servers and `.next`. Independent jobs provide filesystem and process
 isolation. The local `npm run verify:interface:ci` command still runs both complete
 lanes sequentially. No test inventory, fuzz budget, compiler setting, or production
-bundle validation is reduced.
+bundle validation is reduced for ordinary functional changes. A separate narrow
+guide-literal route is described below.
 
 The aggregate rejects failed, cancelled, missing, inconsistent, or unexpectedly
 skipped worker results. Unaffected Interface work skips both worker jobs; the
 stable aggregate still runs and validates classification. `read_model=true` must
 imply `interface=true`.
 
-The production proof resolver expects the exact eleven-job inventory, including
-the two named workers. All protected contexts and final gates must succeed. Only
-the two workers may both be skipped, with GitHub's unassigned-runner metadata and
-no executed steps. Source SHA, workflow hash, tree, run attempt, hosted-runner
-identity, artifact digest, attestation and freshness checks remain in force.
-The new workflow cannot substitute a previous nine-job run at a different source
-revision. Existing proof document parsing is unchanged; an old deployed revision
-continues to use its own workflow and verifier.
+The production proof resolver expects the exact sixteen-job inventory, including
+the two Interface workers and five Contract workers. All protected contexts and
+final gates must succeed. Each worker group may only be skipped in full, with
+GitHub's unassigned-runner metadata and no executed steps. Source SHA, workflow
+hash, tree, run attempt, hosted-runner identity, artifact digest, attestation and
+freshness checks remain in force. Earlier job inventories cannot substitute for
+the workflow at this source revision. Existing proof document parsing is
+unchanged; an old deployed revision continues to use its own workflow and verifier.
+
+## Narrow guide edits and shared Interface work
+
+Only a plain guide-URL replacement in the two fixed existing literals listed in
+`scripts/ci/classify-verify-paths.mjs` can replace the global lint, full Interface
+Vitest batch, and unrelated browser suites with scoped lint and 14 direct test
+files. The trusted-base classifier reads actual before/after Git blobs and proves
+that every byte outside the single URL is unchanged, including a UTF-8 BOM.
+Missing history, unknown or mixed functional paths, invalid UTF-8, escapes,
+renaming, deletion and mode changes select full coverage. The two fixed companion
+Markdown files may accompany a literal edit; Markdown alone does not select it.
+All existing Interface Node contracts, the complete production build and both
+activation audits remain. A base classifier without this output also runs full
+coverage. The direct 14-file suite passed 130 tests locally.
+
+When full Interface and Custom V2 are both required, the final gates require both
+results while running identical global lint, 12 shared Vitest files and the Next
+build only once. Custom V2-specific contracts and operations checks remain in its
+worker. A standalone Custom V2 release retains its complete original command;
+the guide route cannot supply shared functional coverage.
+
+## Contract workers and a single default-profile build
+
+The stable `Contracts` check requires five explicit jobs: one build, two complete
+deterministic test partitions, release/fork verification, and static analysis.
+Consumers use only the immutable artifact ID from this run. Download digest,
+source SHA/tree, workflow bytes, run attempt and pinned Foundry version must all
+match. This is not a cross-commit compiler or release-proof cache. The two actual
+Forge inventories contain all 93 source suites; local execution passed 804 tests
+with the same two existing skips. No fuzz or invariant setting changes.
+
+Default-profile release consumers finish before the late-migration profile
+compiles. Slither runs separately. Missing, failed, cancelled, partially skipped,
+or substituted workers fail the protected aggregate. Detailed command ownership
+and artifact boundaries are documented in `scripts/ci/README.md`.
+
+## Run cancellation and installation
+
+Concurrency groups include the source ref and closed verification intent. A
+manual Custom V2 release verification cannot cancel a production push; newer
+changes still supersede older work of the same intent on the same ref. Locked
+dependency installation disables implicit audit/funding requests, while explicit
+dependency security gates remain on their existing scopes.
 
 ## Exact CLI-coordinate classification
 
@@ -60,6 +104,14 @@ does not create a new trust source or replace any contract test.
 Public RPC availability can change. Use the actual per-provider outcomes from a
 new run to assess the improvement; do not equate a current connectivity probe with
 completed fork-test coverage.
+
+The official-runtime verifier additionally reads its six contracts sequentially
+at the same block to avoid a provider burst. Each request has a ten-second
+timeout; recognized infrastructure failures can restart the complete snapshot
+using the next fixed default provider. An explicit RPC remains the sole provider.
+Wrong chain, empty or mismatching code, malformed replies and unknown errors
+remain failures. The generated source manifest records the changed fork-wrapper
+digest; registry bytecode, ABI and event documents are unchanged.
 
 ## Baseline and measuring the result
 
