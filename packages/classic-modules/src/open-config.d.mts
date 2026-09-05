@@ -18,5 +18,37 @@ export const OPEN_CONFIG_LIMITS: Readonly<{
   stringBytes: 16384; bytesLength: 16384; schemaBytes: 65536; valueBytes: 131072;
   contextBytes: 131072; jsonDepth: 32; jsonNodes: 16384; encodedBytes: 262144;
 }>;
-/** Throws OpenConfigError with a JSON-pointer path; never executes schema-provided code. */
+/** Local Node API. Throws OpenConfigError with a JSON-pointer path; rejects getters and Proxies. */
 export function assertOpenConfigSchema(schema: unknown): asserts schema is OpenConfigSchema;
+export type OpenConfigHex = `0x${string}`;
+export interface OpenAssetContext { chainId: OpenConfigUintInput; address: OpenConfigHex; decimals: number }
+export interface OpenConfigContext {
+  roles?: Record<string, OpenConfigHex>;
+  assets?: Record<string, OpenAssetContext>;
+  components?: Record<string, OpenConfigHex>;
+}
+export interface OpenResolvedAsset { chainId: string; address: OpenConfigHex; decimals: number }
+export type OpenConfigBinding =
+  | { path: string; kind: 'account' | 'component'; reference: string; resolved: OpenConfigHex }
+  | { path: string; kind: 'asset'; reference: string; resolved: OpenResolvedAsset };
+export type OpenConfigValue = string | boolean | OpenConfigValue[] | { [key: string]: OpenConfigValue };
+export interface OpenAbiParameter { name: string; type: string; components?: OpenAbiParameter[] }
+export interface OpenCompiledConfig {
+  value: OpenConfigValue;
+  abiParameters: OpenAbiParameter[];
+  /** Includes BigInts. Omit this field from JSON artifacts; commit the encoded bytes. */
+  abiValues: unknown[];
+  encoded: OpenConfigHex;
+  bindings: OpenConfigBinding[];
+}
+/**
+ * One root ABI parameter; records sort fields, arrays preserve order. Optional
+ * fields encode tuple(bool present,T value) with type-level zero when absent.
+ * Empty records stay {} and encode tuple(bool _empty) with a fixed false sentinel.
+ * Variant input { [tag]: branchName,...fields } encodes tuple(uint16 index,bytes
+ * abi.encode(branchRecordTuple)), with lexically sorted zero-based branch indexes.
+ * maxLength counts UTF-8 bytes for strings, decoded bytes for hexadecimal bytes.
+ * References are caller-supplied assertions, not authenticated onchain evidence.
+ * Asset metadata is in bindings; committing its encoded address alone is insufficient.
+ */
+export function compileOpenConfig(schema: unknown, values: unknown, context?: OpenConfigContext): OpenCompiledConfig;
