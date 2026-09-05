@@ -1,6 +1,9 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
 import { DEFAULT_EXPLORE_FILTERS, type RobinhoodExploreFilters } from "@/lib/robinhood-explore-filters";
+import { isVisibleRobinhoodToken } from "@/lib/robinhood-explore-policy";
+import { readRobinhoodMarkets, readRobinhoodPresentations } from "@/lib/server/robinhood-presentation";
+import type { RobinhoodCoinMarket, RobinhoodCoinPresentation } from "@/lib/robinhood-presentation";
 import { launchList } from "./model";
 import { indexStore } from "./store";
 
@@ -9,8 +12,15 @@ const readSnapshot = unstable_cache(async () => (await indexStore().read())?.sna
   ["robinhood-website-index-v1"], { revalidate: 15 });
 
 export async function readRobinhoodLaunches(page = 1, query = "", filters: RobinhoodExploreFilters = DEFAULT_EXPLORE_FILTERS) {
-  try { return launchList(await readSnapshot(), page, query, Date.now(), filters); }
-  catch { return launchList(null, page, query, Date.now(), filters); }
+  try {
+    const snapshot = await readSnapshot();
+    const visible = (snapshot?.items ?? []).filter((token) => isVisibleRobinhoodToken(token.tokenAddress));
+    const markets = await readRobinhoodMarkets(visible).catch(() => new Map<string, RobinhoodCoinMarket>());
+    const caps = new Map(Array.from(markets).flatMap(([address, market]) => market.marketCapUsd === null ? [] : [[address, market.marketCapUsd] as const]));
+    const list = launchList(snapshot, page, query, Date.now(), filters, caps);
+    // Ranking and card values use the same full-catalog market observation.
+    return { ...list, presentations: await readRobinhoodPresentations(list.items, markets) };
+  } catch { return { ...launchList(null, page, query, Date.now(), filters), presentations: [] as RobinhoodCoinPresentation[] }; }
 }
 
 export async function readRobinhoodToken(address: string) {

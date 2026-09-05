@@ -71,8 +71,6 @@ export function RobinhoodTokenView({ address, token, status }: {
         </header>
         <p className="sr-only" role="status">{copyState === "copied" ? "Token address copied" : ""}</p>
         {copyState === "failed" ? <p className={styles.notice} role="status">Could not copy. <a href={`${EXPLORER}/token/${address}`} target="_blank" rel="noreferrer">View the address on Explorer.</a></p> : null}
-        {status === "stale" ? <p className={styles.notice} role="status">Showing saved launch details. Updates are temporarily unavailable.</p> : null}
-        {presentation.delayed && status !== "stale" ? <p className={styles.notice} role="status">Market data is temporarily delayed.</p> : null}
 
             <dl className={styles.metrics}>
               <Metric label="Price" value={coinDollars(market?.priceUsd, true)} />

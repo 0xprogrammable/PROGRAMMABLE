@@ -119,8 +119,7 @@
   margin: 0 0 16px;
 }
 
-.list,
-.skeletonGrid {
+.list {
   display: grid;
   gap: 16px;
   grid-template-columns: repeat(auto-fill, minmax(208px, 1fr));
@@ -146,6 +145,8 @@
 
 .artwork { border-radius: 8px; width: 100%; }
 .identity { min-width: 0; padding: 12px 4px 0; }
+.nameRow { align-items: center; display: flex; gap: 8px; min-width: 0; }
+.pin { color: var(--webde-muted); display: inline-flex; flex: none; }
 .name, .symbol { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .name { font-size: 18px; font-weight: 550; line-height: 28px; }
 .symbol { color: var(--webde-muted); font-size: 14px; line-height: 20px; }
@@ -154,10 +155,8 @@
 .marketCap > span { color: var(--webde-muted); font-size: 12px; line-height: 16px; }
 .marketCap strong { font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 28px; }
 .launched { color: var(--webde-muted); flex-shrink: 0; font-size: 12px; line-height: 28px; }
-.skeletonCard { background: var(--webde-surface); border: 1px solid var(--webde-line); border-radius: 16px; padding: 8px 8px 24px; }
-.skeletonCard div { aspect-ratio: 1; background: var(--webde-surface-raised); border-radius: 8px; }
-.skeletonCard span { background: var(--webde-surface-raised); border-radius: 4px; display: block; height: 16px; margin: 16px 4px 0; width: 70%; }
-.skeletonCard span:last-child { margin-top: 8px; width: 40%; }
+.loading { display: flex; justify-content: center; padding: 24px; }
+.loading span { background: var(--webde-surface-raised); border-radius: 4px; height: 8px; width: 120px; }
 
 .empty {
   border: 1px solid var(--webde-line);
@@ -264,7 +263,7 @@
     font-size: 16px;
   }
 
-  .list, .skeletonGrid { gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .list { gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .name { font-size: 16px; line-height: 24px; }
   .cardFooter { align-items: start; flex-direction: column; gap: 4px; margin-top: 12px; }
   .launched { line-height: 20px; }

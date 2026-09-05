@@ -17,6 +17,8 @@ export type RobinhoodCoinPresentation = Readonly<{
   market: RobinhoodCoinMarket | null;
 }>;
 
+export const ROBINHOOD_MARKET_MAX_AGE_MS = 180_000;
+
 export function mergeRobinhoodPresentations(
   previous: readonly RobinhoodCoinPresentation[],
   incoming: readonly RobinhoodCoinPresentation[] | null,
@@ -26,7 +28,7 @@ export function mergeRobinhoodPresentations(
   let delayed = incoming === null;
   function recent(market: RobinhoodCoinMarket | null | undefined) {
     const age = market ? now - Date.parse(market.observedAt) : NaN;
-    return age >= 0 && age <= 180_000 ? market : null;
+    return age >= 0 && age <= ROBINHOOD_MARKET_MAX_AGE_MS ? market : null;
   }
   const items = (incoming ?? previous.map((item) => ({ ...item, market: null }))).map((item) => {
     const previousMarket = saved.get(item.tokenAddress.toLowerCase());

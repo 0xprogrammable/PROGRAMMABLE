@@ -9,7 +9,7 @@ vi.mock("@/lib/server/robinhood-index/read", () => ({
   readRobinhoodToken: storage.token,
 }));
 
-import { readRobinhoodPresentations } from "@/lib/server/robinhood-presentation";
+import { readRobinhoodMarkets, readRobinhoodPresentations } from "@/lib/server/robinhood-presentation";
 import { GET } from "@/app/api/explore/robinhood/presentation/route";
 // @ts-expect-error -- package fixtures are intentionally JavaScript.
 import { validV4ProjectMetadata } from "../packages/launch/test/fixtures/v4.mjs";
@@ -202,6 +202,58 @@ describe("Robinhood optional coin presentation", () => {
   });
 });
 
+describe("Robinhood catalog market observations", () => {
+  it.each([new Error("offline"), { invalid: true }])("rejects failed refreshes so they cannot replace a cached observation", async (failure) => {
+    vi.stubGlobal("fetch", sourceFetch(feed(), failure));
+    await expect(readRobinhoodMarkets([TOKEN])).rejects.toThrow("Market observation unavailable");
+  });
+
+  it("accepts a successful response with no indexed pair as unknown market data", async () => {
+    vi.stubGlobal("fetch", sourceFetch(feed(), { pairs: null }));
+    expect(await readRobinhoodMarkets([TOKEN])).toEqual(new Map());
+  });
+
+  it("batches the full catalog beyond the visible page with bounded concurrency and exact pool joins", async () => {
+    const tokens = Array.from({ length: 151 }, (_, index) => ({ ...TOKEN,
+      tokenAddress: `0x${(index + 1).toString(16).padStart(40, "0")}`,
+      poolId: `0x${(index + 1).toString(16).padStart(64, "0")}`,
+    }));
+    let active = 0;
+    let peak = 0;
+    const sizes: number[] = [];
+    const fetcher = vi.fn(async (input: string) => {
+      active++;
+      peak = Math.max(peak, active);
+      const pools = input.split("/").at(-1)!.split(",");
+      sizes.push(pools.length);
+      await Promise.resolve();
+      active--;
+      return Response.json({ pairs: pools.map((pool) => {
+        const token = tokens.find((row) => row.poolId === pool)!;
+        return { ...pair(), pairAddress: pool, baseToken: { address: token.tokenAddress } };
+      }) });
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const result = await readRobinhoodMarkets(tokens.toReversed());
+    expect(result.size).toBe(151);
+    expect(fetcher).toHaveBeenCalledTimes(6);
+    expect(Math.max(...sizes)).toBe(30);
+    expect(peak).toBeLessThanOrEqual(4);
+    expect(result.get(tokens[150].tokenAddress)?.poolId).toBe(tokens[150].poolId);
+  });
+
+  it("uses the supplied catalog observation for card values without fetching prices again", async () => {
+    const fetcher = sourceFetch();
+    vi.stubGlobal("fetch", fetcher);
+    const market = { poolId: TOKEN.poolId, priceUsd: 2, marketCapUsd: 42, liquidityUsd: null,
+      volume24hUsd: null, change24hPercent: null, observedAt: new Date().toISOString(), sourceUrl: "https://dexscreener.com/" };
+    const result = await readRobinhoodPresentations([TOKEN], new Map([[TOKEN.tokenAddress, market]]));
+    expect(result[0].market).toBe(market);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(String(fetcher.mock.calls[0][0])).toContain("finalized-custom-launches");
+  });
+});
+
 describe("Robinhood presentation HTTP boundary", () => {
   const endpoint = "https://website.invalid/api/explore/robinhood/presentation";
   it.each([
@@ -227,20 +279,21 @@ describe("Robinhood presentation HTTP boundary", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
-  it("resolves a bounded search from the saved list before enriching", async () => {
+  it("reuses the selected page presentation without a second provider observation", async () => {
     vi.stubGlobal("fetch", sourceFetch());
-    storage.list.mockResolvedValue({ items: [TOKEN] });
+    storage.list.mockResolvedValue({ items: [TOKEN], presentations: [{ tokenAddress: TOKEN.tokenAddress, market: null }] });
     const response = await GET(new Request(`${endpoint}?page=2&q=RHV4`));
-    expect(storage.list).toHaveBeenCalledWith(2, "RHV4", { age: "any", sort: "newest" });
+    expect(storage.list).toHaveBeenCalledWith(2, "RHV4", { sort: "highest" });
     expect(storage.token).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
     expect(response.headers.get("cache-control")).toContain("s-maxage=60");
     expect((await response.json()).items[0].tokenAddress).toBe(TOKEN.tokenAddress);
   });
   it("enriches the same filtered page as the launch list", async () => {
     vi.stubGlobal("fetch", sourceFetch());
-    storage.list.mockResolvedValue({ items: [TOKEN] });
-    const response = await GET(new Request(`${endpoint}?page=2&q=RHV4&age=30d&sort=oldest`));
+    storage.list.mockResolvedValue({ items: [TOKEN], presentations: [{ tokenAddress: TOKEN.tokenAddress, market: null }] });
+    const response = await GET(new Request(`${endpoint}?page=2&q=RHV4&sort=lowest`));
     expect(response.status).toBe(200);
-    expect(storage.list).toHaveBeenCalledWith(2, "RHV4", { age: "30d", sort: "oldest" });
+    expect(storage.list).toHaveBeenCalledWith(2, "RHV4", { sort: "lowest" });
   });
 });

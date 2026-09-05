@@ -610,35 +610,56 @@ describe("Robinhood website launch list", () => {
     }));
 
     expect(launchList(saved, 1, "", NOW).items).toEqual([rows[1], rows[2], rows[0]]);
-    expect(launchList(saved, 1, "", NOW, { age: "any", sort: "oldest" }).items).toEqual([rows[0], rows[2], rows[1]]);
+    expect(launchList(saved, 1, "", NOW, { sort: "oldest" }).items).toEqual([rows[0], rows[2], rows[1]]);
   });
 
-  it("filters the entire catalog before paging oldest-first and combines age with search", () => {
-    const rows = Array.from({ length: 60 }, (_, index) => launch(index + 1, 100 + index, {
-      launchedAt: new Date(NOW - (index < 5 ? 2 * 86_400_000 : (60 - index) * 60_000)).toISOString(),
-    }));
+  it.each(["highest", "lowest"] as const)("sorts the entire catalog by %s market cap before pagination", (sort) => {
+    const rows = Array.from({ length: 60 }, (_, index) => launch(index + 1, 100 + index));
     const saved = snapshot(rows);
-    const filters = { age: "24h", sort: "oldest" } as const;
-    const first = launchList(saved, 1, "", NOW, filters);
-    const second = launchList(saved, 2, "", NOW, filters);
-    expect(first.items).toEqual(rows.slice(5, 55));
-    expect(first.page).toMatchObject({ totalItems: 55, totalPages: 2, hasMore: true });
-    expect(second.items).toEqual(rows.slice(55));
-    expect(launchList(saved, 99, "", NOW, filters)).toEqual(second);
-    expect(launchList(saved, 1, rows[59].tokenAddress, NOW, filters).items).toEqual([rows[59]]);
-    expect(launchList(saved, 1, rows[0].tokenAddress, NOW, filters).items).toEqual([]);
+    const caps = new Map(rows.map((row, index) => [row.tokenAddress, (60 - index) * 100]));
+    const ordered = sort === "highest" ? rows : rows.toReversed();
+    const first = launchList(saved, 1, "", NOW, { sort }, caps);
+    const second = launchList(saved, 2, "", NOW, { sort }, caps);
+    expect(first.items).toEqual(ordered.slice(0, 50));
+    expect(first.page).toMatchObject({ totalItems: 60, totalPages: 2, hasMore: true });
+    expect(second.items).toEqual(ordered.slice(50));
+    expect(launchList(saved, 99, "", NOW, { sort }, caps)).toEqual(second);
+    expect(launchList(saved, 1, rows[59].tokenAddress, NOW, { sort }, caps).items).toEqual([rows[59]]);
     expect(saved.items).toEqual(rows);
   });
 
-  it.each([ ["24h", 86_400_000], ["7d", 604_800_000], ["30d", 2_592_000_000] ] as const)("respects the %s boundary and excludes unknown or future launch times", (age, ageMs) => {
-    const rows = [
-      launch(1, 100, { launchedAt: new Date(NOW - ageMs).toISOString() }),
-      launch(2, 101, { launchedAt: new Date(NOW - ageMs - 1).toISOString() }),
-      launch(3, 102, { launchedAt: null }),
-      launch(4, 103, { launchedAt: new Date(NOW + 1).toISOString() }),
-    ];
-    expect(launchList(snapshot(rows), 1, "", NOW, { age, sort: "newest" }).items).toEqual([rows[0]]);
-    expect(launchList(snapshot(rows), 1, "", NOW).page.totalItems).toBe(4);
+  it.each(["highest", "lowest", "newest", "oldest"] as const)("keeps the verified Programmable token first for %s, every page and search", (sort) => {
+    const pinned = launch(70, 170, { tokenAddress: "0xC60bA256B44334A0Cd2C7242E98B88f031abB006" });
+    const hidden = launch(71, 171, { tokenAddress: "0x15FCA474B23CAFE775120B1FAfbCFF0E7a827af2" });
+    const rows = Array.from({ length: 55 }, (_, index) => launch(index + 1, 100 + index));
+    const saved = snapshot([...rows, pinned, hidden]);
+    const caps = new Map([...rows, pinned, hidden].map((row, index) => [row.tokenAddress.toLowerCase(), index]));
+    const ascending = sort === "lowest" || sort === "oldest";
+    const ordered = ascending ? rows : rows.toReversed();
+    const first = launchList(saved, 1, "", NOW, { sort }, caps);
+    const second = launchList(saved, 2, "", NOW, { sort }, caps);
+    expect(first.items).toEqual([pinned, ...ordered.slice(0, 49)]);
+    expect(second.items).toEqual([pinned, ...ordered.slice(49)]);
+    expect(first.page).toMatchObject({ totalItems: 56, totalPages: 2 });
+    expect(launchList(saved, 1, rows[3].tokenAddress, NOW, { sort }, caps).items).toEqual([pinned, rows[3]]);
+    expect(launchList(saved, 1, hidden.tokenAddress, NOW, { sort }, caps).items).toEqual([pinned]);
+    expect(saved.items).toEqual([...rows, pinned, hidden]);
+  });
+
+  it("hides only the exact Clean Room address without removing canonical records or inventing a pinned token", () => {
+    const hidden = launch(1, 100, { tokenAddress: "0x15fca474b23cafe775120b1fafbcff0e7a827af2" });
+    const other = launch(2, 101, { name: "Robinhood Clean Room", symbol: "RHCR" });
+    const saved = snapshot([hidden, other]);
+    expect(launchList(saved, 1, "", NOW).items).toEqual([other]);
+    expect(saved.items).toHaveLength(2);
+  });
+
+  it.each(["highest", "lowest"] as const)("keeps unknown caps last for %s, preserves zero and breaks ties by launch order", (sort) => {
+    const rows = Array.from({ length: 6 }, (_, index) => launch(index + 1, 100 + index));
+    const caps = new Map([[rows[0].tokenAddress, 0], [rows[1].tokenAddress, 5], [rows[2].tokenAddress, 5],
+      [rows[3].tokenAddress, -1], [rows[4].tokenAddress, NaN]]);
+    const known = sort === "highest" ? [rows[2], rows[1], rows[0]] : [rows[0], rows[2], rows[1]];
+    expect(launchList(snapshot(rows), 1, "", NOW, { sort }, caps).items).toEqual([...known, rows[5], rows[4], rows[3]]);
   });
 
   it("distinguishes unavailable, syncing, ready and stale while retaining indexed rows", () => {

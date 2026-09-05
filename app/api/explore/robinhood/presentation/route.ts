@@ -14,10 +14,9 @@ export async function GET(request: Request) {
     || [...query.keys()].some((key) => key !== "token" || query.getAll(key).length !== 1)) {
     return Response.json({ error: "invalid_query" }, { status: 400, headers: { "cache-control": "no-store" } });
   }
-  const tokens = listQuery
-    ? (await readRobinhoodLaunches(listQuery.page, listQuery.q, listQuery.filters)).items
-    : [(await readRobinhoodToken(token!)).token].filter((row) => row !== null);
-  const items = await readRobinhoodPresentations(tokens);
+  const items = listQuery
+    ? (await readRobinhoodLaunches(listQuery.page, listQuery.q, listQuery.filters)).presentations
+    : await readRobinhoodPresentations([(await readRobinhoodToken(token!)).token].filter((row) => row !== null));
   return Response.json({ items }, { headers: {
     "cache-control": "public, max-age=0, s-maxage=60, stale-while-revalidate=60",
     "x-content-type-options": "nosniff",

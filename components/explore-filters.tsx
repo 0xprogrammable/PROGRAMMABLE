@@ -3,7 +3,7 @@
 import { SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import {
-  activeExploreFilterCount, DEFAULT_EXPLORE_FILTERS, LAUNCH_AGE_OPTIONS, LAUNCH_SORT_OPTIONS,
+  activeExploreFilterCount, DEFAULT_EXPLORE_FILTERS, LAUNCH_SORT_OPTIONS,
   type RobinhoodExploreFilters,
 } from "@/lib/robinhood-explore-filters";
 import styles from "./explore-filters.module.css";
@@ -63,15 +63,8 @@ export function ExploreFilters({ value = DEFAULT_EXPLORE_FILTERS, onApply, disab
         <button className={styles.close} type="button" aria-label="Close filters" onClick={() => close(true)}><X size={18} aria-hidden="true" /></button>
       </div>
       <label className={styles.field}>
-        <span>Launched</span>
-        <select ref={firstFieldRef} name="age" value={draft.age}
-          onChange={(event) => setDraft((current) => ({ ...current, age: event.target.value as RobinhoodExploreFilters["age"] }))}>
-          {LAUNCH_AGE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
-      </label>
-      <label className={styles.field}>
         <span>Sort by</span>
-        <select name="sort" value={draft.sort}
+        <select ref={firstFieldRef} name="sort" value={draft.sort}
           onChange={(event) => setDraft((current) => ({ ...current, sort: event.target.value as RobinhoodExploreFilters["sort"] }))}>
           {LAUNCH_SORT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>

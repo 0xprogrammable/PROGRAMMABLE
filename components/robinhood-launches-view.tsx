@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pin, Search, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 
 import { ExploreChainSelector } from "@/components/explore-chain-selector";
@@ -10,9 +10,9 @@ import { AnimatedMarketCap } from "@/components/animated-market-cap";
 import { ExploreIndexResetView } from "@/components/explore-index-reset-view";
 import { useViewChain } from "@/components/view-chain";
 import { RobinhoodCoinArtwork } from "@/components/robinhood-coin-artwork";
-import { useRobinhoodPresentation } from "@/components/use-robinhood-presentation";
-import { coinAge, coinTicker } from "@/lib/robinhood-presentation";
+import { coinAge, coinTicker, mergeRobinhoodPresentations, type RobinhoodCoinPresentation } from "@/lib/robinhood-presentation";
 import { activeExploreFilterCount, DEFAULT_EXPLORE_FILTERS, type RobinhoodExploreFilters } from "@/lib/robinhood-explore-filters";
+import { isPinnedRobinhoodToken } from "@/lib/robinhood-explore-policy";
 import styles from "@/components/robinhood-launches-view.module.css";
 
 type Launch = {
@@ -33,6 +33,7 @@ type LaunchResponse = {
   status: "ready" | "syncing" | "stale" | "unavailable";
   updatedAt: string | null;
   items: Launch[];
+  presentations: RobinhoodCoinPresentation[];
   page: {
     number: number;
     size: number;
@@ -48,7 +49,21 @@ type Snapshot = { request: Request; data: LaunchResponse };
 const ADDRESS = /^0x[0-9a-f]{40}$/i;
 const HASH = /^0x[0-9a-f]{64}$/i;
 const REFRESH_MS = 30_000;
-const REQUEST_TIMEOUT_MS = 12_000;
+const REQUEST_TIMEOUT_MS = 15_000;
+
+// Public, browser-only navigation state. Nothing is written during server rendering.
+let rememberedSnapshot: { value: Snapshot; savedAt: number } | null = null;
+function readRememberedSnapshot() {
+  if (typeof window === "undefined" || !rememberedSnapshot || Date.now() - rememberedSnapshot.savedAt >= 300_000) return null;
+  const value = rememberedSnapshot.value;
+  return { ...value, data: { ...value.data,
+    presentations: mergeRobinhoodPresentations([], value.data.presentations).items,
+  } };
+}
+function rememberSnapshot(value: Snapshot) {
+  if (typeof window !== "undefined") rememberedSnapshot = { value, savedAt: Date.now() };
+  return value;
+}
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -79,7 +94,9 @@ function readResponse(value: unknown): LaunchResponse {
   if (!isObject(value) || value.chainId !== 4663
     || !["ready", "syncing", "stale", "unavailable"].includes(String(value.status))
     || !isDate(value.updatedAt) || !Array.isArray(value.items)
-    || value.items.length > 50 || !value.items.every(isLaunch) || !isObject(value.page)) {
+    || value.items.length > 50 || !value.items.every(isLaunch) || !isObject(value.page)
+    || !Array.isArray(value.presentations) || value.presentations.length > 50
+    || !value.presentations.every((item) => isObject(item) && typeof item.tokenAddress === "string" && ADDRESS.test(item.tokenAddress))) {
     throw new Error("Invalid launch response");
   }
   const page = value.page;
@@ -117,16 +134,14 @@ function RobinhoodLaunchList({ embedded, enabled }: { embedded: boolean; enabled
   const searchId = useId();
   const statusId = useId();
   const searchRef = useRef<HTMLInputElement>(null);
-  const [search, setSearch] = useState("");
-  const [request, setRequest] = useState<Request>({ page: 1, q: "", ...DEFAULT_EXPLORE_FILTERS });
-  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [initial] = useState(readRememberedSnapshot);
+  const [search, setSearch] = useState(initial?.request.q ?? "");
+  const [request, setRequest] = useState<Request>(initial?.request ?? { page: 1, q: "", ...DEFAULT_EXPLORE_FILTERS });
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(initial);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [now, setNow] = useState(Date.now);
-  const presentation = useRobinhoodPresentation(
-    new URLSearchParams({ page: String(request.page), q: request.q, age: request.age, sort: request.sort }).toString(), enabled,
-  );
-  const presentations = new Map(presentation.items.map((item) => [item.tokenAddress.toLowerCase(), item]));
+  const presentations = new Map((snapshot?.data.presentations ?? []).map((item) => [item.tokenAddress.toLowerCase(), item]));
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -151,7 +166,7 @@ function RobinhoodLaunchList({ embedded, enabled }: { embedded: boolean; enabled
       setLoading(true);
 
       try {
-        const query = new URLSearchParams({ page: String(request.page), q: request.q, age: request.age, sort: request.sort });
+        const query = new URLSearchParams({ page: String(request.page), q: request.q, sort: request.sort });
         const response = await fetch(`/api/explore/robinhood?${query}`, {
           signal: activeController.signal,
           cache: "no-store",
@@ -162,17 +177,26 @@ function RobinhoodLaunchList({ embedded, enabled }: { embedded: boolean; enabled
         if (disposed || activeController.signal.aborted) return;
         setSnapshot((current) => {
           const sameRequest = current?.request.page === request.page && current.request.q === request.q
-            && current.request.age === request.age && current.request.sort === request.sort;
+            && current.request.sort === request.sort;
           if (sameRequest && current.data.items.length > 0
             && data.items.length === 0 && data.status !== "ready") {
-            return { request, data: { ...current.data, status: data.status } };
+            return rememberSnapshot({ request, data: { ...current.data, status: data.status,
+              presentations: mergeRobinhoodPresentations(current.data.presentations, null).items,
+            } });
           }
-          return { request, data };
+          return rememberSnapshot({ request, data: { ...data,
+            presentations: mergeRobinhoodPresentations([], data.presentations).items,
+          } });
         });
         setFailed(false);
         setNow(Date.now());
       } catch {
-        if (!disposed && isVisible() && activeController.signal.reason !== "hidden") setFailed(true);
+        if (!disposed && isVisible() && activeController.signal.reason !== "hidden") {
+          setFailed(true);
+          setSnapshot((current) => current ? rememberSnapshot({ ...current, data: { ...current.data,
+            presentations: mergeRobinhoodPresentations(current.data.presentations, null).items,
+          } }) : null);
+        }
       } finally {
         window.clearTimeout(timeout);
         controller = null;
@@ -211,14 +235,14 @@ function RobinhoodLaunchList({ embedded, enabled }: { embedded: boolean; enabled
   }
 
   function applyFilters(filters: RobinhoodExploreFilters) {
-    setRequest((current) => current.age === filters.age && current.sort === filters.sort
+    setRequest((current) => current.sort === filters.sort
       ? current : { ...current, ...filters, page: 1 });
   }
 
   const data = snapshot?.data;
   const items = data?.items ?? [];
   const hasRows = items.length > 0;
-  const updatingSearch = search.trim() !== snapshot?.request.q || request.age !== snapshot?.request.age || request.sort !== snapshot?.request.sort;
+  const updatingSearch = search.trim() !== snapshot?.request.q || request.sort !== snapshot?.request.sort;
   const hasFilters = activeExploreFilterCount(snapshot?.request ?? request) > 0;
   const Heading = embedded ? "h2" : "h1";
   const StateHeading = embedded ? "h3" : "h2";
@@ -229,7 +253,7 @@ function RobinhoodLaunchList({ embedded, enabled }: { embedded: boolean; enabled
       ? hasRows ? "Showing saved launches. Updates are temporarily unavailable." : "Launches are temporarily unavailable."
       : data?.status === "syncing"
         ? "New launches are being checked."
-        : updatingSearch ? "Loading launches…" : presentation.delayed ? "Market data is temporarily delayed." : "";
+        : updatingSearch ? "Loading launches…" : "";
   const emptyTitle = loading
     ? "Loading Robinhood launches"
     : failed || data?.status === "unavailable" || data?.status === "stale"
@@ -272,8 +296,8 @@ function RobinhoodLaunchList({ embedded, enabled }: { embedded: boolean; enabled
           <ExploreFilters value={request} onApply={applyFilters} />
         </div>
 
-        <p className={failed || data?.status === "stale" || data?.status === "unavailable" || presentation.delayed ? styles.status : "sr-only"} id={statusId} role="status">
-          {statusText || (data ? <span className="sr-only">{count} {count === 1 ? "launch found" : "launches found"}</span> : null)}
+        <p className="sr-only" id={statusId} role="status">
+          {statusText || (data ? `${count} ${count === 1 ? "token" : "tokens"} displayed` : null)}
         </p>
 
         {hasRows ? (
@@ -284,11 +308,14 @@ function RobinhoodLaunchList({ embedded, enabled }: { embedded: boolean; enabled
               <li key={launch.launchId} className={styles.item}>
                 <Link className={styles.row} href={`/token/${launch.tokenAddress}?chain=4663`} prefetch={false}>
                   <RobinhoodCoinArtwork
-                    imageUrl={details?.imageUrl} loading={presentation.loading}
+                    imageUrl={details?.imageUrl} loading={loading && !details}
                     className={styles.artwork}
                   />
                   <div className={styles.identity}>
-                    <strong className={styles.name} title={launch.name?.trim() || "Unnamed token"}>{launch.name?.trim() || "Unnamed token"}</strong>
+                    <div className={styles.nameRow}>
+                      <strong className={styles.name} title={launch.name?.trim() || "Unnamed token"}>{launch.name?.trim() || "Unnamed token"}</strong>
+                      {isPinnedRobinhoodToken(launch.tokenAddress) ? <span className={styles.pin} title="Pinned"><Pin size={14} aria-hidden="true" /><span className="sr-only">Pinned</span></span> : null}
+                    </div>
                     <span className={styles.symbol} title={launch.symbol || undefined}>{coinTicker(launch.symbol)}</span>
                   </div>
                   <div className={styles.cardFooter}>
@@ -305,9 +332,7 @@ function RobinhoodLaunchList({ embedded, enabled }: { embedded: boolean; enabled
             );})}
           </ul>
         ) : loading ? (
-          <div className={styles.skeletonGrid} aria-label="Loading Robinhood launches" role="status">
-            {Array.from({ length: 5 }, (_, index) => <div className={styles.skeletonCard} aria-hidden="true" key={index}><div /><span /><span /></div>)}
-          </div>
+          <div className={styles.loading} aria-label="Loading Robinhood launches" role="status"><span aria-hidden="true" /></div>
         ) : (
           <div className={styles.empty} aria-busy={loading}>
             <StateHeading>{emptyTitle}</StateHeading>

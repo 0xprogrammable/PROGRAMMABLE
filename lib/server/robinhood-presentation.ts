@@ -2,7 +2,7 @@ import "server-only";
 
 import { unstable_cache } from "next/cache";
 import type { RobinhoodLaunch } from "@/lib/robinhood-launches";
-import type { RobinhoodCoinMarket, RobinhoodCoinPresentation } from "@/lib/robinhood-presentation";
+import { ROBINHOOD_MARKET_MAX_AGE_MS, type RobinhoodCoinMarket, type RobinhoodCoinPresentation } from "@/lib/robinhood-presentation";
 import { PROGRAMMABLE_MAIN_TOKEN_PRESENTATION } from "@/lib/programmable-main-token-presentation";
 import { safePublicImageUrl } from "@/lib/safe-public-image-url";
 // @ts-expect-error -- the canonical launch package is ESM JavaScript.
@@ -14,12 +14,14 @@ const MAIN_TOKEN = "0xc60ba256b44334a0cd2c7242e98b88f031abb006";
 const MAX_RESPONSE_BYTES = 2_000_000;
 const MAX_METADATA_PAGES = 8;
 const MAX_TOKENS = 50;
+const MAX_MARKET_TOKENS = 10_000;
 const ADDRESS = /^0x[\da-f]{40}$/i;
 const HASH = /^0x[\da-f]{64}$/i;
 
 type JsonObject = Record<string, unknown>;
 type Metadata = Pick<RobinhoodCoinPresentation, "imageUrl" | "description" | "links">;
 type MetadataBinding = Readonly<{ launch: JsonObject; metadata: Metadata }>;
+type MarketToken = Pick<RobinhoodLaunch, "tokenAddress" | "poolId">;
 const object = (value: unknown): value is JsonObject =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 const same = (left: unknown, right: unknown) =>
@@ -184,28 +186,45 @@ function numeric(value: unknown, signed = false): number | null {
   return Number.isFinite(parsed) && (signed || parsed >= 0) ? parsed : null;
 }
 
-async function readMarkets(tokens: readonly RobinhoodLaunch[]): Promise<Map<string, RobinhoodCoinMarket>> {
+async function readMarkets(tokens: readonly MarketToken[]): Promise<Map<string, RobinhoodCoinMarket>> {
   const pools = [...new Set(tokens.map((token) => token.poolId.toLowerCase()))];
-  const signal = AbortSignal.timeout(4_000);
   const batches = Array.from({ length: Math.ceil(pools.length / 30) }, (_, index) => pools.slice(index * 30, (index + 1) * 30));
-  const results = await Promise.allSettled(batches.map(async (batch) => {
-    const payload = await readJson(`${DEX_PAIRS}${batch.join(",")}`, signal);
-    if (!object(payload) || !Array.isArray(payload.pairs) || payload.pairs.length > 100) {
-      if (object(payload) && payload.pairs === null) return [];
-      throw new Error("Invalid market response");
+  const pairs: { pair: unknown; observedAt: string }[] = [];
+  const overall = AbortSignal.timeout(6_000);
+  let nextBatch = 0;
+  let failed = false;
+  async function worker() {
+    while (nextBatch < batches.length && !overall.aborted) {
+      const batch = batches[nextBatch++];
+      try {
+        const payload = await readJson(`${DEX_PAIRS}${batch.join(",")}`,
+          AbortSignal.any([overall, AbortSignal.timeout(4_000)]));
+        if (!object(payload) || !(payload.pairs === null || Array.isArray(payload.pairs))
+          || (Array.isArray(payload.pairs) && payload.pairs.length > 100)) throw new Error("Invalid market response");
+        const observedAt = new Date().toISOString();
+        if (Array.isArray(payload.pairs)) pairs.push(...payload.pairs.map((pair) => ({ pair, observedAt })));
+      } catch { failed = true; }
     }
-    return payload.pairs;
-  }));
-  const pairs = results.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+  }
+  await Promise.all(Array.from({ length: Math.min(4, batches.length) }, worker));
+  // Reject an incomplete refresh so the cache retains the last complete observation.
+  // The reader still expires it after three minutes; token membership is independent.
+  if (failed || nextBatch < batches.length) throw new Error("Market observation unavailable");
+  const byIdentity = new Map<string, { pair: JsonObject; observedAt: string } | null>();
+  for (const { pair, observedAt } of pairs) {
+    if (!object(pair) || pair.chainId !== "robinhood" || pair.dexId !== "uniswap"
+      || !Array.isArray(pair.labels) || !pair.labels.includes("v4")
+      || typeof pair.pairAddress !== "string" || !HASH.test(pair.pairAddress)
+      || !object(pair.baseToken) || typeof pair.baseToken.address !== "string" || !ADDRESS.test(pair.baseToken.address)) continue;
+    const key = `${pair.baseToken.address.toLowerCase()}:${pair.pairAddress.toLowerCase()}`;
+    // Ambiguous duplicates never become a price for a verified launch.
+    byIdentity.set(key, byIdentity.has(key) ? null : { pair, observedAt });
+  }
   const markets = new Map<string, RobinhoodCoinMarket>();
-  const observedAt = new Date().toISOString();
   for (const token of tokens) {
-    const matches = pairs.filter((pair) => object(pair) && pair.chainId === "robinhood"
-      && pair.dexId === "uniswap" && Array.isArray(pair.labels) && pair.labels.includes("v4")
-      && same(pair.pairAddress, token.poolId) && object(pair.baseToken)
-      && same(pair.baseToken.address, token.tokenAddress));
-    if (matches.length !== 1) continue;
-    const pair = matches[0] as JsonObject;
+    const match = byIdentity.get(`${token.tokenAddress.toLowerCase()}:${token.poolId.toLowerCase()}`);
+    if (!match) continue;
+    const { pair, observedAt } = match;
     markets.set(token.tokenAddress.toLowerCase(), {
       poolId: token.poolId,
       priceUsd: numeric(pair.priceUsd),
@@ -220,8 +239,37 @@ async function readMarkets(tokens: readonly RobinhoodLaunch[]): Promise<Map<stri
   return markets;
 }
 
-const cachedPresentations = unstable_cache(async (tokens: readonly RobinhoodLaunch[]) => {
-  const [metadata, markets] = await Promise.allSettled([readMetadata(tokens), readMarkets(tokens)]);
+const cachedMetadata = unstable_cache(async (tokens: readonly RobinhoodLaunch[]) =>
+  Array.from(await readMetadata(tokens)), ["robinhood-coin-metadata-v2"], { revalidate: 60 });
+
+// A shared full-catalog observation makes sorting independent of the current page.
+const cachedMarkets = unstable_cache(async (tokens: readonly MarketToken[]) =>
+  Array.from(await readMarkets(tokens)), ["robinhood-coin-markets-v2"], { revalidate: 60 });
+
+export async function readRobinhoodMarkets(tokens: readonly MarketToken[]): Promise<Map<string, RobinhoodCoinMarket>> {
+  if (tokens.length === 0) return new Map();
+  if (tokens.length > MAX_MARKET_TOKENS || tokens.some((token) => !ADDRESS.test(token.tokenAddress) || !HASH.test(token.poolId))) {
+    throw new Error("Invalid market request");
+  }
+  const identities = tokens.map((token) => ({ tokenAddress: token.tokenAddress.toLowerCase(), poolId: token.poolId.toLowerCase() }))
+    .toSorted((a, b) => a.tokenAddress.localeCompare(b.tokenAddress));
+  const entries = await cachedMarkets(identities);
+  const now = Date.now();
+  return new Map(entries.filter(([, market]) => {
+    const age = now - Date.parse(market.observedAt);
+    return age >= 0 && age <= ROBINHOOD_MARKET_MAX_AGE_MS;
+  }));
+}
+
+export async function readRobinhoodPresentations(tokens: readonly RobinhoodLaunch[], knownMarkets?: ReadonlyMap<string, RobinhoodCoinMarket>): Promise<RobinhoodCoinPresentation[]> {
+  if (tokens.length === 0) return [];
+  if (tokens.length > MAX_TOKENS || tokens.some((token) => !ADDRESS.test(token.tokenAddress) || !HASH.test(token.poolId))) {
+    throw new Error("Invalid presentation request");
+  }
+  const [metadata, markets] = await Promise.allSettled([
+    cachedMetadata(tokens.toSorted((a, b) => a.tokenAddress.toLowerCase().localeCompare(b.tokenAddress.toLowerCase()))).then((entries) => new Map(entries)),
+    knownMarkets ? Promise.resolve(knownMarkets) : readRobinhoodMarkets(tokens),
+  ]);
   return tokens.map((token): RobinhoodCoinPresentation => {
     const key = token.tokenAddress.toLowerCase();
     const presentation = metadata.status === "fulfilled" ? metadata.value.get(key) : undefined;
@@ -233,12 +281,4 @@ const cachedPresentations = unstable_cache(async (tokens: readonly RobinhoodLaun
       market: markets.status === "fulfilled" ? markets.value.get(key) ?? null : null,
     };
   });
-}, ["robinhood-coin-presentation-v1"], { revalidate: 60 });
-
-export async function readRobinhoodPresentations(tokens: readonly RobinhoodLaunch[]): Promise<RobinhoodCoinPresentation[]> {
-  if (tokens.length === 0) return [];
-  if (tokens.length > MAX_TOKENS || tokens.some((token) => !ADDRESS.test(token.tokenAddress) || !HASH.test(token.poolId))) {
-    throw new Error("Invalid presentation request");
-  }
-  return cachedPresentations(tokens);
 }
