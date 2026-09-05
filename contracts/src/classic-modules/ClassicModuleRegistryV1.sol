@@ -5,6 +5,7 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Ownable2Step } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import { IClassicModuleV1 } from "./IClassicModuleV1.sol";
 import { ClassicModuleTypes as T } from "./ClassicModuleTypes.sol";
+import { ClassicModuleCalls } from "./ClassicModuleCalls.sol";
 
 /// @notice Review authority controls new catalogue use, never existing recipes or contributor payouts.
 /// @dev An approval records reviewed evidence; codehash and interface checks alone are not a security review.
@@ -92,10 +93,8 @@ contract ClassicModuleRegistryV1 is Ownable2Step {
         if (implementation.code.length == 0 || (kind != T.FEE_POLICY && kind != T.TRADE_LIMIT)) {
             revert InvalidModule();
         }
-        (bool ok, bytes memory result) = implementation.staticcall{ gas: T.MODULE_CALL_GAS }(
-            abi.encodeCall(IClassicModuleV1.moduleKind, ())
-        );
-        if (!ok || result.length != 32 || abi.decode(result, (uint256)) != kind) revert InvalidModule();
+        bytes memory result = ClassicModuleCalls.read(implementation, abi.encodeCall(IClassicModuleV1.moduleKind, ()), 32);
+        if (abi.decode(result, (uint256)) != kind) revert InvalidModule();
         bytes32 codeHash = implementation.codehash;
         _versions[versionId] = Version(familyId, version, implementation, codeHash, manifestHash, kind, true);
         emit VersionApproved(versionId, familyId, version, implementation, codeHash, manifestHash, kind);
