@@ -1,5 +1,5 @@
 ---
-description: Developer API reference, live Ethereum V3 resources and the deployed Robinhood V4 release candidate
+description: Developer API reference, live Ethereum V3 resources and Robinhood V4 release gates
 ---
 
 # API reference
