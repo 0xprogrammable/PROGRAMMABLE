@@ -1,4 +1,6 @@
 export type Hex = `0x${string}`;
+export { buildCreatorSplit, encodeCreatorTakeover, MAX_CREATOR_SPLIT_RECIPIENTS, CREATOR_SPLIT_DOMAIN } from './creator-recipients.mjs';
+export type { CreatorSplitRecipientInput, CreatorSplitRecipient, CreatorSplit, CreatorTakeoverInput, PreparedCreatorTakeover } from './creator-recipients.mjs';
 export type UintInput = string | number | bigint;
 export type ConfigValue = string | number | boolean;
 export type ConfigParameters = Record<string, ConfigValue>;

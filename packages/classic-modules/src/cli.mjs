@@ -1,4 +1,4 @@
-import { validateRecipe } from './index.mjs';
+import { buildCreatorSplit, validateRecipe } from './index.mjs';
 import { FILE_LIMITS, loadModulePackage, readJsonFile, writeJsonExclusive, submitToLocalQueue,
   listLocalQueue, localSubmissionStatus, recordLocalReview } from './io.mjs';
 
@@ -12,15 +12,18 @@ Commands:
   list-local --queue path
   status-local --queue path --id 0x...
   review-local --queue path --id 0x... --reviewer 0x... --decision accepted|changes_requested|rejected --note text
+  prepare-creator-split --recipients path --out path
 
 All file paths are relative to --root (default: current directory).
 Existing output files are never overwritten. Catalogue is an explicit trusted input.
 Local reviewer identity is an operator assertion, not a wallet signature.
+Creator recipients input is a JSON array of { wallet, shareBps }; shares total 10000.
 `;
 const fields = {
   'validate-module': ['manifest'], 'validate-recipe': ['recipe', 'catalogue'], pack: ['manifest', 'out'],
   'submit-local': ['manifest', 'queue'], 'list-local': ['queue'], 'status-local': ['queue', 'id'],
   'review-local': ['queue', 'id', 'reviewer', 'decision', 'note'],
+  'prepare-creator-split': ['recipients', 'out'],
 };
 export async function runCli(args, { stdout = process.stdout, stderr = process.stderr } = {}) {
   try {
@@ -47,6 +50,11 @@ export async function runCli(args, { stdout = process.stdout, stderr = process.s
       const catalogue = await readJsonFile(root, options.catalogue, FILE_LIMITS.catalogue);
       result = validateRecipe(recipe, catalogue);
       stdout.write(`${JSON.stringify(result, null, 2)}\n`); return result.ok ? 0 : 1;
+    } else if (command === 'prepare-creator-split') {
+      const recipients = await readJsonFile(root, options.recipients, 256 * 1024);
+      const split = buildCreatorSplit(recipients);
+      if (!await writeJsonExclusive(root, options.out, split)) throw new Error('Output exists; choose a new path');
+      result = { ok: true, scope: 'local-only', output: options.out, root: split.root, recipientCount: split.recipientCount };
     } else if (command === 'submit-local') result = await submitToLocalQueue({ root, manifestPath: options.manifest, queue: options.queue });
     else if (command === 'list-local') result = await listLocalQueue({ root, queue: options.queue });
     else if (command === 'status-local') result = await localSubmissionStatus({ root, queue: options.queue, id: options.id });

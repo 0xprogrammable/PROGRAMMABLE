@@ -5,6 +5,7 @@ import recipeSchema from '../schemas/recipe-v1.json' with { type: 'json' };
 import { canonicalJson } from './canonical-json.mjs';
 
 export { canonicalJson } from './canonical-json.mjs';
+export { buildCreatorSplit, encodeCreatorTakeover, MAX_CREATOR_SPLIT_RECIPIENTS, CREATOR_SPLIT_DOMAIN } from './creator-recipients.mjs';
 export const MAX_MODULES = 8;
 export const MAX_CONFIG_BYTES = 256;
 export const MAX_CATALOGUE_ENTRIES = 10_000;
