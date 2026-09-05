@@ -2274,7 +2274,17 @@ async function buildRobinhoodPromotionBundle({
   backendCaptureAuthorization,
   backendAuthorization,
   backendDependencies = {},
-}, { historicalReplay }) {
+}, { historicalReplay, promotion = null }) {
+  const releaseTools = promotion?.releaseTools;
+  const backendTools = promotion?.backendTools;
+  const validateCapture = backendTools?.validateRobinhoodBackendCaptureAuthorization
+    ?? validateRobinhoodBackendCaptureAuthorization;
+  const validateInput = backendTools?.validateRobinhoodBackendPromotionPublicInput
+    ?? validateRobinhoodBackendPromotionPublicInput;
+  const validateAuthorization = backendTools?.validateRobinhoodBackendAuthorization
+    ?? validateRobinhoodBackendAuthorization;
+  const validateBackendEvidence = releaseTools?.validateV4BackendReleaseEvidence
+    ?? validateV4BackendReleaseEvidence;
   assertJsonBytesMatch(stageBundle, stageBundleBytes, "stage bundle", 64 * 1024 * 1024);
   assertJsonBytesMatch(
     backendPromotionInput,
@@ -2290,25 +2300,26 @@ async function buildRobinhoodPromotionBundle({
     captureAuthorization,
     captureDependencies,
   });
-  const backendCapture = validateRobinhoodBackendCaptureAuthorization({
+  const backendCapture = validateCapture({
     authorization: backendCaptureAuthorization,
     inputBytes: backendPromotionInputBytes,
     attestationBundleBytes: backendAttestationBundleBytes,
     input: backendPromotionInput,
     allowTestOnly: backendDependencies.allowTestOnly === true,
   });
-  const backend = validateRobinhoodBackendPromotionPublicInput({
+  const backend = validateInput({
     input: backendPromotionInput,
-    stageBundle,
+    stageBundle: promotion?.backendStageContext
+      ? promotion.backendStageContext({ repositoryRoot, stageBundle }) : stageBundle,
     now: historicalReplay
       ? () => new Date(backendPromotionInput.observedAt)
       : backendDependencies.now,
   });
-  validateV4BackendReleaseEvidence(
+  validateBackendEvidence(
     backend.backendReleaseEvidence,
     stageBundle.finalizedBindings.chainDeploymentDescriptorDigest,
   );
-  const authorization = validateRobinhoodBackendAuthorization({
+  const authorization = validateAuthorization({
     authorization: backendAuthorization,
     stageBundle,
     stageBundleBytes,
@@ -2328,13 +2339,18 @@ async function buildRobinhoodPromotionBundle({
   if (!productionAuthorized && !explicitlyTestOnly) {
     throw new TypeError("Phase B requires three authenticated production authorities");
   }
+  const releaseContext = promotion?.prepareReleaseBinding
+    ? promotion.prepareReleaseBinding({ repositoryRoot, stageBundle, backendAuthorization: authorization })
+    : { binding: stageBundle.artifacts.cliReleaseBinding.value,
+        replacesSha256: stageBundle.artifacts.cliReleaseBinding.replacesSha256 };
   const finalBinding = buildFinalReleaseBinding(
-    stageBundle.artifacts.cliReleaseBinding.value,
+    releaseContext.binding,
     backend.backendReleaseEvidence,
     productionAuthorized,
   );
   const consumerInputs = buildFinalConsumerInputs({
-    stageInputs: stageBundle.consumerInputs,
+    stageInputs: promotion?.consumerInputs
+      ? promotion.consumerInputs(stageBundle.consumerInputs, finalBinding) : stageBundle.consumerInputs,
     finalBinding,
     backendPromotionPublicInput: backendPromotionInput,
     backendReleaseEvidence: backend.backendReleaseEvidence,
@@ -2383,8 +2399,8 @@ async function buildRobinhoodPromotionBundle({
     artifacts: {
       liveDeployment: structuredClone(stageBundle.artifacts.liveDeployment),
       cliReleaseBinding: {
-        ...artifact(V4_RELEASE_BINDING_PATH, finalBinding),
-        replacesSha256: stageBundle.artifacts.cliReleaseBinding.replacesSha256,
+        ...artifact(releaseTools?.V4_RELEASE_BINDING_PATH ?? V4_RELEASE_BINDING_PATH, finalBinding),
+        replacesSha256: releaseContext.replacesSha256,
       },
       backendRelease: structuredClone(stageBundle.artifacts.backendRelease),
     },
@@ -2401,7 +2417,11 @@ export async function materializeRobinhoodPromotionBundle(options) {
 }
 
 export async function verifyRobinhoodPromotionBundle(options) {
-  const rebuilt = await buildRobinhoodPromotionBundle(options, { historicalReplay: true });
+  return verifyPromotionWithConfiguration(options, null);
+}
+
+async function verifyPromotionWithConfiguration(options, promotion) {
+  const rebuilt = await buildRobinhoodPromotionBundle(options, { historicalReplay: true, promotion });
   deepEqual(options.bundle, rebuilt,
     "promotion bundle and exact stage/capture/backend evidence sidecars");
   const production = rebuilt.state === "finalized-live";
@@ -2416,5 +2436,19 @@ export async function verifyRobinhoodPromotionBundle(options) {
     publicWrites: rebuilt.publicWrites,
     phase: "promotion",
     authorizationClass: production ? "production" : "test-only",
+  });
+}
+
+// A successor supplies an exact release context; Phase A is always replayed by the original verifier.
+export function createRobinhoodPromotionTools(promotion) {
+  if (!promotion?.releaseTools || !promotion?.backendTools
+    || typeof promotion.prepareReleaseBinding !== "function"
+    || typeof promotion.backendStageContext !== "function") {
+    throw new TypeError("successor promotion requires explicit release, backend and stage bindings");
+  }
+  return Object.freeze({
+    materializeRobinhoodPromotionBundle: (options) =>
+      buildRobinhoodPromotionBundle(options, { historicalReplay: false, promotion }),
+    verifyRobinhoodPromotionBundle: (options) => verifyPromotionWithConfiguration(options, promotion),
   });
 }
