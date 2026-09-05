@@ -100,9 +100,19 @@ changes.
 
 Mainnet fork tests try the existing Tenderly public endpoint first. In both
 observed release runs it completed the entire mainnet suite after five preceding
-public endpoints had failed or timed out. All endpoints, test groups, configured
-endpoint precedence, retry conditions and timeouts are retained. This reordering
-does not create a new trust source or replace any contract test.
+public endpoints had failed or timed out. All endpoints, configured endpoint
+precedence, retry conditions and the 90-second per-process timeout are retained.
+This reordering does not create a new trust source or replace any contract test.
+
+A subsequent hosted run exposed a separate timeout problem: its first provider
+completed 25 suites with 100 passing tests and no test failures before the single
+30-file process hit that timeout. Split this explicit inventory into three
+interleaved groups of ten files, distributing the Stock-Paired deployment suites.
+The two separate Safe groups and all six Sepolia files remain. Every original
+file is still required exactly once; test profiles and budgets are unchanged.
+One provider must pass every group for its chain. A provider failure restarts the
+complete chain inventory on the next provider; configured endpoints never fall
+back. Required runner tests check coverage, grouping, timeout and failure behavior.
 
 Public RPC availability can change. Use the actual per-provider outcomes from a
 new run to assess the improvement; do not equate a current connectivity probe with

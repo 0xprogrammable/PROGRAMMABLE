@@ -420,7 +420,7 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Verify contract orchestration and complete test coverage
-        run: node --test scripts/ci/contracts-ci.test.mjs scripts/ci/verify-contracts-workflow.test.mjs
+        run: node --test scripts/ci/contracts-ci.test.mjs scripts/ci/verify-contracts-workflow.test.mjs contracts/scripts/verify-fork-tests-ci.test.mjs
 
       - name: Build the complete default contract profile once
         run: node scripts/ci/contracts-ci.mjs build

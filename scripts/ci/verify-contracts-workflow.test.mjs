@@ -64,7 +64,7 @@ test("contract test partitions and integrations consume only the complete build 
   assert.equal(upload.with["if-no-files-found"], "error");
   assert.equal(upload.with.overwrite, false);
   assert.match(step(jobs["contracts-build"], "Verify contract orchestration and complete test coverage").run,
-    /node --test scripts\/ci\/contracts-ci.test.mjs scripts\/ci\/verify-contracts-workflow.test.mjs/u);
+    /node --test scripts\/ci\/contracts-ci.test.mjs scripts\/ci\/verify-contracts-workflow.test.mjs contracts\/scripts\/verify-fork-tests-ci.test.mjs/u);
 });
 
 test("the protected Contracts context retains exact attested evidence and requires every worker", () => {
