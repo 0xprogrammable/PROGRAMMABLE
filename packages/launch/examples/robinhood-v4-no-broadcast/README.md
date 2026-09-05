@@ -6,6 +6,11 @@ addresses. At build time it fetches the unauthenticated production V4 capabiliti
 chain-deployment descriptor and integer-revision profile reference into the generated config. It fails closed while
 that route, any required trust root, the finality digest, or the production profile digest is unavailable.
 
+The builder reads the finalized Robinhood block from the official public RPC and includes that checkpoint in the
+permit window. Finalized blocks can trail the current API clock by many minutes. The permit still lasts at most
+one hour, and the build stops unless at least five minutes remain for submission. The backend independently
+checks finality and the exact transaction; the public RPC read does not authorize a launch.
+
 The request declares funding mode `none`, value `0`, an uninitialized empty pool, and no liquidity action. The hook
 authenticates `beforeSwap` calls against the capabilities-bound immutable PoolManager. The build binds the compiler's
 exact immutable reference to the same address passed to the constructor. This fixture does not claim a fee,
@@ -75,7 +80,7 @@ programmable-launch validate launch.json \
   --config programmable-launch.config.json
 ```
 
-Run `build` again if the one-hour permit window expires or the public capabilities binding changes. Do not edit the
+Run `build` again if the generated permit expires or the public capabilities binding changes. Do not edit the
 generated chain deployment or profile to bypass that change; generate a new config and pack new bytes.
 
 The four public CLI commands are `pack`, `validate`, `submit`, and `status`. This example stops after local validation.
