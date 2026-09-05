@@ -16,6 +16,19 @@ export class IndexBlockIncomplete extends Error {
   constructor(readonly items: RobinhoodLaunch[]) { super("Block verification continues on next pass"); }
 }
 
+function mergeVerifiedLaunches(known: RobinhoodLaunch[], discovered: RobinhoodLaunch[]) {
+  const byLaunchId = new Map<string, RobinhoodLaunch>();
+  for (const row of [...known, ...discovered]) {
+    const existing = byLaunchId.get(row.launchId.toLowerCase());
+    if (existing && (existing.blockHash.toLowerCase() !== row.blockHash.toLowerCase()
+      || existing.blockNumber !== row.blockNumber || existing.logIndex !== row.logIndex)) {
+      throw new Error("Launch location changed without a reorg");
+    }
+    byLaunchId.set(row.launchId.toLowerCase(), row);
+  }
+  return [...byLaunchId.values()];
+}
+
 // Only the background job uses the source. A failed range is retried from its
 // beginning; neither an RPC error nor partial verification advances the cursor.
 export async function syncRobinhoodIndex(source: IndexSource, store: IndexStore, options: {
@@ -79,15 +92,7 @@ export async function syncRobinhoodIndex(source: IndexSource, store: IndexStore,
       // Previously verified rows are removed only by the explicit reorg rewind.
       // An incomplete-but-successful overlap response cannot erase their origin.
       const accepted = [...snapshot.items, ...(snapshot.pending?.items ?? [])];
-      const byLaunchId = new Map(accepted.map((row) => [row.launchId.toLowerCase(), row]));
-      for (const row of rows) {
-        const existing = byLaunchId.get(row.launchId.toLowerCase());
-        if (existing && (existing.blockHash !== row.blockHash || existing.logIndex !== row.logIndex)) {
-          throw new Error("Launch location changed without a reorg");
-        }
-        byLaunchId.set(row.launchId.toLowerCase(), row);
-      }
-      const items = [...byLaunchId.values()];
+      const items = mergeVerifiedLaunches(accepted, rows);
       const cursor = snapshot.cursor && BigInt(snapshot.cursor.number) > to ? snapshot.cursor : end;
       snapshot = parseSnapshot({ ...snapshot, cursor, pending: null,
         finalizedBlock: source.finalized.number,
@@ -100,8 +105,9 @@ export async function syncRobinhoodIndex(source: IndexSource, store: IndexStore,
     } catch (error) {
       if (error instanceof IndexBlockIncomplete && from === to) {
         const end = await source.block(to);
+        const items = mergeVerifiedLaunches(snapshot.pending?.items ?? [], error.items);
         snapshot = parseSnapshot({ ...snapshot, finalizedBlock: source.finalized.number,
-          pending: { block: end, items: error.items }, updatedAt: new Date(now()).toISOString() });
+          pending: { block: end, items }, updatedAt: new Date(now()).toISOString() });
         progress = true;
         break;
       }

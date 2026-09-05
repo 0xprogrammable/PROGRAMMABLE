@@ -386,6 +386,62 @@ describe("Robinhood website index synchronization", () => {
     expect(memory.writes).toHaveLength(3);
   });
 
+  it("retains disjoint verified pending subsets across repeated incomplete responses from the same canonical block", async () => {
+    const accepted = launch(1, 190);
+    const dense = Array.from({ length: 7 }, (_, index) => launch(index + 2, 250));
+    const memory = memoryStore(snapshot([accepted], {
+      cursor: point(249), checkpoints: [point(249)], finalizedBlock: "249",
+    }));
+    const source = indexSource([accepted, ...dense]);
+    let pass = 0;
+    source.launches.mockImplementation(async (from, to) => {
+      if (from <= 250n && to >= 250n) {
+        if (from !== to) throw new IndexRangeTooWide();
+        pass += 1;
+        if (pass === 1) throw new IndexBlockIncomplete(dense.slice(0, 3));
+        if (pass === 2) throw new IndexBlockIncomplete(dense.slice(3, 6));
+        return dense.slice(3);
+      }
+      return [accepted].filter((row) => BigInt(row.blockNumber) >= from && BigInt(row.blockNumber) <= to);
+    });
+
+    for (const count of [3, 6]) {
+      const result = await syncRobinhoodIndex(source, memory.store, OPTIONS);
+      expect(result).toMatchObject({ status: "syncing", indexedThrough: "249", launches: 1 });
+      expect(memory.saved()?.pending).toEqual({ block: point(250), items: dense.slice(0, count) });
+      expect(launchList(memory.saved(), 1, "", NOW).items).toEqual([accepted]);
+    }
+
+    const completed = await syncRobinhoodIndex(source, memory.store, OPTIONS);
+
+    expect(completed).toMatchObject({ status: "ready", indexedThrough: "299", launches: 8 });
+    expect(memory.saved()).toMatchObject({ pending: null, items: [accepted, ...dense] });
+    expect(memory.writes).toHaveLength(3);
+  });
+
+  it.each([
+    { logIndex: 99 },
+    { blockHash: point(250, 1).hash },
+  ])("rejects a conflicting pending launch position without writing the store: %j", async (changed) => {
+    const accepted = launch(1, 190);
+    const pending = launch(2, 250);
+    const original = snapshot([accepted], {
+      cursor: point(249), checkpoints: [point(249)],
+      pending: { block: point(250), items: [pending] },
+    });
+    const memory = memoryStore(original);
+    const source = indexSource([]);
+    source.launches.mockRejectedValue(new IndexBlockIncomplete([
+      { ...pending, ...changed }, launch(3, 250),
+    ]));
+
+    await expect(syncRobinhoodIndex(source, memory.store, OPTIONS)).rejects.toThrow("Launch location changed without a reorg");
+
+    expect(source.launches.mock.calls[0].slice(0, 2)).toEqual([250n, 250n]);
+    expect(memory.writes).toEqual([]);
+    expect(memory.saved()).toEqual(original);
+  });
+
   it("discards pending launches when their block changes even if the completed cursor is still canonical", async () => {
     const retained = launch(1, 150);
     const orphan = launch(2, 200);
