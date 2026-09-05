@@ -489,6 +489,8 @@ jobs:
 
       - name: Fresh-download and verify the published release
         env:
+          PROGRAMMABLE_PRODUCTION_VERIFY_PROOF: ${{ runner.temp }}/production-verify-proof/production-verify-proof.json
+          PROGRAMMABLE_ROBINHOOD_BACKEND_AUTHORIZATION: ${{ github.workspace }}/release/robinhood-chain-4663/programmable-backend-authorization.json
           EXPECTED_VERSION: ${{ inputs.version }}
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.identity.outputs.tag }}
