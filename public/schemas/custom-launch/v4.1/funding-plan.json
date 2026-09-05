@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://programmable.market/schemas/custom-launch/v4.1/funding-plan.json",
+  "title": "Programmable Robinhood native funding plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "capitalSource",
+    "pricingModel",
+    "nativeAllocations",
+    "maxLaunchValueWei",
+    "maxGasCostWei",
+    "launchMode"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "programmable.robinhood-funding-plan.v1"
+    },
+    "capitalSource": {
+      "enum": [
+        "buyer-funded",
+        "creator-funded",
+        "hybrid",
+        "custom"
+      ]
+    },
+    "pricingModel": {
+      "enum": [
+        "concentrated-liquidity",
+        "custom-curve",
+        "auction",
+        "custom"
+      ]
+    },
+    "nativeAllocations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "initialLiquidityWei",
+        "initialBuyWei",
+        "reserveWei",
+        "otherLaunchValueWei"
+      ],
+      "properties": {
+        "initialLiquidityWei": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9][0-9]*)$",
+          "maxLength": 78
+        },
+        "initialBuyWei": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9][0-9]*)$",
+          "maxLength": 78
+        },
+        "reserveWei": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9][0-9]*)$",
+          "maxLength": 78
+        },
+        "otherLaunchValueWei": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9][0-9]*)$",
+          "maxLength": 78
+        }
+      }
+    },
+    "maxLaunchValueWei": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*)$",
+      "maxLength": 78
+    },
+    "maxGasCostWei": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*)$",
+      "maxLength": 78
+    },
+    "launchMode": {
+      "enum": [
+        "fund-and-launch",
+        "build-only"
+      ]
+    }
+  },
+  "description": "Declared native capital allocation and reviewed budgets; not proof of balances, reserves, solvency, liquidity or gas availability. Allocation sum must equal funding.valueWei without uint256 overflow and must not exceed maxLaunchValueWei. Build-only permits local pack/preflight only; fresh create must reject before persistence or signing.",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "launchMode": {
+            "const": "fund-and-launch"
+          }
+        },
+        "required": [
+          "launchMode"
+        ]
+      },
+      "then": {
+        "properties": {
+          "maxGasCostWei": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$",
+            "maxLength": 78
+          }
+        }
+      }
+    }
+  ]
+}

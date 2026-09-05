@@ -53,9 +53,52 @@ The config declares:
 - Funding model: buyer-funded token inventory, no ETH principal or initial buy.
 - Native transaction value: `0`.
 - Liquidity model: `project-provided-liquidity` / `liquidity-provided-by-launch`, target `initializer`.
-- A separately disclosed, positive gas budget supplied by the launch wallet or an explicitly supported sponsor.
+- A separately disclosed, positive gas budget paid by the launch wallet. This recipe provides no gas sponsorship.
 
 Before building a real launch, the agent must obtain the selected chain, funding model, gas budget, project image, description, name, ticker and social links. The fixed token name/symbol above must match this reference project's metadata. A changed token or initializer requires new source-bound admission; do not substitute an unreviewed token while claiming this exact example's evidence.
+
+### Run the public builder
+
+Use the verified CLI 4.1 release package and its bundled `project/` directory. Install the project's exact compiler dependency with `npm ci`. When copying the project outside that package, set `PROGRAMMABLE_LAUNCH_MODULE_PATH` to the extracted CLI's absolute `src/index.mjs` path.
+
+Create `native20-input.json` after reviewing these fields with the user:
+
+```json
+{
+  "launchWallet": "<checksummed Robinhood wallet>",
+  "nonce": "<fresh nonzero 32-byte lowercase hex>",
+  "publicOrigin": { "url": "<HTTPS source repository>", "revision": "<exact 40-character commit>" },
+  "checkedAt": "<current ISO UTC timestamp with milliseconds>",
+  "projectMetadata": {
+    "schemaVersion": "programmable.project-metadata-input.v1",
+    "token": { "name": "Robinhood Native20 Example", "symbol": "RHN20" },
+    "presentation": {
+      "description": "<user-reviewed coin description>",
+      "image": { "sourcePath": "assets/project.png", "uri": "<public HTTPS image URL>" },
+      "links": [{ "kind": "website", "uri": "<user's website>" }, { "kind": "x", "uri": "<user's X profile>" }]
+    }
+  },
+  "fundingPlan": {
+    "schemaVersion": "programmable.robinhood-funding-plan.v1",
+    "capitalSource": "buyer-funded",
+    "pricingModel": "concentrated-liquidity",
+    "nativeAllocations": { "initialLiquidityWei": "0", "initialBuyWei": "0", "reserveWei": "0", "otherLaunchValueWei": "0" },
+    "maxLaunchValueWei": "0",
+    "maxGasCostWei": "<user-reviewed positive wei budget>",
+    "launchMode": "fund-and-launch"
+  }
+}
+```
+
+The placeholders are deliberately invalid until the agent obtains the user's values. The image must exist at the local path and pass the exact image decoder. Use `launchMode: "build-only"` for a local pack/preflight; its gas budget may be `"0"`. A build-only request cannot be submitted for launch. Changing the funding plan requires repacking because the plan is included in the launch-intent hash.
+
+```sh
+npm run build -- --input native20-input.json
+programmable-launch pack --config programmable-launch.config.json --out launch.json
+programmable-launch validate launch.json --config programmable-launch.config.json
+```
+
+The unauthenticated builder fetches current 4663 capabilities and a finalized checkpoint, requires the complete successor profile tuple, and refuses API keys. It emits two complete compiler inputs, artifacts, build evidence and the config. The canonical fee unit stays unchanged; the token and initializer compile together. A second deterministic pack pass materializes the first-CREATE vault address without changing the hook deployment address. Local reproduction does not replace backend admission, live balance/gas checks, wallet confirmation or finalized evidence.
 
 ## Local verification and limits
 

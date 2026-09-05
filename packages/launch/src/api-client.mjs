@@ -1,3 +1,6 @@
+import { assertRobinhoodFeeReviewV1 } from "./fee-review-v1.mjs";
+import { isRobinhoodProfileV41 } from "./profile-v41.mjs";
+import { normalizeRobinhoodFundingPlanV1, assertRobinhoodFundingPlanDeployableV1 } from "./funding-plan-v1.mjs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -279,6 +282,9 @@ export async function submitLaunch(options) {
   }
   const isV4 = validation.schemaVersion === CREATE_REQUEST_SCHEMA_V4;
   const request = isV4 ? parseV4RequestBytes(requestBytes) : null;
+  if (isV4 && isRobinhoodProfileV41(normalizeV4ProfileRef(request.profile))) {
+    assertRobinhoodFundingPlanDeployableV1(request.fundingPlan, request.funding);
+  }
   const localCommitments = isV4
     ? exactLocalV4Commitments(validation, request)
     : null;
@@ -303,7 +309,7 @@ export async function submitLaunch(options) {
       fetchImpl: options.fetchImpl,
       sleepImpl: options.sleepImpl,
     });
-  if (isV4) assertV4RequestMatchesCapabilities(request, capabilities.resource);
+
   const stateDirectory = path.resolve(options.stateDirectory ?? defaultStateDirectory());
   const journalPath = path.join(
     stateDirectory,
@@ -332,6 +338,22 @@ export async function submitLaunch(options) {
     requestBodyBase64: requestBytes.toString("base64"),
     lastResponse: null,
   };
+  let requestCapabilities = capabilities.resource;
+  if (isV4) {
+    const oldProfile = normalizeV4ProfileRef(request.profile);
+    if (!isRobinhoodProfileV41(oldProfile) && isRobinhoodProfileV41(capabilities.resource.profile)) {
+      let existing;
+      try { existing = (await readStrictJsonFile(journalPath, MAX_SUBMISSION_JOURNAL_BYTES_V4)).value; }
+      catch (error) { if (error?.code !== "ENOENT") throw error; }
+      if (existing !== undefined) {
+        assertJournalBinding(existing, binding);
+        // Only byte-identical historical retries use their original profile. The server
+        // still owns replay lookup and rejects fresh old-profile requests.
+        requestCapabilities = { ...capabilities.resource, profile: oldProfile };
+      }
+    }
+    assertV4RequestMatchesCapabilities(request, requestCapabilities);
+  }
   const journal = await bindJournal(journalPath, binding);
   const apiKey = await (options.loadApiKeyImpl ?? loadApiKey)();
   const result = await requestWithRetry({
@@ -356,7 +378,7 @@ export async function submitLaunch(options) {
     assertV4LaunchResource(result.body, {
       request,
       rawRequestSha256: requestSha256,
-      capabilities: capabilities.resource,
+      capabilities: requestCapabilities,
       localCommitments,
       localArtifactBindings,
     });
@@ -595,6 +617,11 @@ async function bindJournal(journalPath, binding) {
       ? MAX_SUBMISSION_JOURNAL_BYTES_V4
       : MAX_SUBMISSION_JOURNAL_BYTES,
   )).value;
+  assertJournalBinding(existing, binding);
+  return existing;
+}
+
+function assertJournalBinding(existing, binding) {
   const bindingKeys = binding.schemaVersion === V4_SUBMIT_JOURNAL_SCHEMA
     ? [
         "schemaVersion",
@@ -622,7 +649,6 @@ async function bindJournal(journalPath, binding) {
       );
     }
   }
-  return existing;
 }
 
 async function updateJournal(journalPath, journal, result, { isV4 = false } = {}) {
@@ -1147,7 +1173,11 @@ function assertV4LaunchResource(value, {
   localArtifactBindings,
 }) {
   assertResponseObject(value, "V4 launch resource");
+  const resourceProfile = normalizeV4ProfileRef(value.profile);
+  // History remains bound to its original supported profile, not the currently advertised one.
+  if (request == null) capabilities = { ...capabilities, profile: resourceProfile };
   const optionalFields = [
+    ...(isRobinhoodProfileV41(resourceProfile) ? ["feeReview"] : []),
     "actionRequired",
     "walletHandoffUrl",
     "expiresAt",
@@ -1178,6 +1208,7 @@ function assertV4LaunchResource(value, {
     "commitments",
     "projectMetadata",
     "funding",
+    ...(isRobinhoodProfileV41(resourceProfile) ? ["fundingPlan"] : []),
     "liquidityModel",
     "walletTransaction",
     "preparedArtifact",
@@ -1308,6 +1339,14 @@ function assertV4LaunchResource(value, {
     });
   }
   normalizeV4FundingIntent(value.funding);
+  if (isRobinhoodProfileV41(resourceProfile)) {
+    const plan = normalizeRobinhoodFundingPlanV1(value.fundingPlan, value.funding);
+    if (request != null && canonicalizeJson(plan) !== canonicalizeJson(request.fundingPlan)) {
+      throw new ProgrammableApiError("Custom Launch API resource funding plan drifted", {
+        code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID", serverDetails: { field: "fundingPlan" },
+      });
+    }
+  }
   normalizeV4LiquidityModel(value.liquidityModel);
   if (request?.projectMetadata !== undefined
     && canonicalizeJson(metadata)
@@ -1402,6 +1441,9 @@ function assertV4LaunchResource(value, {
     });
   }
   assertV4ReceiptPhase(value, { request, capabilities });
+  if (isRobinhoodProfileV41(resourceProfile) && value.feeReview !== undefined) {
+    assertRobinhoodFeeReviewV1(value.feeReview, value);
+  }
   if ((value.walletTransaction === null) !== (value.preparedArtifact === null)) {
     throw new ProgrammableApiError("Custom Launch API split its wallet transaction and artifact", {
       code: "CUSTOM_LAUNCH_V4_RESOURCE_INVALID",
@@ -1846,11 +1888,15 @@ function assertV4AdmissionReceipt(value, resource, capabilities) {
     "schemaVersion", "apiVersion", "chainId", "requestHash", "rawRequestSha256",
     "chainDeploymentDescriptorDigest", "profileDigest", "commitments",
     "staticAnalysisDigest", "externalContractEvidenceDigest", "disposition",
+    ...(isRobinhoodProfileV41(resource.profile) ? ["feeReviewDigest"] : []),
     "evidenceTier", "hardBlockFindingCodes", "needsEvidenceFindingCodes",
     "warningFindingCodes", "issuedAt", "receiptDigest",
   ], "resource.admissionReceipt");
   const { receiptDigest, ...preimage } = value;
-  if (value.schemaVersion !== "programmable.custom-launch-admission-receipt.v4"
+  const feeReviewValid = !isRobinhoodProfileV41(resource.profile) || (value.feeReviewDigest === null
+    ? ["unsupported", "needs_evidence"].includes(value.disposition) && resource.feeReview === undefined
+    : SHA256.test(value.feeReviewDigest ?? "") && resource.feeReview?.evidenceDigest === value.feeReviewDigest);
+  if (!feeReviewValid || value.schemaVersion !== "programmable.custom-launch-admission-receipt.v4"
     || value.apiVersion !== "v4" || value.chainId !== ROBINHOOD_CHAIN_ID
     || value.requestHash !== resource.requestHash
     || value.rawRequestSha256 !== resource.rawRequestSha256

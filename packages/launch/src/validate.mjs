@@ -1,3 +1,5 @@
+import { isRobinhoodProfileV41, PACK_CONFIG_V41_CONTRACT_URL, PACK_CONFIG_V41_EXAMPLE_URL } from "./profile-v41.mjs";
+import { normalizeRobinhoodFundingPlanV1 } from "./funding-plan-v1.mjs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -121,7 +123,7 @@ export async function validateLaunchFile({ launchPath, configPath }) {
     throw new TypeError(`launch request exceeds the ${MAX_REQUEST_BYTES}-byte limit`);
   }
   if (isV3 && configPath === undefined) throw v3ArtifactConfigRequired();
-  if (isV4 && configPath === undefined) throw v4ArtifactConfigRequired();
+  if (isV4 && configPath === undefined) throw v4ArtifactConfigRequired(request?.profile?.profileVersion);
   const result = isV3
     ? validateV3LaunchRequest(request)
     : isV4
@@ -162,7 +164,7 @@ export function validateLaunchRequest(request) {
     throw v3ArtifactConfigRequired();
   }
   if (request?.schemaVersion === CREATE_REQUEST_SCHEMA_V4) {
-    throw v4ArtifactConfigRequired();
+    throw v4ArtifactConfigRequired(request?.profile?.profileVersion);
   }
   throw new TypeError(
     `schemaVersion must be ${CREATE_REQUEST_SCHEMA_V1}, ${CREATE_REQUEST_SCHEMA_V2}, ${CREATE_REQUEST_SCHEMA_V3}, or ${CREATE_REQUEST_SCHEMA_V4}`,
@@ -188,7 +190,7 @@ function v3ArtifactConfigRequired() {
   });
 }
 
-function v4ArtifactConfigRequired() {
+function v4ArtifactConfigRequired(profileVersion) {
   return createCliDiagnosticError({
     code: "PACK_CONFIG_V4_MISSING",
     stage: "pack-config",
@@ -196,8 +198,8 @@ function v4ArtifactConfigRequired() {
     expected: {
       flag: "--config programmable-launch.config.json",
       schemaVersion: PACK_CONFIG_SCHEMA_V4,
-      configContract: PACK_CONFIG_V4_CONTRACT_URL,
-      executableExample: PACK_CONFIG_V4_EXAMPLE_URL,
+      configContract: profileVersion === "4.1.0" ? PACK_CONFIG_V41_CONTRACT_URL : PACK_CONFIG_V4_CONTRACT_URL,
+      executableExample: profileVersion === "4.1.0" ? PACK_CONFIG_V41_EXAMPLE_URL : PACK_CONFIG_V4_EXAMPLE_URL,
     },
     observed: {
       flag: null,
@@ -528,6 +530,7 @@ function validateV3LaunchRequest(request) {
 }
 
 function validateV4LaunchRequest(request) {
+  const selectedProfile = normalizeV4ProfileRef(request?.profile);
   const behaviorScenarioPresent = Object.hasOwn(request ?? {}, "behaviorScenarioInputs")
     || Object.hasOwn(request ?? {}, "behaviorScenarioInputsHash");
   assertExactKeys(request, [
@@ -552,6 +555,7 @@ function validateV4LaunchRequest(request) {
       : []),
     "verificationBundle",
     "funding",
+    ...(isRobinhoodProfileV41(selectedProfile) ? ["fundingPlan"] : []),
     "liquidityModel",
     "launchIntentHash",
     "agentAttestation",
@@ -569,6 +573,8 @@ function validateV4LaunchRequest(request) {
   const profile = normalizeV4ProfileRef(request.profile);
   const externalContracts = normalizeV4ExternalContracts(request.externalContracts);
   const funding = normalizeV4FundingIntent(request.funding);
+  const fundingPlan = isRobinhoodProfileV41(profile)
+    ? normalizeRobinhoodFundingPlanV1(request.fundingPlan, funding) : null;
   const liquidityModel = normalizeV4LiquidityModel(request.liquidityModel);
   const permitWindow = validateDirectNativePermitWindow(request.permitWindow);
   const projectMetadata = validateProjectMetadata(request.projectMetadata, {
@@ -660,6 +666,7 @@ function validateV4LaunchRequest(request) {
     ...(behaviorScenarioInputsHash === null ? {} : { behaviorScenarioInputsHash }),
     verificationBundleHash: verification.verificationBundleHash,
     funding,
+    ...(fundingPlan === null ? {} : { fundingPlan }),
     liquidityModel,
   });
   if (request.launchIntentHash !== launchIntentHash) {

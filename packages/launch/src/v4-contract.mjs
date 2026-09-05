@@ -36,6 +36,7 @@ import {
   V4_SOURCE_BUILD_COMMITMENT_DOMAIN,
 } from "./constants.mjs";
 import { assertExactKeys, compareUtf8, sha256Digest } from "./io.mjs";
+import { ROBINHOOD_PROFILE_V41, isRobinhoodProfileV41 } from "./profile-v41.mjs";
 
 const HEX32 = /^0x[0-9a-f]{64}$/u;
 const SHA256 = /^sha256:[0-9a-f]{64}$/u;
@@ -369,6 +370,7 @@ export function normalizeV4ProfileRef(value) {
     "profileVersion",
     "profileDigest",
   ], "profile");
+  if (isRobinhoodProfileV41(value)) return { ...ROBINHOOD_PROFILE_V41 };
   if (value.schemaVersion !== V4_PROFILE_REF_SCHEMA
     || value.structuralProfileId !== V4_STRUCTURAL_PROFILE_ID
     || value.businessProfileId !== V4_BUSINESS_PROFILE_ID

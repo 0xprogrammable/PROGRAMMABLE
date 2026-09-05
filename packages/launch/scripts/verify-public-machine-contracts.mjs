@@ -81,7 +81,7 @@ assertJsonEqual(
 );
 
 const v4 = documents.get("custom-launch-v4.json");
-assert.equal(v4.info.version, PACKAGE_VERSION, "V4 OpenAPI and CLI versions must match");
+assert.equal(v4.info.version, "4.0.0", "Historical V4 OpenAPI version is immutable");
 assertJsonEqual(v4.security, [{ CustomLaunchApiKey: [] }], "V4 root security");
 for (const pathName of [
   "/v4/chains/{chainId}/capabilities",
